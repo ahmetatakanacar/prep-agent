@@ -6,8 +6,11 @@ Rules, in the order their issues are reported (columns in frame order):
 - `column_mismatch` (error): train and test differ in columns or in their order.
 - `target_altered` (error): the target in the output differs from the target right after the
   split, so something in the pipeline touched it.
-- `train_test_overlap`: a row (features and target) is in both train and test. An error when
-  the plan has a dedupe step, which should have prevented it, and a warning otherwise.
+- `train_test_overlap`: a row (features and target) is in both train and test. It is judged on
+  the frames right after the split (stateless steps applied, stateful ones not), because the
+  pipeline can make distinct rows look alike (one-hot grouping, imputation) without that
+  being leakage. An error when the plan has a dedupe step, which should have prevented it, and
+  a warning otherwise.
 - `nan_in_output` (warning): a feature column still has missing values.
 - `non_numeric_output` (warning): a feature column is not numeric.
 - `possible_target_leakage` (warning): for a numeric target, a feature whose absolute
@@ -53,7 +56,7 @@ def validate_result(result: "ExecutionResult", plan: Plan) -> list[ValidationIss
 
     issues: list[ValidationIssue] = []
     issues += _check_target(result, target)
-    issues += _check_overlap(train, test, plan)
+    issues += _check_overlap(result.split_train, result.split_test, plan)
     features = [c for c in train.columns if c != target]
     issues += _check_missing(train, test, features)
     issues += _check_numeric(train, test, features)
@@ -72,11 +75,11 @@ def _issue(
 
 def _check_target(result: "ExecutionResult", target: str) -> list[ValidationIssue]:
     issues = []
-    for name, output, expected in (
-        ("train", result.train, result.target_train),
-        ("test", result.test, result.target_test),
+    for name, output, split in (
+        ("train", result.train, result.split_train),
+        ("test", result.test, result.split_test),
     ):
-        if target not in output.columns or not _same_values(output[target], expected):
+        if target not in output.columns or not _same_values(output[target], split[target]):
             issues.append(
                 _issue(
                     "target_altered",
@@ -92,18 +95,23 @@ def _same_values(actual: pd.Series, expected: pd.Series) -> bool:
     return actual.reset_index(drop=True).equals(expected.reset_index(drop=True))
 
 
-def _check_overlap(train: pd.DataFrame, test: pd.DataFrame, plan: Plan) -> list[ValidationIssue]:
-    train_hashes = set(pd.util.hash_pandas_object(train, index=False))
-    n_shared = sum(h in train_hashes for h in pd.util.hash_pandas_object(test, index=False))
+def _check_overlap(
+    split_train: pd.DataFrame, split_test: pd.DataFrame, plan: Plan
+) -> list[ValidationIssue]:
+    train_hashes = set(pd.util.hash_pandas_object(split_train, index=False))
+    n_shared = sum(h in train_hashes for h in pd.util.hash_pandas_object(split_test, index=False))
     if n_shared == 0:
         return []
     has_dedupe = any(isinstance(step, DedupeStep) for step in plan.steps)
     return [
         _issue(
             "train_test_overlap",
-            f"{n_shared} test row(s) also appear in train (features and target equal); "
+            f"{n_shared} test row(s) also appear in train (features and target equal at the "
+            "split); "
             + (
-                "the plan has a dedupe step, so it should have prevented this."
+                "the plan has a dedupe step, but rows became equal after it, for example "
+                "through a later drop_columns; move the dedupe after the steps that drop "
+                "columns."
                 if has_dedupe
                 else "add a dedupe step before the split if duplicates are not intended."
             ),

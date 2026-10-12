@@ -1,9 +1,5 @@
-import dataclasses
 import json
 from pathlib import Path
-
-from prep_agent import cli
-from prep_agent.validators import ValidationIssue
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CSV = str(FIXTURES / "customers.csv")
@@ -83,21 +79,28 @@ def test_invalid_plan_writes_no_artifacts(invoke_cli, tmp_path):
     assert not (tmp_path / "runs").exists()
 
 
-def test_result_error_writes_failed_artifacts(invoke_cli, tmp_path, monkeypatch):
-    real_execute = cli.execute
+def test_result_error_writes_failed_artifacts(invoke_cli, tmp_path):
+    # dedupe runs while `id` still tells the rows apart; dropping it afterwards recreates
+    # duplicates that the split spreads over train and test.
+    csv = tmp_path / "dups.csv"
+    rows = ["id,x,t"] + [f"{i},{(i // 2) % 2},{i % 2}" for i in range(40)]
+    csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    plan = tmp_path / "plan.json"
+    steps = [
+        {"op": "dedupe", "keep": "first", "reason": "r"},
+        {"op": "drop_columns", "columns": ["id"], "reason": "r"},
+        {"op": "split", "stratify": True, "reason": "r"},
+    ]
+    plan.write_text(
+        json.dumps(
+            {"target": "t", "task_type": "classification", "model_family": "any", "steps": steps}
+        ),
+        encoding="utf-8",
+    )
 
-    def execute_with_result_error(df, plan, profile):
-        result = real_execute(df, plan, profile)
-        error = ValidationIssue(
-            code="train_test_overlap", severity="error", message="forced for the test"
-        )
-        return dataclasses.replace(result, result_issues=[error])
+    result = invoke_cli(["run", str(csv), "--plan", str(plan), "--out-dir", str(tmp_path / "runs")])
 
-    monkeypatch.setattr(cli, "execute", execute_with_result_error)
-
-    result = invoke_cli(run_args(tmp_path))
-
-    assert result.exit_code == 1
+    assert result.exit_code == 1, result.output
     assert "train_test_overlap" in result.output
     [run_dir] = list((tmp_path / "runs").iterdir())
     info = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))

@@ -53,15 +53,17 @@ class ExecutionError(RuntimeError):
 class ExecutionResult:
     """What `execute` returns.
 
-    `target_train` and `target_test` are the target values right after the split, kept so that
-    the result validator can check that the output target was not altered.
+    `split_train` and `split_test` are the frames right after the split: stateless steps
+    applied, stateful ones not. The result validator uses them to check that the target was
+    not altered and to find rows shared by train and test, which must be judged before the
+    pipeline can make distinct rows look alike.
     """
 
     train: pd.DataFrame
     test: pd.DataFrame
     pipeline: Pipeline
-    target_train: pd.Series
-    target_test: pd.Series
+    split_train: pd.DataFrame
+    split_test: pd.DataFrame
     plan_issues: list[ValidationIssue] = field(default_factory=list)
     result_issues: list[ValidationIssue] = field(default_factory=list)
 
@@ -104,8 +106,8 @@ def _run(df: pd.DataFrame, plan: Plan, plan_issues: list[ValidationIssue]) -> Ex
         train=pd.concat([x_train_out, y_train], axis=1),
         test=pd.concat([x_test_out, y_test], axis=1),
         pipeline=pipeline,
-        target_train=y_train,
-        target_test=y_test,
+        split_train=train,
+        split_test=test,
         plan_issues=plan_issues,
     )
 

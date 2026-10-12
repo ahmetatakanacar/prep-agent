@@ -150,7 +150,44 @@ def test_target_never_enters_the_pipeline(make_plan):
 
     assert "t" not in result.pipeline.feature_names_in_
     assert list(result.train.columns)[-1] == "t"
-    assert result.train["t"].tolist() == result.target_train.tolist()
+    assert result.train["t"].tolist() == result.split_train["t"].tolist()
+
+
+def result_codes(result):
+    return {i.code for i in result.result_issues if i.severity == "error"}
+
+
+def test_rows_that_only_match_after_encoding_are_not_an_overlap(make_plan):
+    # Every `u` is distinct, but one-hot grouping puts nearly all of them into the same
+    # "infrequent" column, so train and test end up with equal output rows.
+    df = pd.DataFrame({"u": [f"u{i}" for i in range(40)], "t": np.arange(40) % 2})
+    plan = make_plan(
+        {"op": "dedupe", "keep": "first"},
+        split(),
+        {"op": "encode", "columns": ["u"], "method": "onehot", "max_categories": 2},
+    )
+
+    result = run_frame(df, plan)
+
+    assert len(result.train.merge(result.test)) > 0, "the output frames must share a row"
+    assert result.train.drop(columns="t").duplicated().any()
+    assert "train_test_overlap" not in {i.code for i in result.result_issues}
+    assert not has_errors(result.result_issues)
+
+
+def test_rows_that_become_equal_before_the_split_are_an_overlap_error(make_plan):
+    # dedupe runs while `id` still tells the rows apart; dropping it afterwards recreates
+    # duplicates, which the split then spreads over train and test.
+    i = np.arange(40)
+    df = pd.DataFrame({"id": i, "x": (i // 2) % 2, "t": i % 2})
+    plan = make_plan(
+        {"op": "dedupe", "keep": "first"}, {"op": "drop_columns", "columns": ["id"]}, split()
+    )
+
+    result = run_frame(df, plan)
+
+    assert not has_errors(result.plan_issues)
+    assert result_codes(result) == {"train_test_overlap"}
 
 
 def test_plan_error_raises_before_anything_runs(monkeypatch):

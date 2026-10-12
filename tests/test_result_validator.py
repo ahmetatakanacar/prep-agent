@@ -26,14 +26,16 @@ def split(stratify=True):
     return {"op": "split", "stratify": stratify}
 
 
-def make_result(train=TRAIN, test=TEST, target_train=None, target_test=None) -> ExecutionResult:
+def make_result(train=TRAIN, test=TEST, split_train=None, split_test=None) -> ExecutionResult:
+    """`split_train` and `split_test` are the frames right after the split; by default they equal
+    the output, as when there are no stateful steps."""
     identity = Pipeline([("identity", FunctionTransformer())])
     return ExecutionResult(
         train=train.copy(),
         test=test.copy(),
         pipeline=identity,
-        target_train=(train["t"] if target_train is None else target_train).copy(),
-        target_test=(test["t"] if target_test is None else target_test).copy(),
+        split_train=(train if split_train is None else split_train).copy(),
+        split_test=(test if split_test is None else split_test).copy(),
     )
 
 
@@ -84,10 +86,10 @@ def test_different_column_order_is_an_error(make_plan):
 
 
 def test_altered_target_is_an_error(make_plan):
-    altered = TRAIN["t"].copy()
-    altered.iloc[0] = 1 - altered.iloc[0]
+    altered = TRAIN.copy()
+    altered.loc[0, "t"] = 1 - altered.loc[0, "t"]
 
-    issues = issues_for(make_result(target_train=altered), make_plan(split()))
+    issues = issues_for(make_result(split_train=altered), make_plan(split()))
 
     assert codes(issues) == ["target_altered"]
     assert issues[0].severity == "error"
@@ -95,7 +97,7 @@ def test_altered_target_is_an_error(make_plan):
 
 
 def test_altered_test_target_is_an_error(make_plan):
-    issues = issues_for(make_result(target_test=TEST["t"] * 0), make_plan(split()))
+    issues = issues_for(make_result(split_test=TEST.assign(t=0)), make_plan(split()))
 
     assert codes(issues) == ["target_altered"]
 
@@ -123,6 +125,28 @@ def test_overlap_is_an_error_with_dedupe(make_plan):
 
     issues = issues_for(make_result(test=overlapping_test()), plan)
 
+    assert codes(issues) == ["train_test_overlap"]
+    assert issues[0].severity == "error"
+
+
+def test_rows_that_only_become_equal_after_the_pipeline_are_not_an_overlap(make_plan):
+    # Distinct at the split, equal in the output (as after one-hot grouping or imputing).
+    train = TRAIN.assign(a=0.0)
+    test = TEST.assign(a=0.0, b=TRAIN.loc[0, "b"], t=TRAIN.loc[0, "t"])
+    assert len(train.merge(test)) > 0, "the output frames must share a row"
+    plan = make_plan({"op": "dedupe", "keep": "first"}, split())
+
+    result = make_result(train, test, split_train=TRAIN, split_test=test.assign(a=TEST["a"]))
+
+    assert "train_test_overlap" not in codes(issues_for(result, plan))
+
+
+def test_rows_equal_at_the_split_are_an_overlap_even_if_the_output_differs(make_plan):
+    plan = make_plan({"op": "dedupe", "keep": "first"}, split())
+    split_test = overlapping_test()
+    test = TEST.assign(t=split_test["t"])
+
+    issues = issues_for(make_result(test=test, split_test=split_test), plan)
     assert codes(issues) == ["train_test_overlap"]
     assert issues[0].severity == "error"
 
