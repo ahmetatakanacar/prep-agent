@@ -400,6 +400,16 @@ def test_free_text_mentioning_emails_is_not_flagged_by_value_pattern():
         "ssn",
         "userEmail",
         "HTMLName",
+        "username",
+        "UserName",
+        "fullname",
+        "full_name",
+        "musteri_adi",
+        "adi",
+        "adı",
+        "soyadi",
+        "soyadı",
+        "musteri_soyadı",
     ],
 )
 def test_pii_column_names_are_flagged(name):
@@ -410,7 +420,9 @@ def test_pii_column_names_are_flagged(name):
     assert col.top_values == []
 
 
-@pytest.mark.parametrize("name", ["filename", "paid", "valid", "company", "named", "telephone_x"])
+@pytest.mark.parametrize(
+    "name", ["filename", "paid", "valid", "company", "named", "telephone_x", "radio", "adidas"]
+)
 def test_non_pii_column_names_are_not_flagged(name):
     col = profile_column(["a", "b", "c", "d"] * 5, name=name)
 

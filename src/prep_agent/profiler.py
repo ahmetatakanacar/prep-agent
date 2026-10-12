@@ -90,6 +90,7 @@ class ProfilerConfig:
     pii_name_parts: tuple[str, ...] = (
         "email", "mail", "phone", "telefon", "tel", "gsm", "name", "firstname", "lastname",
         "surname", "ad", "soyad", "isim", "address", "adres", "tckn", "iban", "ssn",
+        "username", "fullname", "adi", "adı", "soyadi", "soyadı",
     )  # fmt: skip
 
     # Task hint: a numeric target with more distinct values than this looks like regression.
