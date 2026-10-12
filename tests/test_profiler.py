@@ -435,6 +435,47 @@ def test_date_strings_and_zip_codes_are_not_flagged_as_phone_numbers():
     assert "possible_pii" not in zips.warnings
 
 
+def test_include_samples_false_hides_samples_and_top_values_everywhere():
+    df = pd.DataFrame(
+        {
+            "num": [float(i) for i in range(N)],
+            "cat": ["red", "green", "blue", "red"] * 5,
+            "flag": ["yes", "no"] * 10,
+            "ident": list(range(N)),
+            "text": [f"this is a fairly long free text comment number {i}" for i in range(N)],
+        }
+    )
+
+    profile = profile_dataframe(df, include_samples=False)
+
+    for col in profile.columns:
+        assert col.sample_values == []
+        assert not col.top_values
+    by_name = {c.name: c for c in profile.columns}
+    assert by_name["cat"].top_values == []
+    assert by_name["flag"].top_values == []
+    assert by_name["num"].top_values is None
+
+
+def test_include_samples_false_keeps_other_statistics():
+    df = pd.DataFrame({"num": [float(i) for i in range(N)] + [None], "cat": ["a", "b", "c"] * 7})
+
+    with_samples = profile_dataframe(df)
+    without = profile_dataframe(df, include_samples=False)
+
+    for kept, hidden in zip(with_samples.columns, without.columns, strict=True):
+        assert hidden.model_dump(exclude={"sample_values", "top_values"}) == kept.model_dump(
+            exclude={"sample_values", "top_values"}
+        )
+
+
+def test_samples_are_included_by_default():
+    col = profile_column(["a", "b", "c"] * 7)
+
+    assert col.sample_values == ["a", "b", "c"]
+    assert len(col.top_values) == 3
+
+
 # --- JSON safety -----------------------------------------------------------------------------
 
 

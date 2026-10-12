@@ -42,10 +42,16 @@ def profile_command(
     csv_path: Annotated[Path, typer.Argument(help="CSV file to profile.")],
     target: Annotated[str | None, typer.Option(help="Name of the target column.")] = None,
     out: Annotated[Path | None, typer.Option(help="Write the profile JSON to this file.")] = None,
+    no_samples: Annotated[
+        bool,
+        typer.Option("--no-samples", help="Leave sample values and top values out of the profile."),
+    ] = False,
 ) -> None:
     """Profile a CSV file and print a summary table."""
     try:
-        profile = profile_dataframe(load_csv(csv_path), target=target)
+        profile = profile_dataframe(
+            load_csv(csv_path), target=target, include_samples=not no_samples
+        )
     except ProfilerError as exc:
         Console(stderr=True).print(Text.assemble(("Error: ", "red"), str(exc)))
         raise typer.Exit(1) from None

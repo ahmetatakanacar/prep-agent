@@ -172,8 +172,12 @@ def profile_dataframe(
     df: pd.DataFrame,
     target: str | None = None,
     config: ProfilerConfig = DEFAULT_CONFIG,
+    include_samples: bool = True,
 ) -> DatasetProfile:
-    """Profile every column of `df`. The input is not modified."""
+    """Profile every column of `df`. The input is not modified.
+
+    With `include_samples=False`, no column gets `sample_values` or `top_values`.
+    """
     if df.shape[1] == 0:
         raise ProfilerError("DataFrame is empty (no columns)")
     if df.shape[0] == 0:
@@ -185,7 +189,9 @@ def profile_dataframe(
     if target is not None and target not in names:
         raise ProfilerError(f"target column '{target}' not found; available columns: {names}")
 
-    columns = [_profile_column(str(label), df[label], config) for label in df.columns]
+    columns = [
+        _profile_column(str(label), df[label], config, include_samples) for label in df.columns
+    ]
     n_rows = int(df.shape[0])
     n_duplicate_rows = int(df.duplicated().sum())
 
@@ -203,7 +209,9 @@ def profile_dataframe(
     )
 
 
-def _profile_column(name: str, series: pd.Series, config: ProfilerConfig) -> ColumnProfile:
+def _profile_column(
+    name: str, series: pd.Series, config: ProfilerConfig, include_samples: bool
+) -> ColumnProfile:
     n_rows = len(series)
     non_null = series.dropna()
     n_non_null = len(non_null)
@@ -225,6 +233,7 @@ def _profile_column(name: str, series: pd.Series, config: ProfilerConfig) -> Col
     possible_pii = _looks_like_pii(name, non_null, inferred, config)
     if possible_pii:
         warnings.append("possible_pii")
+    hide_values = possible_pii or not include_samples
 
     if inferred == "numeric":
         stats, n_inf = _numeric_stats(non_null, config)
@@ -238,7 +247,7 @@ def _profile_column(name: str, series: pd.Series, config: ProfilerConfig) -> Col
         if n_inf:
             warnings.append("infinite_values")
     elif inferred in ("categorical", "binary"):
-        fields["top_values"] = [] if possible_pii else _top_values(non_null, config)
+        fields["top_values"] = [] if hide_values else _top_values(non_null, config)
     elif inferred == "text":
         lengths = non_null.astype(str).str.len()
         fields["mean_length"] = float(lengths.mean())
@@ -252,7 +261,7 @@ def _profile_column(name: str, series: pd.Series, config: ProfilerConfig) -> Col
         missing_ratio=missing_ratio,
         n_unique=n_unique,
         unique_ratio=n_unique / n_non_null if n_non_null else 0.0,
-        sample_values=[] if possible_pii else _sample_values(non_null, config),
+        sample_values=[] if hide_values else _sample_values(non_null, config),
         warnings=warnings,
         **fields,
     )

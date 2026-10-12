@@ -52,3 +52,28 @@ def test_profile_unknown_target_fails_with_message(invoke_cli):
 
     assert result.exit_code == 1
     assert "target column 'nope' not found" in result.output
+
+
+def test_profile_json_contains_samples_by_default(invoke_cli, tmp_path):
+    out = tmp_path / "profile.json"
+
+    invoke_cli(["profile", str(FIXTURE), "--out", str(out)])
+
+    profile = DatasetProfile.model_validate_json(out.read_text(encoding="utf-8"))
+    plan = next(c for c in profile.columns if c.name == "plan")
+    assert plan.sample_values
+    assert plan.top_values
+
+
+def test_profile_no_samples_flag_removes_values_from_json(invoke_cli, tmp_path):
+    out = tmp_path / "profile.json"
+
+    result = invoke_cli(["profile", str(FIXTURE), "--no-samples", "--out", str(out)])
+
+    assert result.exit_code == 0
+    text = out.read_text(encoding="utf-8")
+    profile = DatasetProfile.model_validate_json(text)
+    assert all(c.sample_values == [] for c in profile.columns)
+    assert all(not c.top_values for c in profile.columns)
+    assert "enterprise" not in text
+    assert "2023-01-05" not in text
