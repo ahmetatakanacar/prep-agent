@@ -2,7 +2,7 @@
 
 Prepares a CSV dataset for machine learning from a natural-language goal: it profiles the data, has an LLM propose a structured preparation plan, validates the plan, and executes it.
 
-**Status:** under development. Only the `profile` command works so far; planning and execution are not implemented yet.
+**Status:** under development. The `profile` and `run` commands work; `run` takes a hand-written plan, and the LLM planner is not implemented yet.
 
 ## Planned features
 
@@ -30,6 +30,16 @@ uv run prep-agent profile tests/fixtures/customers.csv --target churned --out ru
 ```
 
 Columns that look like they hold personal data (email addresses, phone numbers, or names such as `email` or `user_name`) are flagged `possible_pii` and their sample values, top values and numeric statistics are left out of the profile. Pass `--no-samples` to leave sample values out for every column.
+
+Run a hand-written plan on a CSV file. The plan's `target` is the target column. The plan is validated first; if it has errors, nothing is run or written.
+
+```powershell
+uv run prep-agent run tests/fixtures/customers.csv --plan tests/fixtures/customers_plan.json --out-dir runs
+```
+
+This writes `runs/<run_id>/` with `profile.json`, `plan.json`, `train.csv`, `test.csv`, `pipeline.joblib`, `issues.json` and `run.json`. The exit code is 1 if the plan has errors or the result fails validation (in the second case the files are still written, with status `failed` in `run.json`); warnings do not fail a run. Pass `--dry-run` to only validate the plan.
+
+`pipeline.joblib` contains only the fitted impute, encode and scale steps. It does not include the stateless steps or the split, so it cannot be applied to a raw file. A standalone `pipeline.py` is not generated yet.
 
 ## Known limitations
 
