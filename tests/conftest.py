@@ -6,6 +6,7 @@ import pytest
 from typer.testing import CliRunner
 
 from prep_agent.cli import app
+from prep_agent.plan import Plan
 
 # Wide enough that rich never wraps table rows or help text in tests.
 TERMINAL_WIDTH = "200"
@@ -18,6 +19,23 @@ ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 class CliResult:
     exit_code: int
     output: str
+
+
+@pytest.fixture
+def make_plan() -> Callable[..., Plan]:
+    """Build a Plan from step dicts; every step gets a placeholder reason."""
+
+    def build(*steps, target="t", task_type="classification", model_family="any") -> Plan:
+        return Plan.model_validate(
+            {
+                "target": target,
+                "task_type": task_type,
+                "model_family": model_family,
+                "steps": [{"reason": "test", **step} for step in steps],
+            }
+        )
+
+    return build
 
 
 @pytest.fixture

@@ -65,6 +65,16 @@ IssueCode = Literal[
     "missing_values_remain",
     "unencoded_column_remains",
     "stratify_disabled",
+    # result errors (raised by result_validator, not by validate_plan)
+    "empty_split",
+    "column_mismatch",
+    "target_altered",
+    "train_test_overlap",
+    # result warnings
+    "nan_in_output",
+    "non_numeric_output",
+    "possible_target_leakage",
+    "class_distribution_shift",
 ]
 
 # The severity of an issue is a property of its code, defined once here. The one exception is
@@ -93,6 +103,16 @@ SEVERITY: dict[IssueCode, Severity] = {
     "missing_values_remain": "warning",
     "unencoded_column_remains": "warning",
     "stratify_disabled": "warning",
+    "empty_split": "error",
+    "column_mismatch": "error",
+    "target_altered": "error",
+    # An error when the plan has a dedupe step, a warning otherwise; the result validator
+    # passes the severity explicitly. The entry below is the error severity.
+    "train_test_overlap": "error",
+    "nan_in_output": "warning",
+    "non_numeric_output": "warning",
+    "possible_target_leakage": "warning",
+    "class_distribution_shift": "warning",
 }
 
 # Type and warning sets the rules are built on.
