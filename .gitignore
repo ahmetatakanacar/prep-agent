@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Environments
+.venv/
+.env
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+
+# Run outputs
+runs/
+
+# Benchmark data files
+benchmarks/datasets/**/*.csv
+benchmarks/datasets/**/*.tsv
+benchmarks/datasets/**/*.parquet
+benchmarks/datasets/**/*.zip
+benchmarks/datasets/**/*.gz
