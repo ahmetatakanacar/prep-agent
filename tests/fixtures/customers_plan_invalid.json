@@ -1,0 +1,25 @@
+{
+  "target": "churned",
+  "task_type": "classification",
+  "model_family": "any",
+  "steps": [
+    {
+      "op": "impute",
+      "columns": ["age"],
+      "strategy": "median",
+      "reason": "Deliberately placed before the split: this leaks test data."
+    },
+    {
+      "op": "drop_columns",
+      "columns": ["no_such_column"],
+      "reason": "Deliberately refers to a column that does not exist."
+    },
+    {
+      "op": "split",
+      "test_size": 0.2,
+      "stratify": true,
+      "random_state": 42,
+      "reason": "Hold out a test set."
+    }
+  ]
+}

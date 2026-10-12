@@ -1,0 +1,47 @@
+{
+  "target": "churned",
+  "task_type": "classification",
+  "model_family": "any",
+  "steps": [
+    {
+      "op": "drop_columns",
+      "columns": ["customer_id", "signup_date", "country"],
+      "reason": "customer_id is an identifier, signup_date is a raw date string and country is constant."
+    },
+    {
+      "op": "dedupe",
+      "subset": null,
+      "keep": "first",
+      "reason": "Remove exact duplicate customers before splitting."
+    },
+    {
+      "op": "drop_missing_target",
+      "reason": "Rows without a label cannot be used for supervised learning."
+    },
+    {
+      "op": "split",
+      "test_size": 0.2,
+      "stratify": true,
+      "random_state": 42,
+      "reason": "Hold out a test set; churn is imbalanced so keep the class proportions."
+    },
+    {
+      "op": "impute",
+      "columns": ["age"],
+      "strategy": "median",
+      "reason": "age has a few missing values and the median is robust to outliers."
+    },
+    {
+      "op": "encode",
+      "columns": ["plan"],
+      "method": "onehot",
+      "reason": "plan is a low-cardinality categorical column."
+    },
+    {
+      "op": "scale",
+      "columns": ["age", "monthly_spend"],
+      "method": "robust",
+      "reason": "monthly_spend has a large outlier."
+    }
+  ]
+}
