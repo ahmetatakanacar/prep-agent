@@ -10,7 +10,11 @@ from rich.table import Table
 from rich.text import Text
 
 from prep_agent import __version__
+from prep_agent.env import load_dotenv_file
 from prep_agent.executor import ExecutionError, PlanValidationError, execute
+from prep_agent.llm.base import LLMError
+from prep_agent.llm.factory import create_llm_client
+from prep_agent.llm.ping import PING_SYSTEM, PING_USER, PingReply
 from prep_agent.plan import Plan
 from prep_agent.profiler import DatasetProfile, ProfilerError, load_csv, profile_dataframe
 from prep_agent.runs import RunExistsError, save_run
@@ -40,6 +44,7 @@ def main(
     ),
 ) -> None:
     """LLM-planned, validated data preparation for tabular ML."""
+    load_dotenv_file()
 
 
 @app.command("profile")
@@ -123,6 +128,21 @@ def run_command(
         raise typer.Exit(1)
     console.print(Text(f"Train: {train_shape} | Test: {test_shape}"))
     console.print(Text(f"Run folder: {run_dir}"), soft_wrap=True)
+
+
+@app.command("llm-check")
+def llm_check_command() -> None:
+    """Send one small request to the configured LLM provider and report the outcome."""
+    try:
+        result = create_llm_client().generate(PING_SYSTEM, PING_USER, PingReply)
+    except LLMError as exc:
+        _fail(str(exc))
+
+    usage = result.usage
+    tokens = (
+        "not reported" if usage is None else f"{usage.input_tokens} in / {usage.output_tokens} out"
+    )
+    Console().print(Text(f"LLM check passed | model: {result.model} | tokens: {tokens}"))
 
 
 class PlanFileError(ValueError):

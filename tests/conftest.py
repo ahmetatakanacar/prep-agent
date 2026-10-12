@@ -21,6 +21,12 @@ class CliResult:
     output: str
 
 
+@pytest.fixture(autouse=True)
+def no_dotenv_in_cli(monkeypatch):
+    """Keep a developer's real .env (and its API key) out of every CLI test."""
+    monkeypatch.setattr("prep_agent.cli.load_dotenv_file", lambda: None)
+
+
 @pytest.fixture
 def make_plan() -> Callable[..., Plan]:
     """Build a Plan from step dicts; every step gets a placeholder reason."""
