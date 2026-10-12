@@ -317,6 +317,124 @@ def test_sample_values_skip_missing():
     assert col.sample_values == ["a", "b"]
 
 
+# --- privacy ---------------------------------------------------------------------------------
+
+
+def test_email_values_are_flagged_as_pii_and_hidden():
+    col = profile_column([f"person{i % 6}@example.com" for i in range(N)])
+
+    assert col.inferred_type == "categorical"
+    assert "possible_pii" in col.warnings
+    assert col.sample_values == []
+    assert col.top_values == []
+
+
+def test_unique_email_values_are_flagged_and_have_no_samples():
+    col = profile_column([f"person{i}@example.com" for i in range(N)])
+
+    assert "possible_pii" in col.warnings
+    assert col.sample_values == []
+    assert not col.top_values
+
+
+@pytest.mark.parametrize(
+    "phone",
+    ["+90 532 123 45 67", "0532 123 45 67", "(212) 555-0147", "+1-202-555-0173", "5321234567"],
+)
+def test_phone_values_are_flagged_as_pii(phone):
+    col = profile_column([phone, phone[:-1] + "9", phone[:-2] + "11"] * 7)
+
+    assert "possible_pii" in col.warnings
+    assert col.sample_values == []
+
+
+def test_pii_value_ratio_threshold():
+    mostly = [f"p{i}@example.com" for i in range(17)] + ["n/a", "unknown", "-"]
+    half = [f"p{i}@example.com" for i in range(10)] + [f"note {i}" for i in range(10)]
+
+    assert "possible_pii" in profile_column(mostly).warnings
+    assert "possible_pii" not in profile_column(half).warnings
+
+
+def test_pii_columns_keep_non_value_statistics():
+    values = [f"p{i % 7}@example.com" for i in range(N - 4)] + [None] * 4
+    col = profile_column(values)
+
+    assert col.n_missing == 4
+    assert col.missing_ratio == pytest.approx(0.2)
+    assert col.n_unique == 7
+    assert col.unique_ratio == pytest.approx(7 / 16)
+
+
+def test_free_text_mentioning_emails_is_not_flagged_by_value_pattern():
+    col = profile_column([f"contact me at someone{i}@example.com or by phone" for i in range(N)])
+
+    assert col.inferred_type == "text"
+    assert "possible_pii" not in col.warnings
+    assert len(col.sample_values) == 5
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "email",
+        "Email",
+        "e_mail",
+        "user_name",
+        "firstName",
+        "first_name",
+        "firstname",
+        "LastName",
+        "surname",
+        "Phone",
+        "customer_phone2",
+        "GSM",
+        "telefon",
+        "tel",
+        "adres",
+        "soyad",
+        "isim",
+        "address",
+        "tckn",
+        "IBAN",
+        "ssn",
+        "userEmail",
+        "HTMLName",
+    ],
+)
+def test_pii_column_names_are_flagged(name):
+    col = profile_column(["a", "b", "c", "d"] * 5, name=name)
+
+    assert "possible_pii" in col.warnings
+    assert col.sample_values == []
+    assert col.top_values == []
+
+
+@pytest.mark.parametrize("name", ["filename", "paid", "valid", "company", "named", "telephone_x"])
+def test_non_pii_column_names_are_not_flagged(name):
+    col = profile_column(["a", "b", "c", "d"] * 5, name=name)
+
+    assert "possible_pii" not in col.warnings
+    assert col.sample_values == ["a", "b", "c", "d"]
+    assert len(col.top_values) == 4
+
+
+def test_pii_named_numeric_column_has_no_samples():
+    col = profile_column(list(range(5321000000, 5321000000 + N)), name="phone")
+
+    assert "possible_pii" in col.warnings
+    assert col.sample_values == []
+    assert col.n_unique == N
+
+
+def test_date_strings_and_zip_codes_are_not_flagged_as_phone_numbers():
+    dates = profile_column(list(pd.date_range("2024-01-01", periods=N).strftime("%Y-%m-%d")))
+    zips = profile_column([f"{34000 + i % 5}" for i in range(N)])
+
+    assert "possible_pii" not in dates.warnings
+    assert "possible_pii" not in zips.warnings
+
+
 # --- JSON safety -----------------------------------------------------------------------------
 
 

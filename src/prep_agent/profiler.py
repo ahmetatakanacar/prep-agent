@@ -28,6 +28,11 @@ threshold lives in `ProfilerConfig`.
      `text_min_unique_ratio` of the values are distinct (long, mostly unique strings).
    - `categorical` otherwise.
 
+Privacy: a column is flagged `possible_pii` if most of its string values look like email
+addresses or phone numbers, or if a part of its name (split on `_`, spaces and camelCase) is in
+`ProfilerConfig.pii_name_parts`. Such columns get no `sample_values` and no `top_values`; their
+other statistics are kept.
+
 `unique_ratio` and the other ratios of a column use its non-missing values as denominator,
 except `missing_ratio`, which uses all rows. Numeric statistics ignore missing and infinite
 values. Outliers follow the IQR rule: values outside [q1 - k * IQR, q3 + k * IQR].
@@ -78,6 +83,14 @@ class ProfilerConfig:
     high_skew_abs: float = 2.0
     many_outliers_ratio: float = 0.05
 
+    # Privacy: a column is flagged `possible_pii` if at least this share of its string values
+    # looks like an email address or phone number, or if a part of its name is in the list.
+    pii_value_min_ratio: float = 0.8
+    pii_name_parts: tuple[str, ...] = (
+        "email", "mail", "phone", "telefon", "tel", "gsm", "name", "firstname", "lastname",
+        "surname", "ad", "soyad", "isim", "address", "adres", "tckn", "iban", "ssn",
+    )  # fmt: skip
+
     # Task hint: a numeric target with more distinct values than this looks like regression.
     regression_min_unique: int = 20
 
@@ -86,6 +99,10 @@ DEFAULT_CONFIG = ProfilerConfig()
 
 _CAMEL_ID_NAME = re.compile(r"[a-z](Id|ID)$")
 _SNAKE_ID_NAME = re.compile(r"(^|[^a-z0-9])(id|uuid|guid)($|[^a-z0-9])", re.IGNORECASE)
+_EMAIL = r"[^@\s]+@[^@\s]+\.[^@\s]+"
+_PHONE = r"\+?[\d\s().-]{7,20}"
+_PHONE_MIN_DIGITS = 7
+_PHONE_MAX_DIGITS = 15
 
 
 class TopValue(BaseModel):
@@ -205,6 +222,9 @@ def _profile_column(name: str, series: pd.Series, config: ProfilerConfig) -> Col
         warnings.append("high_cardinality")
     if inferred == "id_like":
         warnings.append("possible_id")
+    possible_pii = _looks_like_pii(name, non_null, inferred, config)
+    if possible_pii:
+        warnings.append("possible_pii")
 
     if inferred == "numeric":
         stats, n_inf = _numeric_stats(non_null, config)
@@ -218,7 +238,7 @@ def _profile_column(name: str, series: pd.Series, config: ProfilerConfig) -> Col
         if n_inf:
             warnings.append("infinite_values")
     elif inferred in ("categorical", "binary"):
-        fields["top_values"] = _top_values(non_null, config)
+        fields["top_values"] = [] if possible_pii else _top_values(non_null, config)
     elif inferred == "text":
         lengths = non_null.astype(str).str.len()
         fields["mean_length"] = float(lengths.mean())
@@ -232,7 +252,7 @@ def _profile_column(name: str, series: pd.Series, config: ProfilerConfig) -> Col
         missing_ratio=missing_ratio,
         n_unique=n_unique,
         unique_ratio=n_unique / n_non_null if n_non_null else 0.0,
-        sample_values=_sample_values(non_null, config),
+        sample_values=[] if possible_pii else _sample_values(non_null, config),
         warnings=warnings,
         **fields,
     )
@@ -300,6 +320,42 @@ def _looks_like_datetime(strings: pd.Series, config: ProfilerConfig) -> bool:
         return False
     parsed = pd.to_datetime(candidates, format="mixed", errors="coerce", utc=True)
     return parsed.notna().sum() >= config.datetime_min_parse_ratio * len(strings)
+
+
+def _looks_like_pii(
+    name: str, non_null: pd.Series, inferred: InferredType, config: ProfilerConfig
+) -> bool:
+    if not set(_name_parts(name)).isdisjoint(config.pii_name_parts):
+        return True
+    if inferred == "datetime" or non_null.empty or pdt.is_numeric_dtype(non_null.dtype):
+        return False
+    strings = non_null.astype(str).str.strip()
+    is_email = strings.str.fullmatch(_EMAIL)
+    n_digits = strings.str.count(r"\d")
+    is_phone = strings.str.fullmatch(_PHONE) & n_digits.between(
+        _PHONE_MIN_DIGITS, _PHONE_MAX_DIGITS
+    )
+    return bool((is_email | is_phone).mean() >= config.pii_value_min_ratio)
+
+
+def _name_parts(name: str) -> list[str]:
+    """Split a column name on separators, camelCase and letter/digit boundaries, lowercased."""
+    parts = []
+    for chunk in re.split(r"[\W_]+", name):
+        start = 0
+        for i in range(1, len(chunk)):
+            prev, cur = chunk[i - 1], chunk[i]
+            following = chunk[i + 1] if i + 1 < len(chunk) else ""
+            if (
+                (prev.islower() and cur.isupper())
+                or (prev.isupper() and cur.isupper() and following.islower())
+                or prev.isdigit() != cur.isdigit()
+            ):
+                parts.append(chunk[start:i])
+                start = i
+        parts.append(chunk[start:])
+    # The dotted capital I of Turkish lowercases to two code points; map it to plain "i" first.
+    return [part.replace("İ", "i").lower() for part in parts if part]
 
 
 def _numeric_stats(non_null: pd.Series, config: ProfilerConfig) -> tuple[dict, int]:
