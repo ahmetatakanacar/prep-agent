@@ -20,9 +20,17 @@ dependencies = [
 [project.scripts]
 prep-agent = "prep_agent.cli:app"
 
+[project.optional-dependencies]
+openai = [
+    "openai>=3.29.0",
+    "python-dotenv>=1.2.4",
+]
+
 [dependency-groups]
 dev = [
+    "openai>=3.29.0",
     "pytest",
+    "python-dotenv>=1.2.4",
     "ruff",
 ]
 
@@ -46,3 +54,6 @@ select = ["E", "F", "I", "B", "UP"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["error"]
+markers = [
+    "llm: calls the real LLM API; skipped unless PREP_AGENT_RUN_LLM_TESTS=1 and an API key is set",
+]
