@@ -1,0 +1,428 @@
+"""Deterministic plan validator: checks a plan against the dataset profile before it runs.
+
+The validator walks the steps in order and simulates, for every column, whether it still exists,
+its type and whether it still contains missing values:
+
+- `drop_columns` removes the columns.
+- `impute` clears the missing values.
+- `encode` with `ordinal` keeps the column under the same name and makes it numeric.
+- `encode` with `onehot` consumes the column: the names of the output columns are only known
+  after fitting, so later steps cannot refer to it.
+- `drop_missing_target` clears the missing values of the target.
+- `scale` changes nothing. The extra columns of `impute` with `add_indicator` are not tracked.
+
+Leakage protection lives here and not in the planner: the kind of every step (stateless, split
+or stateful) is read from the op registry and compared with the position of the split. Order is
+judged relative to the first split; a plan without a split only gets `invalid_split_count`.
+
+Issues come out in a fixed order: plan-level checks, then the steps in plan order (the order
+check of a step first, then its columns in the order the step lists them), then the end-of-plan
+checks, one rule at a time with columns in profile order.
+"""
+
+from dataclasses import dataclass
+from typing import Literal
+
+from pandas.api import types as pdt
+from pydantic import BaseModel, ConfigDict
+
+from prep_agent.ops import get_op
+from prep_agent.plan import (
+    DedupeStep,
+    DropColumnsStep,
+    DropMissingTargetStep,
+    EncodeStep,
+    ImputeStep,
+    Plan,
+    ScaleStep,
+    SplitStep,
+    Step,
+)
+from prep_agent.profiler import ColumnProfile, DatasetProfile, InferredType
+
+Severity = Literal["error", "warning"]
+IssueCode = Literal[
+    # errors
+    "target_not_in_profile",
+    "invalid_split_count",
+    "stateless_after_split",
+    "stateful_before_split",
+    "unknown_column",
+    "target_in_step",
+    "impute_non_numeric",
+    "scale_non_numeric",
+    "encode_numeric",
+    "ordinal_with_missing",
+    "stratify_regression",
+    # warnings
+    "onehot_before_impute",
+    "ordinal_for_linear",
+    "scale_for_tree",
+    "repeated_op",
+    "uninformative_column_kept",
+    "missing_values_remain",
+    "unencoded_column_remains",
+    "stratify_disabled",
+]
+
+# The severity of an issue is a property of its code, defined once here.
+SEVERITY: dict[IssueCode, Severity] = {
+    "target_not_in_profile": "error",
+    "invalid_split_count": "error",
+    "stateless_after_split": "error",
+    "stateful_before_split": "error",
+    "unknown_column": "error",
+    "target_in_step": "error",
+    "impute_non_numeric": "error",
+    "scale_non_numeric": "error",
+    "encode_numeric": "error",
+    "ordinal_with_missing": "error",
+    "stratify_regression": "error",
+    "onehot_before_impute": "warning",
+    "ordinal_for_linear": "warning",
+    "scale_for_tree": "warning",
+    "repeated_op": "warning",
+    "uninformative_column_kept": "warning",
+    "missing_values_remain": "warning",
+    "unencoded_column_remains": "warning",
+    "stratify_disabled": "warning",
+}
+
+# Type and warning sets the rules are built on.
+NUMERIC_ONLY_IMPUTE_STRATEGIES = frozenset({"mean", "median"})
+UNENCODED_TYPES = frozenset({"categorical", "text", "datetime"})
+UNINFORMATIVE_TYPES = frozenset({"id_like", "constant"})
+UNINFORMATIVE_WARNINGS = frozenset({"possible_id", "constant"})
+
+
+class ValidationIssue(BaseModel):
+    """One finding. `message` says what is wrong and how to fix it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    code: IssueCode
+    severity: Severity
+    step_index: int | None = None
+    column: str | None = None
+    message: str
+
+
+def has_errors(issues: list[ValidationIssue]) -> bool:
+    return any(issue.severity == "error" for issue in issues)
+
+
+def partition_issues(
+    issues: list[ValidationIssue],
+) -> tuple[list[ValidationIssue], list[ValidationIssue]]:
+    """Return (errors, warnings), each in the original order."""
+    errors = [issue for issue in issues if issue.severity == "error"]
+    warnings = [issue for issue in issues if issue.severity == "warning"]
+    return errors, warnings
+
+
+def validate_plan(plan: Plan, profile: DatasetProfile) -> list[ValidationIssue]:
+    """Check `plan` against `profile` without running anything. Inputs are not modified."""
+    return _Validation(plan, profile).run()
+
+
+@dataclass
+class _Column:
+    inferred_type: InferredType
+    numeric: bool
+    has_missing: bool
+
+
+def _starts_numeric(column: ColumnProfile) -> bool:
+    # A binary column counts as numeric only when it is stored as numbers (0/1), not as yes/no.
+    if column.inferred_type == "numeric":
+        return True
+    return column.inferred_type == "binary" and bool(pdt.is_numeric_dtype(column.pandas_dtype))
+
+
+class _Validation:
+    def __init__(self, plan: Plan, profile: DatasetProfile) -> None:
+        self.plan = plan
+        self.profile = profile
+        self.issues: list[ValidationIssue] = []
+        self.columns = {
+            c.name: _Column(c.inferred_type, _starts_numeric(c), c.n_missing > 0)
+            for c in profile.columns
+        }
+        self.gone: dict[str, str] = {}
+        self.applied: set[tuple[str, str]] = set()
+        self.kinds = [get_op(step.op).kind for step in plan.steps]
+        self.first_split = self.kinds.index("split") if "split" in self.kinds else None
+
+    def run(self) -> list[ValidationIssue]:
+        self._check_target_exists()
+        self._check_split_count()
+        for index, step in enumerate(self.plan.steps):
+            self._check_order(index, step)
+            self._simulate(index, step)
+        self._check_end_of_plan()
+        return self.issues
+
+    def _add(
+        self,
+        code: IssueCode,
+        message: str,
+        step_index: int | None = None,
+        column: str | None = None,
+    ) -> None:
+        self.issues.append(
+            ValidationIssue(
+                code=code,
+                severity=SEVERITY[code],
+                step_index=step_index,
+                column=column,
+                message=message,
+            )
+        )
+
+    # --- plan level ---
+
+    def _check_target_exists(self) -> None:
+        target = self.plan.target
+        if target not in {c.name for c in self.profile.columns}:
+            self._add(
+                "target_not_in_profile",
+                f"target {target!r} is not a column of the dataset; set 'target' to one of: "
+                f"{', '.join(self.columns)}.",
+                column=target,
+            )
+
+    def _check_split_count(self) -> None:
+        splits = [i for i, kind in enumerate(self.kinds) if kind == "split"]
+        if not splits:
+            self._add(
+                "invalid_split_count",
+                "the plan has no split step; add exactly one 'split' step after the stateless "
+                "steps (dedupe, drop_columns, drop_missing_target) and before any impute, encode "
+                "or scale step.",
+            )
+        elif len(splits) > 1:
+            self._add(
+                "invalid_split_count",
+                f"the plan has {len(splits)} split steps (steps {splits}); keep exactly one.",
+                step_index=splits[1],
+            )
+
+    # --- one step ---
+
+    def _check_order(self, index: int, step: Step) -> None:
+        kind = self.kinds[index]
+        if self.first_split is None:
+            return
+        if kind == "stateless" and index > self.first_split:
+            self._add(
+                "stateless_after_split",
+                f"stateless step {step.op!r} comes after the split (step {self.first_split}); "
+                "move it before the split so it is applied to the whole dataset consistently.",
+                step_index=index,
+            )
+        elif kind == "stateful" and index < self.first_split:
+            self._add(
+                "stateful_before_split",
+                f"{step.op!r} learns from data but comes before the split (step "
+                f"{self.first_split}), which leaks test data into training; move it after the "
+                "split so it is fit on train only.",
+                step_index=index,
+            )
+
+    def _simulate(self, index: int, step: Step) -> None:
+        if isinstance(step, DedupeStep):
+            self._resolve(index, step.subset or [], allow_target=True)
+        elif isinstance(step, DropColumnsStep):
+            for name in self._resolve(index, step.columns):
+                del self.columns[name]
+                self.gone[name] = f"dropped by drop_columns at step {index}"
+        elif isinstance(step, DropMissingTargetStep):
+            if self.plan.target in self.columns:
+                self.columns[self.plan.target].has_missing = False
+        elif isinstance(step, SplitStep):
+            self._check_split(index, step)
+        elif isinstance(step, ImputeStep):
+            self._impute(index, step)
+        elif isinstance(step, EncodeStep):
+            self._encode(index, step)
+        elif isinstance(step, ScaleStep):
+            self._scale(index, step)
+
+    def _resolve(self, index: int, names: list[str], allow_target: bool = False) -> list[str]:
+        """Return the names a step can act on; report the target and unknown columns."""
+        usable = []
+        for name in names:
+            if name == self.plan.target and not allow_target:
+                self._add(
+                    "target_in_step",
+                    f"the target {name!r} must not be changed by this step; remove it from "
+                    "'columns'.",
+                    step_index=index,
+                    column=name,
+                )
+            elif name not in self.columns:
+                self._add(
+                    "unknown_column",
+                    self._unknown_column_message(name),
+                    step_index=index,
+                    column=name,
+                )
+            else:
+                usable.append(name)
+        return usable
+
+    def _unknown_column_message(self, name: str) -> str:
+        if name not in self.gone:
+            return f"column {name!r} does not exist in the dataset; use a column from the profile."
+        reason = self.gone[name]
+        if "one-hot" in reason:
+            return (
+                f"column {name!r} was {reason}; the names of one-hot output columns are only "
+                "known after fitting, so no later step can refer to it. Apply every other step "
+                "to this column before the one-hot encode."
+            )
+        return f"column {name!r} was {reason} and cannot be used afterwards; remove the reference."
+
+    def _note_repeat(self, index: int, step: Step, name: str) -> None:
+        if (step.op, name) in self.applied:
+            self._add(
+                "repeated_op",
+                f"{step.op!r} is applied to column {name!r} more than once; keep a single step.",
+                step_index=index,
+                column=name,
+            )
+        self.applied.add((step.op, name))
+
+    def _check_split(self, index: int, step: SplitStep) -> None:
+        if self.plan.task_type == "regression" and step.stratify:
+            self._add(
+                "stratify_regression",
+                "stratify is on for a regression task, but a continuous target has no classes "
+                "to stratify on; set stratify to false.",
+                step_index=index,
+            )
+        if self.plan.task_type == "classification" and not step.stratify:
+            self._add(
+                "stratify_disabled",
+                "stratify is off for a classification task, so class proportions can drift "
+                "between train and test; set stratify to true unless classes are too small.",
+                step_index=index,
+            )
+
+    def _impute(self, index: int, step: ImputeStep) -> None:
+        for name in self._resolve(index, step.columns):
+            self._note_repeat(index, step, name)
+            column = self.columns[name]
+            if step.strategy in NUMERIC_ONLY_IMPUTE_STRATEGIES and not column.numeric:
+                self._add(
+                    "impute_non_numeric",
+                    f"strategy {step.strategy!r} needs a numeric column but {name!r} is "
+                    f"{column.inferred_type}; use 'most_frequent' or 'constant'.",
+                    step_index=index,
+                    column=name,
+                )
+            column.has_missing = False
+
+    def _encode(self, index: int, step: EncodeStep) -> None:
+        if step.method == "ordinal" and self.plan.model_family == "linear":
+            self._add(
+                "ordinal_for_linear",
+                "ordinal encoding gives categories a false order that a linear model will "
+                "use; prefer method 'onehot'.",
+                step_index=index,
+            )
+        for name in self._resolve(index, step.columns):
+            self._note_repeat(index, step, name)
+            column = self.columns[name]
+            if column.numeric:
+                self._add(
+                    "encode_numeric",
+                    f"column {name!r} is already numeric ({column.inferred_type}) and cannot be "
+                    "encoded; remove it from 'columns'.",
+                    step_index=index,
+                    column=name,
+                )
+            elif step.method == "ordinal":
+                if column.has_missing:
+                    self._add(
+                        "ordinal_with_missing",
+                        f"column {name!r} still has missing values; impute it in an earlier "
+                        "step before the ordinal encode.",
+                        step_index=index,
+                        column=name,
+                    )
+                column.inferred_type = "numeric"
+                column.numeric = True
+            else:
+                if column.has_missing:
+                    self._add(
+                        "onehot_before_impute",
+                        f"column {name!r} still has missing values, so they become their own "
+                        "category; impute it first unless that is intended.",
+                        step_index=index,
+                        column=name,
+                    )
+                del self.columns[name]
+                self.gone[name] = f"one-hot encoded at step {index}"
+
+    def _scale(self, index: int, step: ScaleStep) -> None:
+        if self.plan.model_family == "tree":
+            self._add(
+                "scale_for_tree",
+                "tree models do not need scaling; remove this step.",
+                step_index=index,
+            )
+        for name in self._resolve(index, step.columns):
+            self._note_repeat(index, step, name)
+            column = self.columns[name]
+            if not column.numeric:
+                self._add(
+                    "scale_non_numeric",
+                    f"column {name!r} is {column.inferred_type}, not numeric, and cannot be "
+                    "scaled; encode it instead or remove it from 'columns'.",
+                    step_index=index,
+                    column=name,
+                )
+
+    # --- end of plan ---
+
+    def _check_end_of_plan(self) -> None:
+        target = self.plan.target
+        profiled = {c.name: c for c in self.profile.columns}
+
+        for name in self.columns:
+            column = profiled[name]
+            if name == target:
+                continue
+            if column.inferred_type in UNINFORMATIVE_TYPES or UNINFORMATIVE_WARNINGS.intersection(
+                column.warnings
+            ):
+                self._add(
+                    "uninformative_column_kept",
+                    f"column {name!r} looks like an identifier or a constant "
+                    f"({column.inferred_type}, warnings: {column.warnings}) and is still in the "
+                    "data at the end of the plan; drop it with drop_columns.",
+                    column=name,
+                )
+
+        for name, column in self.columns.items():
+            if not column.has_missing:
+                continue
+            if name == target:
+                fix = "add a drop_missing_target step before the split"
+            else:
+                fix = "add an impute step after the split"
+            self._add(
+                "missing_values_remain",
+                f"column {name!r} still has missing values at the end of the plan; {fix}.",
+                column=name,
+            )
+
+        for name, column in self.columns.items():
+            if name != target and column.inferred_type in UNENCODED_TYPES:
+                self._add(
+                    "unencoded_column_remains",
+                    f"column {name!r} is {column.inferred_type} and is still not numeric at the "
+                    "end of the plan; encode it or drop it.",
+                    column=name,
+                )
