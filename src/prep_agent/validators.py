@@ -139,6 +139,12 @@ def _starts_numeric(column: ColumnProfile) -> bool:
     return column.inferred_type == "binary" and bool(pdt.is_numeric_dtype(column.pandas_dtype))
 
 
+def _needs_encoding(column: _Column) -> bool:
+    if column.inferred_type in UNENCODED_TYPES:
+        return True
+    return column.inferred_type == "binary" and not column.numeric
+
+
 class _Validation:
     def __init__(self, plan: Plan, profile: DatasetProfile) -> None:
         self.plan = plan
@@ -419,7 +425,7 @@ class _Validation:
             )
 
         for name, column in self.columns.items():
-            if name != target and column.inferred_type in UNENCODED_TYPES:
+            if name != target and _needs_encoding(column):
                 self._add(
                     "unencoded_column_remains",
                     f"column {name!r} is {column.inferred_type} and is still not numeric at the "

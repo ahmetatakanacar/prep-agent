@@ -598,19 +598,49 @@ def test_unencoded_categorical_text_and_datetime_columns_warn():
     assert all(i.severity == "warning" and i.step_index is None for i in flagged.values())
 
 
-def test_unencoded_warning_skips_encoded_dropped_numeric_and_binary_columns():
+def test_unencoded_warning_skips_encoded_dropped_and_numeric_columns():
     issues = validate(
-        drop("signup", "notes"), split(), encode(["city"], "onehot"), encode(["job"], "ordinal")
+        drop("signup", "notes"),
+        split(),
+        encode(["city", "gender"], "onehot"),
+        encode(["job"], "ordinal"),
     )
 
     flagged = {i.column for i in find(issues, "unencoded_column_remains")}
     assert flagged == {"segment"}
 
 
+def test_unencoded_binary_text_column_warns():
+    issues = validate(split())
+
+    [issue] = [i for i in find(issues, "unencoded_column_remains") if i.column == "gender"]
+    assert issue.severity == "warning"
+    assert issue.step_index is None
+
+
+@pytest.mark.parametrize("method", ["onehot", "ordinal"])
+def test_encoded_binary_text_column_does_not_warn_as_unencoded(method):
+    issues = validate(split(), encode(["gender"], method))
+
+    assert "gender" not in {i.column for i in find(issues, "unencoded_column_remains")}
+
+
+def test_binary_01_column_does_not_warn_as_unencoded():
+    issues = validate(split())
+
+    assert "flag" not in {i.column for i in find(issues, "unencoded_column_remains")}
+
+
 def test_categorical_target_is_not_reported_as_unencoded():
     issues = validate(split(), target="segment")
 
     assert "segment" not in {i.column for i in find(issues, "unencoded_column_remains")}
+
+
+def test_binary_text_target_is_not_reported_as_unencoded():
+    issues = validate(split(), target="gender")
+
+    assert "gender" not in {i.column for i in find(issues, "unencoded_column_remains")}
 
 
 def test_unstratified_classification_split_warns():
@@ -647,6 +677,7 @@ def test_issue_order_is_plan_level_then_by_step_then_end_of_plan():
         ("missing_values_remain", None, "job"),
         ("unencoded_column_remains", None, "city"),
         ("unencoded_column_remains", None, "job"),
+        ("unencoded_column_remains", None, "gender"),
         ("unencoded_column_remains", None, "signup"),
         ("unencoded_column_remains", None, "notes"),
         ("unencoded_column_remains", None, "segment"),
