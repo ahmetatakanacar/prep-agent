@@ -419,12 +419,48 @@ def test_non_pii_column_names_are_not_flagged(name):
     assert len(col.top_values) == 4
 
 
-def test_pii_named_numeric_column_has_no_samples():
-    col = profile_column(list(range(5321000000, 5321000000 + N)), name="phone")
+NUMERIC_STAT_FIELDS = ("min", "max", "mean", "std", "median", "q1", "q3", "skew", "n_outliers_iqr")
 
+
+def _sparse_phone_numbers():
+    return [5321000000 + i * 7919 for i in range(N - 2)] + [None, None]
+
+
+def test_pii_named_numeric_column_has_no_samples_and_no_numeric_statistics():
+    col = profile_column(_sparse_phone_numbers(), name="phone")
+
+    assert col.inferred_type == "numeric"
     assert "possible_pii" in col.warnings
     assert col.sample_values == []
-    assert col.n_unique == N
+    for field in NUMERIC_STAT_FIELDS:
+        assert getattr(col, field) is None, field
+
+
+def test_pii_named_numeric_column_keeps_counts():
+    col = profile_column(_sparse_phone_numbers(), name="phone")
+
+    assert col.n_missing == 2
+    assert col.missing_ratio == pytest.approx(0.1)
+    assert col.n_unique == N - 2
+    assert col.unique_ratio == 1.0
+
+
+def test_pii_named_numeric_column_raises_no_statistics_based_warnings():
+    values = [1.0] * 10 + [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 100000.0]
+    col = profile_column(values, name="phone")
+
+    assert col.warnings == ["possible_pii"]
+
+
+def test_numeric_statistics_stay_for_non_pii_columns_without_samples():
+    df = pd.DataFrame({"phone": _sparse_phone_numbers(), "age": [float(i) for i in range(N)]})
+
+    profile = profile_dataframe(df, include_samples=False)
+
+    phone, age = profile.columns
+    assert phone.min is None
+    assert age.min == 0.0
+    assert age.max == float(N - 1)
 
 
 def test_date_strings_and_zip_codes_are_not_flagged_as_phone_numbers():

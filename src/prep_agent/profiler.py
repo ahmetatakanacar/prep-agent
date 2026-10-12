@@ -30,8 +30,9 @@ threshold lives in `ProfilerConfig`.
 
 Privacy: a column is flagged `possible_pii` if most of its string values look like email
 addresses or phone numbers, or if a part of its name (split on `_`, spaces and camelCase) is in
-`ProfilerConfig.pii_name_parts`. Such columns get no `sample_values` and no `top_values`; their
-other statistics are kept.
+`ProfilerConfig.pii_name_parts`. Such columns get no `sample_values`, no `top_values` and no
+numeric statistics (min and max would expose real values); counts and ratios are kept. This
+applies whether or not samples are disabled.
 
 `unique_ratio` and the other ratios of a column use its non-missing values as denominator,
 except `missing_ratio`, which uses all rows. Numeric statistics ignore missing and infinite
@@ -235,7 +236,7 @@ def _profile_column(
         warnings.append("possible_pii")
     hide_values = possible_pii or not include_samples
 
-    if inferred == "numeric":
+    if inferred == "numeric" and not possible_pii:
         stats, n_inf = _numeric_stats(non_null, config)
         fields.update(stats)
         skew = fields.get("skew")
