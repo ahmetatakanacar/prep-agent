@@ -29,7 +29,11 @@ Profile a CSV file and print a summary table. `--target` names the target column
 uv run prep-agent profile tests/fixtures/customers.csv --target churned --out runs/profile.json
 ```
 
-Columns that look like they hold personal data (email addresses, phone numbers, or names such as `email` or `user_name`) are flagged `possible_pii` and their sample values are left out of the profile. Pass `--no-samples` to leave sample values out for every column.
+Columns that look like they hold personal data (email addresses, phone numbers, or names such as `email` or `user_name`) are flagged `possible_pii` and their sample values, top values and numeric statistics are left out of the profile. Pass `--no-samples` to leave sample values out for every column.
+
+## Known limitations
+
+- PII detection relies on a list of column-name parts and on email and phone value patterns. Email addresses or phone numbers inside free text are not detected.
 
 ## Development
 
