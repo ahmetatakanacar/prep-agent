@@ -1,0 +1,55 @@
+"""The LLM interface every provider adapter implements, plus its result and error types.
+
+The interface is deliberately narrow: given a system message, a user message and a pydantic
+model, return a validated instance of that model. Everything provider specific (SDKs, retries,
+how structured output is requested) stays in the adapters.
+"""
+
+from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
+
+from pydantic import BaseModel
+
+
+class LLMError(Exception):
+    """Base class for every error the LLM layer raises."""
+
+
+class LLMConfigError(LLMError):
+    """The client cannot be built: a missing API key, a missing package, an unknown provider."""
+
+
+class LLMAPIError(LLMError):
+    """The provider call failed: network, rate limit, server error or rejected request."""
+
+
+class LLMRefusalError(LLMError):
+    """The model declined to answer."""
+
+
+class LLMSchemaError(LLMError):
+    """The model answered, but the answer does not match the requested schema."""
+
+
+@dataclass(frozen=True)
+class TokenUsage:
+    input_tokens: int
+    output_tokens: int
+
+
+@dataclass(frozen=True)
+class LLMResult[T: BaseModel]:
+    parsed: T
+    model: str
+    # None when the provider does not report usage; the benchmark treats that as unknown cost.
+    usage: TokenUsage | None = None
+
+
+@runtime_checkable
+class LLMClient(Protocol):
+    def generate[T: BaseModel](self, system: str, user: str, schema: type[T]) -> LLMResult[T]:
+        """Answer the messages with a validated instance of `schema`.
+
+        Raises an `LLMError` subclass on any failure; adapters never leak provider exceptions.
+        """
+        ...
