@@ -2,7 +2,7 @@
 
 Prepares a CSV dataset for machine learning from a natural-language goal: it profiles the data, has an LLM propose a structured preparation plan, validates the plan, and executes it.
 
-**Status:** under development. Nothing is usable yet beyond the CLI skeleton.
+**Status:** under development. Only the `profile` command works so far; planning and execution are not implemented yet.
 
 ## Planned features
 
@@ -20,6 +20,16 @@ Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
 uv sync
 uv run prep-agent --help
 ```
+
+## Usage
+
+Profile a CSV file and print a summary table. `--target` names the target column and `--out` saves the full profile as JSON.
+
+```powershell
+uv run prep-agent profile tests/fixtures/customers.csv --target churned --out runs/profile.json
+```
+
+Columns that look like they hold personal data (email addresses, phone numbers, or names such as `email` or `user_name`) are flagged `possible_pii` and their sample values are left out of the profile. Pass `--no-samples` to leave sample values out for every column.
 
 ## Development
 
