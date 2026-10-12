@@ -87,7 +87,7 @@ def save_run(
         run_id=run_id,
         created_at=created_at,
         prep_agent_version=__version__,
-        input_path=str(Path(input_path).resolve()),
+        input_path=str(input_path),
         input_sha256=_sha256(Path(input_path)),
         target=plan.target,
         rows=Counts(before=profile.n_rows, train=len(result.train), test=len(result.test)),

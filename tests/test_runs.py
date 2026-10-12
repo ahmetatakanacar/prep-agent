@@ -93,7 +93,7 @@ def test_run_json_describes_the_run(tmp_path, executed):
     assert info.run_id == "r1"
     assert info.prep_agent_version == __version__
     assert info.input_sha256 == hashlib.sha256(CUSTOMERS_CSV.read_bytes()).hexdigest()
-    assert Path(info.input_path) == CUSTOMERS_CSV.resolve()
+    assert info.input_path == str(CUSTOMERS_CSV)
     assert (info.rows.before, info.rows.train, info.rows.test) == (20, 16, 4)
     assert (info.columns.before, info.columns.train, info.columns.test) == (7, 6, 6)
     assert info.target == "churned"
@@ -101,6 +101,24 @@ def test_run_json_describes_the_run(tmp_path, executed):
     assert isinstance(info.created_at, datetime)
     assert info.created_at.tzinfo is not None
     assert "stateful" in info.pipeline_joblib
+
+
+def test_relative_input_path_is_stored_as_given(tmp_path, executed, monkeypatch):
+    _, plan, profile, result = executed
+    monkeypatch.chdir(FIXTURES)
+
+    run_dir = save_run(
+        tmp_path / "runs",
+        input_path=Path("customers.csv"),
+        profile=profile,
+        plan=plan,
+        result=result,
+        run_id="r1",
+    )
+
+    info = RunInfo.model_validate_json((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info.input_path == "customers.csv"
+    assert info.input_sha256 == hashlib.sha256(CUSTOMERS_CSV.read_bytes()).hexdigest()
 
 
 def test_status_is_failed_when_the_result_has_errors(tmp_path, executed):
