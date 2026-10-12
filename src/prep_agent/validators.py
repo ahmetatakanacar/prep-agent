@@ -50,6 +50,7 @@ IssueCode = Literal[
     "unknown_column",
     "target_in_step",
     "impute_non_numeric",
+    "fill_value_type_mismatch",
     "scale_non_numeric",
     "encode_numeric",
     "ordinal_with_missing",
@@ -65,7 +66,10 @@ IssueCode = Literal[
     "stratify_disabled",
 ]
 
-# The severity of an issue is a property of its code, defined once here.
+# The severity of an issue is a property of its code, defined once here. The one exception is
+# `fill_value_type_mismatch`: a string fill value for a numeric column makes the step fail, so
+# that case is an error, while a number in a text column only changes the values, so that case
+# is a warning. The entry below is the error severity; the warning case passes it explicitly.
 SEVERITY: dict[IssueCode, Severity] = {
     "target_not_in_profile": "error",
     "invalid_split_count": "error",
@@ -74,6 +78,7 @@ SEVERITY: dict[IssueCode, Severity] = {
     "unknown_column": "error",
     "target_in_step": "error",
     "impute_non_numeric": "error",
+    "fill_value_type_mismatch": "error",
     "scale_non_numeric": "error",
     "encode_numeric": "error",
     "ordinal_with_missing": "error",
@@ -174,11 +179,12 @@ class _Validation:
         message: str,
         step_index: int | None = None,
         column: str | None = None,
+        severity: Severity | None = None,
     ) -> None:
         self.issues.append(
             ValidationIssue(
                 code=code,
-                severity=SEVERITY[code],
+                severity=severity or SEVERITY[code],
                 step_index=step_index,
                 column=column,
                 message=message,
@@ -327,7 +333,31 @@ class _Validation:
                     step_index=index,
                     column=name,
                 )
+            if step.strategy == "constant":
+                self._check_fill_value(index, step, name, column)
             column.has_missing = False
+
+    def _check_fill_value(self, index: int, step: ImputeStep, name: str, column: _Column) -> None:
+        is_text = isinstance(step.fill_value, str)
+        if column.numeric and is_text:
+            self._add(
+                "fill_value_type_mismatch",
+                f"fill_value {step.fill_value!r} is a string but column {name!r} is numeric, so "
+                "the imputer fails; use a number or impute with 'mean', 'median' or "
+                "'most_frequent'.",
+                step_index=index,
+                column=name,
+            )
+        elif not column.numeric and not is_text:
+            self._add(
+                "fill_value_type_mismatch",
+                f"fill_value {step.fill_value!r} is a number but column {name!r} is "
+                f"{column.inferred_type}; the number would be mixed into its categories. Use a "
+                "string fill_value or 'most_frequent'.",
+                step_index=index,
+                column=name,
+                severity="warning",
+            )
 
     def _encode(self, index: int, step: EncodeStep) -> None:
         if step.method == "ordinal" and self.plan.model_family == "linear":

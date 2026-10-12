@@ -377,6 +377,58 @@ def test_most_frequent_and_constant_imputation_work_on_any_type():
     assert find(issues, "impute_non_numeric") == []
 
 
+@pytest.mark.parametrize("column", ["age", "income", "flag"])
+def test_string_fill_value_for_a_numeric_column_is_an_error(column):
+    issues = validate(split(), impute([column], "constant", fill_value="unknown"))
+
+    [issue] = find(issues, "fill_value_type_mismatch")
+    assert issue.severity == "error"
+    assert issue.column == column
+    assert issue.step_index == 1
+
+
+def test_string_fill_value_for_an_ordinal_encoded_column_is_an_error():
+    issues = validate(
+        split(), encode(["city"], "ordinal"), impute(["city"], "constant", fill_value="x")
+    )
+
+    [issue] = find(issues, "fill_value_type_mismatch")
+    assert issue.severity == "error"
+    assert issue.step_index == 2
+
+
+@pytest.mark.parametrize("fill_value", [0, -1.5])
+@pytest.mark.parametrize("column", ["age", "income", "flag"])
+def test_numeric_fill_value_for_a_numeric_column_is_fine(column, fill_value):
+    issues = validate(split(), impute([column], "constant", fill_value=fill_value))
+
+    assert find(issues, "fill_value_type_mismatch") == []
+
+
+@pytest.mark.parametrize("fill_value", [0, 2.5])
+@pytest.mark.parametrize("column", ["city", "job", "gender", "notes"])
+def test_numeric_fill_value_for_a_non_numeric_column_is_a_warning(column, fill_value):
+    issues = validate(split(), impute([column], "constant", fill_value=fill_value))
+
+    [issue] = find(issues, "fill_value_type_mismatch")
+    assert issue.severity == "warning"
+    assert issue.column == column
+    assert issue.step_index == 1
+
+
+@pytest.mark.parametrize("column", ["city", "job", "gender", "notes"])
+def test_string_fill_value_for_a_non_numeric_column_is_fine(column):
+    issues = validate(split(), impute([column], "constant", fill_value="unknown"))
+
+    assert find(issues, "fill_value_type_mismatch") == []
+
+
+def test_fill_value_type_is_only_checked_for_constant_imputation():
+    issues = validate(split(), impute(["city"], "most_frequent"), impute(["age"], "mean"))
+
+    assert find(issues, "fill_value_type_mismatch") == []
+
+
 @pytest.mark.parametrize("column", ["city", "gender", "signup", "customer_id"])
 def test_scaling_a_non_numeric_column_is_an_error(column):
     issues = validate(split(), scale([column]))
