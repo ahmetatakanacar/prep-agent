@@ -9,8 +9,9 @@ threshold lives in `ProfilerConfig`.
 
 1. `constant`: at most one distinct value (this includes all-missing columns).
 2. `datetime`: a datetime dtype, or strings that parse as dates (see rule 5).
-3. `boolean`: a bool dtype or exactly two distinct values (true/false, yes/no, 0/1, ...).
-   Any two-valued column counts, since it behaves as a binary feature either way.
+3. `binary`: exactly two distinct non-missing values. A bool dtype is binary; a numeric column
+   is binary only if its values are exactly {0, 1} (two-valued numerics like {1, 5} stay
+   `numeric`); any other column with two distinct values is binary (yes/no, male/female, ...).
 4. Numeric dtypes are `id_like` or `numeric`. Only integer dtypes can be `id_like`: every value
    is distinct, there are at least `id_min_rows` of them, and the values either form an almost
    contiguous range (span <= `id_dense_span_ratio` x row count, like 1..n) or the column name
@@ -44,7 +45,7 @@ from pandas.api import types as pdt
 from pydantic import BaseModel
 
 InferredType = Literal[
-    "numeric", "categorical", "boolean", "datetime", "text", "id_like", "constant"
+    "numeric", "categorical", "binary", "datetime", "text", "id_like", "constant"
 ]
 TaskHint = Literal["classification", "regression"]
 
@@ -114,7 +115,7 @@ class ColumnProfile(BaseModel):
     skew: float | None = None
     n_outliers_iqr: int | None = None
 
-    # Categorical and boolean columns
+    # Categorical and binary columns
     top_values: list[TopValue] | None = None
 
     # Text columns
@@ -216,7 +217,7 @@ def _profile_column(name: str, series: pd.Series, config: ProfilerConfig) -> Col
             warnings.append("many_outliers")
         if n_inf:
             warnings.append("infinite_values")
-    elif inferred in ("categorical", "boolean"):
+    elif inferred in ("categorical", "binary"):
         fields["top_values"] = _top_values(non_null, config)
     elif inferred == "text":
         lengths = non_null.astype(str).str.len()
@@ -245,13 +246,17 @@ def _infer_type(
     dtype = non_null.dtype
     if pdt.is_datetime64_any_dtype(dtype):
         return "datetime"
-    if pdt.is_bool_dtype(dtype) or n_unique == 2:
-        return "boolean"
+    if pdt.is_bool_dtype(dtype):
+        return "binary"
     n = len(non_null)
     if pdt.is_numeric_dtype(dtype):
+        if n_unique == 2 and set(non_null.unique().tolist()) == {0, 1}:
+            return "binary"
         if pdt.is_integer_dtype(dtype) and _is_id_like_integer(name, non_null, n_unique, config):
             return "id_like"
         return "numeric"
+    if n_unique == 2:
+        return "binary"
 
     strings = non_null.astype(str)
     if _looks_like_datetime(strings, config):
@@ -347,7 +352,7 @@ def _finite_or_none(value: float) -> float | None:
 
 
 def _task_hint(column: ColumnProfile, config: ProfilerConfig) -> TaskHint | None:
-    if column.inferred_type in ("boolean", "categorical"):
+    if column.inferred_type in ("binary", "categorical"):
         return "classification"
     if column.inferred_type == "numeric":
         return "regression" if column.n_unique > config.regression_min_unique else "classification"

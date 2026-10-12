@@ -67,23 +67,48 @@ def test_top_values_are_ordered_by_count_and_limited():
     [
         [True, False] * 10,
         ["yes", "no"] * 10,
-        [0, 1] * 10,
+        ["male", "female", "female"] * 7,
         ["Y", "N", "Y", "Y"] * 5,
+        [0, 1] * 10,
+        [0.0, 1.0] * 10,
     ],
 )
-def test_two_valued_columns_are_boolean(values):
+def test_two_valued_columns_are_binary(values):
     col = profile_column(values)
 
-    assert col.inferred_type == "boolean"
+    assert col.inferred_type == "binary"
     assert col.n_unique == 2
     assert len(col.top_values) == 2
+    assert col.min is None
 
 
-def test_boolean_ignores_missing_values():
+@pytest.mark.parametrize("values", [[1, 5] * 10, [1.5, 2.5] * 10, [-1, 1] * 10, [2, 3] * 10])
+def test_two_valued_numeric_columns_other_than_zero_one_stay_numeric(values):
+    col = profile_column(values)
+
+    assert col.inferred_type == "numeric"
+    assert col.n_unique == 2
+    assert col.min is not None
+    assert col.top_values is None
+
+
+def test_binary_ignores_missing_values():
     col = profile_column(["yes", "no", None, "yes", None] * 4)
 
-    assert col.inferred_type == "boolean"
+    assert col.inferred_type == "binary"
     assert col.n_missing == 8
+
+
+def test_numeric_zero_one_with_missing_values_is_binary():
+    col = profile_column([0.0, 1.0, np.nan, 1.0] * 5)
+
+    assert col.inferred_type == "binary"
+
+
+def test_three_valued_zero_one_two_column_is_numeric():
+    col = profile_column([0, 1, 2] * 7)
+
+    assert col.inferred_type == "numeric"
 
 
 def test_constant_column():
