@@ -2,7 +2,7 @@
 
 Prepares a CSV dataset for machine learning from a natural-language goal: it profiles the data, has an LLM propose a structured preparation plan, validates the plan, and executes it.
 
-**Status:** under development. The `profile` and `run` commands work; `run` takes a hand-written plan, and the LLM planner is not implemented yet.
+**Status:** under development. The `profile`, `run` and `llm-check` commands work; `run` takes a hand-written plan, and the LLM planner is not implemented yet.
 
 ## Planned features
 
@@ -40,6 +40,26 @@ uv run prep-agent run tests/fixtures/customers.csv --plan tests/fixtures/custome
 This writes `runs/<run_id>/` with `profile.json`, `plan.json`, `train.csv`, `test.csv`, `pipeline.joblib`, `issues.json` and `run.json`. The exit code is 1 if the plan has errors or the result fails validation (in the second case the files are still written, with status `failed` in `run.json`); warnings do not fail a run. Pass `--dry-run` to only validate the plan.
 
 `pipeline.joblib` contains only the fitted impute, encode and scale steps. It does not include the stateless steps or the split, so it cannot be applied to a raw file. A standalone `pipeline.py` is not generated yet.
+
+## LLM provider
+
+The LLM layer is a small `LLMClient` interface with an OpenAI adapter (Responses API, structured outputs). The adapter is an optional extra:
+
+```powershell
+uv sync --extra openai
+```
+
+Put `OPENAI_API_KEY` in your environment or in a `.env` file in the working directory (`.env` is git-ignored). `PREP_AGENT_MODEL` overrides the default model and `PREP_AGENT_PROVIDER` selects the provider (only `openai` exists). Check the setup with one small request; it prints the model and token usage, and exits 1 with a message if the key is missing or the request fails:
+
+```powershell
+uv run prep-agent llm-check
+```
+
+Tests never call the real API. The few tests that do are marked `llm` and skipped unless you opt in:
+
+```powershell
+$env:PREP_AGENT_RUN_LLM_TESTS="1"; uv run pytest -m llm -v
+```
 
 ## Known limitations
 
