@@ -43,6 +43,7 @@ from prep_agent.profiler import ColumnProfile, DatasetProfile, InferredType
 Severity = Literal["error", "warning"]
 IssueCode = Literal[
     # errors
+    "target_mismatch",
     "target_not_in_profile",
     "invalid_split_count",
     "stateless_after_split",
@@ -71,6 +72,7 @@ IssueCode = Literal[
 # that case is an error, while a number in a text column only changes the values, so that case
 # is a warning. The entry below is the error severity; the warning case passes it explicitly.
 SEVERITY: dict[IssueCode, Severity] = {
+    "target_mismatch": "error",
     "target_not_in_profile": "error",
     "invalid_split_count": "error",
     "stateless_after_split": "error",
@@ -165,6 +167,7 @@ class _Validation:
         self.first_split = self.kinds.index("split") if "split" in self.kinds else None
 
     def run(self) -> list[ValidationIssue]:
+        self._check_target_matches_profile()
         self._check_target_exists()
         self._check_split_count()
         for index, step in enumerate(self.plan.steps):
@@ -192,6 +195,17 @@ class _Validation:
         )
 
     # --- plan level ---
+
+    def _check_target_matches_profile(self) -> None:
+        profile_target = self.profile.target
+        if profile_target is not None and profile_target != self.plan.target:
+            self._add(
+                "target_mismatch",
+                f"the plan's target {self.plan.target!r} differs from the target of the "
+                f"profile, {profile_target!r}, which is the one the user specified; set the "
+                "plan's 'target' to the user's target.",
+                column=self.plan.target,
+            )
 
     def _check_target_exists(self) -> None:
         target = self.plan.target

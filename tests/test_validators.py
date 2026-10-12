@@ -184,6 +184,29 @@ def test_target_missing_from_profile_is_an_error():
     assert find(validate(*VALID_STEPS), "target_not_in_profile") == []
 
 
+def test_plan_target_different_from_the_profile_target_is_an_error():
+    issues = validate(*VALID_STEPS, target="segment")
+
+    [issue] = find(issues, "target_mismatch")
+    assert issue.severity == "error"
+    assert issue.step_index is None
+    assert issue.column == "segment"
+    assert "'churn'" in issue.message
+    assert "user" in issue.message
+
+
+def test_plan_target_equal_to_the_profile_target_is_not_a_mismatch():
+    assert find(validate(*VALID_STEPS), "target_mismatch") == []
+
+
+@pytest.mark.parametrize("target", ["churn", "segment", "nope"])
+def test_target_mismatch_is_not_checked_when_the_profile_has_no_target(target):
+    profile = profile_dataframe(make_frame())
+    assert profile.target is None
+
+    assert find(validate(split(), profile=profile, target=target), "target_mismatch") == []
+
+
 def test_plan_without_a_split_is_an_error():
     issues = validate(dedupe(), drop("country"))
 
@@ -739,7 +762,11 @@ def test_issue_order_is_plan_level_then_by_step_then_end_of_plan():
 def test_plan_level_issues_come_before_step_issues():
     issues = validate(scale(["age"]), target="nope")
 
-    assert [i.code for i in issues[:2]] == ["target_not_in_profile", "invalid_split_count"]
+    assert [i.code for i in issues[:3]] == [
+        "target_mismatch",
+        "target_not_in_profile",
+        "invalid_split_count",
+    ]
 
 
 def test_same_input_gives_the_same_issues_in_the_same_order():
