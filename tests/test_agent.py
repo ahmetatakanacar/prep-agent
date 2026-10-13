@@ -220,14 +220,84 @@ def test_zero_question_rounds_never_ask(df):
     assert ask.asked == []
 
 
-def test_questions_after_the_limit_are_an_error_not_a_loop(df):
+def test_questions_after_the_limit_get_one_more_try_with_a_plan_only_instruction(df):
+    responses = [
+        questions_reply(question("a")),
+        questions_reply(question("b")),
+        plan_reply(VALID_PLAN),
+    ]
+
+    result, llm, ask = run(df, responses, max_question_rounds=1)
+
+    assert len(ask.asked) == 1
+    assert "no more questions are allowed" not in llm.calls[1].user
+    assert "no more questions are allowed" in llm.calls[2].user
+    assert "Do not ask any more questions" in llm.calls[2].user
+    assert [c.purpose for c in result.calls] == ["plan", "plan", "revise"]
+    assert [r.question.id for r in result.qa_history] == ["a"]
+
+
+def test_the_plan_only_retry_costs_one_revision(df):
+    responses = [
+        questions_reply(question("a")),
+        questions_reply(question("b")),
+        plan_reply(plan_with_impute_before_split()),
+    ]
+
+    with pytest.raises(RevisionBudgetError) as caught:
+        run(df, responses, max_question_rounds=1, max_revisions=1)
+
+    assert len(caught.value.trace.calls) == 3
+
+
+def test_the_retry_leaves_budget_for_a_revision(df):
+    responses = [
+        questions_reply(question("a")),
+        questions_reply(question("b")),
+        plan_reply(plan_with_impute_before_split()),
+        plan_reply(VALID_PLAN),
+    ]
+
+    result, llm, _ = run(df, responses, max_question_rounds=1, max_revisions=2)
+
+    assert len(llm.calls) == 4
+    assert "no more questions are allowed" not in llm.calls[3].user
+    assert result.calls[3].issue_codes == ["stateful_before_split"]
+
+
+def test_without_revision_budget_questions_after_the_limit_are_an_error(df):
     responses = [questions_reply(question("a")), questions_reply(question("b"))]
 
     with pytest.raises(AgentError, match="question") as caught:
-        run(df, responses, max_question_rounds=1)
+        run(df, responses, max_question_rounds=1, max_revisions=0)
 
     assert len(caught.value.trace.calls) == 2
     assert caught.value.plan is None
+
+
+def test_questions_again_after_the_retry_are_an_error_not_a_loop(df):
+    responses = [questions_reply(question(qid)) for qid in "abcd"]
+
+    with pytest.raises(AgentError, match="question") as caught:
+        run(df, responses, max_question_rounds=1, max_revisions=5)
+
+    assert len(caught.value.trace.calls) == 3
+    assert caught.value.plan is None
+
+
+def test_the_retry_during_a_revision_keeps_the_revision_in_the_prompt(df):
+    responses = [
+        plan_reply(plan_with_impute_before_split()),
+        questions_reply(question("a")),
+        questions_reply(question("b")),
+        plan_reply(VALID_PLAN),
+    ]
+
+    result, llm, _ = run(df, responses, max_question_rounds=1, max_revisions=2)
+
+    assert "no more questions are allowed" in llm.calls[3].user
+    assert "stateful_before_split" in llm.calls[3].user
+    assert result.plan == Plan.model_validate(VALID_PLAN)
 
 
 def test_answers_that_do_not_cover_the_questions_are_rejected(df):

@@ -134,8 +134,10 @@ def build_user_prompt(
     qa_history: list[QARecord],
     revision: Revision | None,
     question_rounds_left: int,
+    plan_only: bool = False,
 ) -> str:
-    """Render the user message. `question_rounds_left == 0` tells the planner to stop asking."""
+    """Render the user message. `question_rounds_left == 0` tells the planner to stop asking;
+    `plan_only` adds that its previous answer asked questions anyway and was refused."""
     return _ENV.get_template("user.j2").render(
         goal=goal,
         target=target,
@@ -145,4 +147,5 @@ def build_user_prompt(
         revision=revision,
         previous_plan_json=revision.plan.model_dump_json(exclude_none=True) if revision else "",
         question_rounds_left=question_rounds_left,
+        plan_only=plan_only,
     )

@@ -207,3 +207,14 @@ def test_exhausted_question_rounds_forbid_questions(profile):
     assert "Do not ask any more questions" in prompt
     assert "recommend" in prompt
     assert "round(s) left" not in prompt
+
+
+def test_plan_only_notice_is_absent_by_default(profile):
+    assert "no more questions are allowed" not in user_prompt(profile)
+
+
+def test_plan_only_notice_says_the_previous_answer_was_refused(profile):
+    prompt = user_prompt(profile, question_rounds_left=0, plan_only=True)
+
+    assert "Your previous answer asked questions, but no more questions are allowed" in prompt
+    assert 'Answer with kind "plan" now' in prompt

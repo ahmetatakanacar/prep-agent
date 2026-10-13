@@ -5,8 +5,10 @@ execution -> result validation. A plan or result with errors goes back to the pl
 with the validator's issues. Warnings never do.
 
 Two limits keep the loop finite. `max_question_rounds` caps how often the user is asked; once it
-is reached the planner is told to answer with a plan. `max_revisions` caps how often a plan is
-sent back, and plan errors and result errors draw on the same budget. When the budget is used up
+is reached the planner is told to answer with a plan. If it asks anyway, it gets one more call
+with a plan-only instruction, and that call is charged to the revision budget. `max_revisions`
+caps how often a plan is sent back, and plan errors, result errors and that retry draw on the
+same budget. When the budget is used up
 and errors remain, `RevisionBudgetError` carries the last plan and its issues.
 
 The planner only ever sees the profile (see `prep_agent.planner`), never the data frame.
@@ -188,15 +190,22 @@ class _Agent:
         self.qa_history: list[QARecord] = []
         self.question_rounds = 0
         self.revisions = 0
+        self.plan_only_retried = False
         self.attempt: _Attempt | None = None
         self._profiles: dict[str, DatasetProfile] = {}
 
     def run(self) -> AgentResult:
         revision: Revision | None = None
+        plan_only = False
         while True:
-            response = self._call_planner(revision)
+            response = self._call_planner(revision, plan_only)
+            plan_only = False
             if response.kind == "questions":
-                self._ask_user(response.questions or [])
+                if self.question_rounds < self.max_question_rounds:
+                    self._ask_user(response.questions or [])
+                else:
+                    self._charge_plan_only_retry()
+                    plan_only = True
                 continue
 
             plan = response.plan
@@ -217,7 +226,7 @@ class _Agent:
             self.revisions += 1
             revision = Revision(plan=plan, issues=errors)
 
-    def _call_planner(self, revision: Revision | None) -> PlannerResponse:
+    def _call_planner(self, revision: Revision | None, plan_only: bool) -> PlannerResponse:
         user = build_user_prompt(
             goal=self.goal,
             profile=self.profile,
@@ -226,6 +235,7 @@ class _Agent:
             qa_history=self.qa_history,
             revision=revision,
             question_rounds_left=self.max_question_rounds - self.question_rounds,
+            plan_only=plan_only,
         )
         try:
             result = self.llm.generate(self.system_prompt, user, PlannerResponse)
@@ -234,7 +244,7 @@ class _Agent:
         self.calls.append(
             LLMCallRecord(
                 index=len(self.calls),
-                purpose="revise" if revision else "plan",
+                purpose="revise" if revision or plan_only else "plan",
                 model=result.model,
                 usage=result.usage,
                 issue_codes=[issue.code for issue in revision.issues] if revision else [],
@@ -243,13 +253,18 @@ class _Agent:
         )
         return result.parsed
 
-    def _ask_user(self, questions: list[Question]) -> None:
-        if self.question_rounds >= self.max_question_rounds:
+    def _charge_plan_only_retry(self) -> None:
+        """Allow one more call after questions past the limit, or give up."""
+        if self.plan_only_retried or self.revisions >= self.max_revisions:
             raise AgentError(
-                "the planner asked questions although the limit of "
+                "the planner kept asking questions although the limit of "
                 f"{self.max_question_rounds} question round(s) was reached",
                 **self._failure(),
             )
+        self.plan_only_retried = True
+        self.revisions += 1
+
+    def _ask_user(self, questions: list[Question]) -> None:
         answers = self.ask_fn(list(questions))
         for question in questions:
             if question.id not in answers:

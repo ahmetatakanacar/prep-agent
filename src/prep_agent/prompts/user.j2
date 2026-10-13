@@ -32,6 +32,13 @@
 {% endfor %}
 {% endif %}
 
+{% if plan_only %}
+
+## Your previous answer was refused
+
+Your previous answer asked questions, but no more questions are allowed. Answer with kind "plan" now.
+{% endif %}
+
 ## What to do now
 
 {% if revision %}Return a complete corrected plan that fixes every issue above.
