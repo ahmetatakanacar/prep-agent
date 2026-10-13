@@ -47,13 +47,13 @@ def make_plan() -> Callable[..., Plan]:
 
 
 @pytest.fixture
-def invoke_cli() -> Callable[[Sequence[str]], CliResult]:
+def invoke_cli() -> Callable[..., CliResult]:
     """Run the CLI with a fixed terminal width and return ANSI-free output."""
     runner = CliRunner()
     env = {"COLUMNS": TERMINAL_WIDTH, "TERMINAL_WIDTH": TERMINAL_WIDTH}
 
-    def invoke(args: Sequence[str]) -> CliResult:
-        result = runner.invoke(app, list(args), env=env)
+    def invoke(args: Sequence[str], input: str | None = None) -> CliResult:
+        result = runner.invoke(app, list(args), input=input, env=env)
         return CliResult(exit_code=result.exit_code, output=ANSI_ESCAPE.sub("", result.output))
 
     return invoke

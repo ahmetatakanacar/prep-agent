@@ -1,5 +1,6 @@
 """Command-line interface for prep-agent."""
 
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, NoReturn
 
@@ -10,12 +11,23 @@ from rich.table import Table
 from rich.text import Text
 
 from prep_agent import __version__
+from prep_agent.agent import AgentError, AgentTrace, AskFn, run_agent
 from prep_agent.env import load_dotenv_file
 from prep_agent.executor import ExecutionError, PlanValidationError, execute
 from prep_agent.llm.base import LLMError
 from prep_agent.llm.factory import create_llm_client
 from prep_agent.llm.ping import PING_SYSTEM, PING_USER, PingReply
-from prep_agent.plan import Plan
+from prep_agent.plan import (
+    DedupeStep,
+    DropMissingTargetStep,
+    EncodeStep,
+    ImputeStep,
+    Plan,
+    ScaleStep,
+    SplitStep,
+    Step,
+)
+from prep_agent.planner import Question
 from prep_agent.profiler import DatasetProfile, ProfilerError, load_csv, profile_dataframe
 from prep_agent.runs import RunExistsError, save_run
 from prep_agent.validators import ValidationIssue, has_errors, validate_plan
@@ -130,6 +142,79 @@ def run_command(
     console.print(Text(f"Run folder: {run_dir}"), soft_wrap=True)
 
 
+class ModelFamily(StrEnum):
+    tree = "tree"
+    linear = "linear"
+    any = "any"
+
+
+@app.command("prepare")
+def prepare_command(
+    csv_path: Annotated[Path, typer.Argument(help="CSV file to prepare.")],
+    goal: Annotated[str, typer.Option(help="What the data is for, in plain language.")],
+    target: Annotated[str | None, typer.Option(help="Name of the target column.")] = None,
+    model_family: Annotated[
+        ModelFamily | None, typer.Option(help="Model family the data is prepared for.")
+    ] = None,
+    out_dir: Annotated[Path, typer.Option(help="Directory that receives the run folder.")] = Path(
+        "runs"
+    ),
+    non_interactive: Annotated[
+        bool,
+        typer.Option(
+            "--non-interactive", help="Answer every question with the recommended option."
+        ),
+    ] = False,
+    max_revisions: Annotated[
+        int, typer.Option(min=0, help="How often a plan with errors may be sent back.")
+    ] = 2,
+) -> None:
+    """Have the LLM plan the preparation of a CSV file, then validate, run and save it."""
+    console = Console()
+    if not goal.strip():
+        _fail("the goal must not be empty")
+    try:
+        df = load_csv(csv_path)
+        llm = create_llm_client()
+        console.print(Text("Profiling the data and planning..."))
+        result = run_agent(
+            df,
+            goal,
+            llm,
+            _ask_recommended(console) if non_interactive else _ask_interactively(console),
+            target=target,
+            model_family=model_family.value if model_family else None,
+            max_revisions=max_revisions,
+        )
+    except AgentError as exc:
+        _report_agent_failure(console, exc, csv_path, out_dir)
+    except (ProfilerError, LLMError) as exc:
+        _fail(str(exc))
+
+    _print_plan(console, result.plan)
+    _print_issues(console, result.issues)
+    try:
+        run_dir = save_run(
+            out_dir,
+            input_path=csv_path,
+            profile=result.profile,
+            plan=result.plan,
+            result=result.execution,
+            trace=result.trace,
+        )
+    except RunExistsError as exc:
+        _fail(str(exc))
+    train, test = result.execution.train, result.execution.test
+    console.print(Text(_usage_line(result.trace)))
+    console.print(
+        Text(
+            f"Train: {len(train)} rows x {train.shape[1]} columns | "
+            f"Test: {len(test)} rows x {test.shape[1]} columns"
+        )
+    )
+    console.print(Text(f"Run folder: {run_dir}"), soft_wrap=True)
+
+
 @app.command("llm-check")
 def llm_check_command() -> None:
     """Send one small request to the configured LLM provider and report the outcome."""
@@ -164,6 +249,120 @@ def _load_plan(path: Path) -> Plan:
             for err in exc.errors()
         )
         raise PlanFileError(f"invalid plan file {path}: {problems}") from None
+
+
+def _ask_recommended(console: Console) -> AskFn:
+    def ask(questions: list[Question]) -> dict[str, str]:
+        for question in questions:
+            console.print(Text(f"{question.question} -> {question.recommended} (recommended)"))
+        return {question.id: question.recommended for question in questions}
+
+    return ask
+
+
+def _ask_interactively(console: Console) -> AskFn:
+    def ask(questions: list[Question]) -> dict[str, str]:
+        answers = {}
+        for question in questions:
+            console.print(Text(question.question, style="bold"))
+            console.print(Text(f"Why I ask: {question.reason}", style="dim"))
+            for number, option in enumerate(question.options, start=1):
+                suffix = " (recommended)" if option == question.recommended else ""
+                console.print(Text(f"  {number}) {option}{suffix}"))
+            answers[question.id] = _read_choice(console, question)
+        return answers
+
+    return ask
+
+
+def _read_choice(console: Console, question: Question) -> str:
+    count = len(question.options)
+    default = question.options.index(question.recommended) + 1
+    while True:
+        try:
+            raw = console.input(Text(f"Choose 1-{count} [Enter = {default}]: ")).strip()
+        except EOFError:
+            _fail("input ended while waiting for an answer")
+        if not raw:
+            return question.recommended
+        if raw.isdecimal() and 1 <= int(raw) <= count:
+            return question.options[int(raw) - 1]
+        console.print(Text(f"Enter a number from 1 to {count}, or press Enter for {default}."))
+
+
+def _report_agent_failure(
+    console: Console, error: AgentError, csv_path: Path, out_dir: Path
+) -> NoReturn:
+    """Print what went wrong, save the failed run if there is a plan to save, and exit 1."""
+    Console(stderr=True).print(Text.assemble(("Error: ", "red"), str(error)))
+    if error.plan is None:
+        console.print(Text("The planner produced no plan, so no run was saved."))
+        raise typer.Exit(1)
+    _print_plan(console, error.plan)
+    _print_issues(console, error.issues)
+    try:
+        run_dir = save_run(
+            out_dir,
+            input_path=csv_path,
+            profile=error.profile,
+            plan=error.plan,
+            result=error.execution,
+            plan_issues=error.issues,
+            trace=error.trace,
+        )
+    except RunExistsError as exc:
+        _fail(str(exc))
+    console.print(Text(_usage_line(error.trace)))
+    console.print(Text("The run failed; artifacts saved with status failed."))
+    console.print(Text(f"Run folder: {run_dir}"), soft_wrap=True)
+    raise typer.Exit(1)
+
+
+def _usage_line(trace: AgentTrace) -> str:
+    usage = trace.total_usage
+    tokens = (
+        "not reported" if usage is None else f"{usage.input_tokens} in / {usage.output_tokens} out"
+    )
+    count = len(trace.calls)
+    calls = f"{count} LLM call{'' if count == 1 else 's'}"
+    return f"Tokens: {tokens} | {calls} | model: {trace.model or 'none'}"
+
+
+def _print_plan(console: Console, plan: Plan) -> None:
+    console.print(
+        Text(f"Plan: target {plan.target} | {plan.task_type} | model family {plan.model_family}")
+    )
+    table = Table()
+    table.add_column("step", justify="right")
+    table.add_column("op", no_wrap=True)
+    table.add_column("columns")
+    table.add_column("reason")
+    for index, step in enumerate(plan.steps):
+        table.add_row(
+            Text(str(index)),
+            Text(_op_label(step)),
+            Text(_step_columns(step, plan.target)),
+            Text(step.reason),
+        )
+    console.print(table)
+
+
+def _op_label(step: Step) -> str:
+    if isinstance(step, ImputeStep):
+        return f"{step.op} ({step.strategy})"
+    if isinstance(step, EncodeStep | ScaleStep):
+        return f"{step.op} ({step.method})"
+    return step.op
+
+
+def _step_columns(step: Step, target: str) -> str:
+    if isinstance(step, DedupeStep):
+        return ", ".join(step.subset) if step.subset else "all columns"
+    if isinstance(step, DropMissingTargetStep):
+        return target
+    if isinstance(step, SplitStep):
+        return ""
+    return ", ".join(step.columns)
 
 
 def _fail(message: str) -> NoReturn:
