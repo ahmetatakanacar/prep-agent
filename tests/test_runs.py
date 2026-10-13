@@ -10,9 +10,12 @@ import pandas as pd
 import pytest
 
 from prep_agent import __version__
+from prep_agent.agent import AgentTrace, LLMCallRecord
 from prep_agent.executor import execute
+from prep_agent.llm.base import TokenUsage
 from prep_agent.ops import OpContext, get_op
 from prep_agent.plan import Plan
+from prep_agent.planner import PlannerResponse, QARecord, Question
 from prep_agent.profiler import DatasetProfile, load_csv, profile_dataframe
 from prep_agent.runs import RunExistsError, RunInfo, save_run
 from prep_agent.validators import ValidationIssue
@@ -204,3 +207,106 @@ def test_saved_pipeline_reproduces_the_executor_output(tmp_path, executed):
     transformed[plan.target] = raw_test[plan.target]
 
     pd.testing.assert_frame_equal(transformed, result.test, check_exact=True)
+
+
+# --- runs that come from the agent ---
+
+DEFAULT_USAGE = TokenUsage(120, 30)
+
+
+def make_trace(*, usage: TokenUsage | None = DEFAULT_USAGE) -> AgentTrace:
+    question = Question(
+        id="family",
+        question="Which model family?",
+        options=["tree", "any"],
+        recommended="any",
+        reason="scaling depends on it",
+    )
+    plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
+    call = LLMCallRecord(
+        index=0,
+        purpose="plan",
+        model="fake-model",
+        usage=usage,
+        issue_codes=[],
+        response=PlannerResponse(kind="plan", plan=plan),
+    )
+    return AgentTrace(
+        goal="prepare for churn",
+        calls=[call],
+        qa_history=[QARecord(question=question, answer="any")],
+    )
+
+
+def test_a_trace_adds_the_trace_and_qa_files(tmp_path, executed):
+    run_dir = save(tmp_path, executed, run_id="r1", trace=make_trace())
+
+    assert {p.name for p in run_dir.iterdir()} == EXPECTED_FILES | {"llm_trace.json", "qa.json"}
+    trace = json.loads((run_dir / "llm_trace.json").read_text(encoding="utf-8"))
+    assert trace["model"] == "fake-model"
+    assert trace["total_usage"] == {"input_tokens": 120, "output_tokens": 30}
+    [call] = trace["calls"]
+    assert call["purpose"] == "plan" and call["issue_codes"] == []
+    assert call["response"]["kind"] == "plan"
+    [qa] = json.loads((run_dir / "qa.json").read_text(encoding="utf-8"))
+    assert qa["question"]["id"] == "family" and qa["answer"] == "any"
+
+
+def test_run_json_gets_goal_model_and_usage_from_the_trace(tmp_path, executed):
+    run_dir = save(tmp_path, executed, run_id="r1", trace=make_trace())
+
+    info = RunInfo.model_validate_json((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info.goal == "prepare for churn"
+    assert info.model == "fake-model"
+    assert info.token_usage == TokenUsage(120, 30)
+
+
+def test_usage_stays_empty_when_the_provider_reported_none(tmp_path, executed):
+    run_dir = save(tmp_path, executed, run_id="r1", trace=make_trace(usage=None))
+
+    info = RunInfo.model_validate_json((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info.token_usage is None
+    trace = json.loads((run_dir / "llm_trace.json").read_text(encoding="utf-8"))
+    assert trace["total_usage"] is None
+
+
+def test_a_run_without_a_trace_has_no_goal(tmp_path, executed):
+    run_dir = save(tmp_path, executed, run_id="r1")
+
+    info = RunInfo.model_validate_json((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert (info.goal, info.model, info.token_usage) == (None, None, None)
+
+
+def test_a_failed_run_without_a_result_still_writes_plan_issues_and_trace(tmp_path, executed):
+    _, plan, profile, _ = executed
+    error = ValidationIssue(
+        code="stateful_before_split", severity="error", step_index=0, message="move it"
+    )
+
+    run_dir = save_run(
+        tmp_path / "runs",
+        input_path=CUSTOMERS_CSV,
+        profile=profile,
+        plan=plan,
+        result=None,
+        plan_issues=[error],
+        trace=make_trace(),
+        run_id="r1",
+    )
+
+    assert {p.name for p in run_dir.iterdir()} == {
+        "profile.json",
+        "plan.json",
+        "issues.json",
+        "run.json",
+        "llm_trace.json",
+        "qa.json",
+    }
+    info = RunInfo.model_validate_json((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info.status == "failed"
+    assert (info.rows.before, info.rows.train, info.rows.test) == (20, None, None)
+    assert (info.columns.before, info.columns.train, info.columns.test) == (7, None, None)
+    assert info.pipeline_joblib is None
+    issues = json.loads((run_dir / "issues.json").read_text(encoding="utf-8"))
+    assert [i["code"] for i in issues["plan_issues"]] == ["stateful_before_split"]
+    assert issues["result_issues"] == []
