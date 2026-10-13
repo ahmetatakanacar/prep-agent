@@ -70,7 +70,7 @@ uv run prep-agent llm-check
 Tests never call the real API. The few tests that do are marked `llm` and skipped unless you opt in:
 
 ```powershell
-$env:PREP_AGENT_RUN_LLM_TESTS="1"; uv run pytest -m llm -v
+$env:PREP_AGENT_RUN_LLM_TESTS="1"; uv run pytest -m llm -v -s
 ```
 
 ## Known limitations

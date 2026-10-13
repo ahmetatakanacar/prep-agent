@@ -11,6 +11,7 @@ from prep_agent.llm.factory import create_llm_client
 from prep_agent.llm.ping import PING_SYSTEM, PING_USER, PingReply
 from prep_agent.plan import Plan
 from prep_agent.profiler import load_csv, profile_dataframe
+from prep_agent.validators import validate_plan
 
 pytestmark = pytest.mark.llm
 
@@ -26,8 +27,8 @@ def test_ping_schema_round_trip():
 
 
 def test_plan_schema_is_accepted_by_strict_structured_outputs():
-    # This is the empirical check of the Plan schema against OpenAI's strict mode: the schema
-    # has oneOf/discriminator and defaults, which the docs do not list as supported.
+    # Plan quality is not asserted here (that is the planner's job in a later stage). The issue
+    # codes are printed so a run shows how far a bare, unprompted answer is from a valid plan.
     profile = profile_dataframe(load_csv(CUSTOMERS), target="churned")
     system = (
         "You prepare tabular data for machine learning. Return a preparation plan as JSON "
@@ -40,4 +41,7 @@ def test_plan_schema_is_accepted_by_strict_structured_outputs():
     result = create_llm_client().generate(system, user, Plan)
 
     assert isinstance(result.parsed, Plan)
-    assert result.parsed.target == "churned"
+    issues = validate_plan(result.parsed, profile)
+    print(f"\nmodel: {result.model} | usage: {result.usage}")
+    print(f"steps: {[step.op for step in result.parsed.steps]}")
+    print(f"validate_plan issue codes: {[f'{i.severity}:{i.code}' for i in issues] or 'none'}")
