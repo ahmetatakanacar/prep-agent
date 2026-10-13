@@ -1,11 +1,18 @@
-"""OpenAI adapter: structured outputs through the Responses API.
+"""OpenAI adapter: strict structured outputs through the Responses API.
+
+The request carries an explicit JSON schema (`text.format` of type `json_schema`, strict) that
+is generated from the pydantic model by `strict_schema.to_strict_schema`, because the SDK's own
+`responses.parse` helper sends pydantic's schema as it is and OpenAI rejects its `oneOf`. The
+answer text is validated by the original model, never by the converted schema.
 
 The `openai` package is imported lazily so that prep_agent imports fine without the optional
 extra; building a client without it raises `LLMConfigError`. Retries on rate limits and server
 errors are the SDK's own (`max_retries`, 2 by default); this module adds no retry loop.
 """
 
+import json
 import os
+import re
 from types import ModuleType
 from typing import Any
 
@@ -19,6 +26,7 @@ from prep_agent.llm.base import (
     LLMSchemaError,
     TokenUsage,
 )
+from prep_agent.llm.strict_schema import drop_added_nulls, to_strict_schema
 
 # The model the OpenAI docs recommend as the starting point (developers.openai.com/api/docs/models,
 # checked 2026-10-13). Models change often, so PREP_AGENT_MODEL overrides it without a code change.
@@ -47,19 +55,22 @@ class OpenAIClient:
     def generate[T: BaseModel](self, system: str, user: str, schema: type[T]) -> LLMResult[T]:
         openai = _import_openai()
         try:
-            response = self._client.responses.parse(
+            response = self._client.responses.create(
                 model=self._model,
                 instructions=system,
                 input=user,
-                text_format=schema,
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": _format_name(schema),
+                        "strict": True,
+                        "schema": to_strict_schema(schema),
+                    }
+                },
                 # The exchange holds dataset summaries; there is no reason for the provider to
                 # keep it.
                 store=False,
             )
-        except ValidationError as exc:
-            raise LLMSchemaError(
-                f"model output does not match {schema.__name__}: {self._redact(str(exc))}"
-            ) from None
         except openai.OpenAIError as exc:
             status = getattr(exc, "status_code", None)
             where = type(exc).__name__ + (f", HTTP {status}" if status else "")
@@ -81,12 +92,21 @@ class OpenAIClient:
                 raise LLMRefusalError("response was blocked by the content filter")
             raise LLMSchemaError(f"response was cut off before it was complete ({reason})")
 
-        if response.output_parsed is None:
+        text = response.output_text
+        if not text:
             raise LLMSchemaError(f"response contained no output for {schema.__name__}")
+        try:
+            parsed = schema.model_validate_json(
+                json.dumps(drop_added_nulls(json.loads(text), schema))
+            )
+        except (json.JSONDecodeError, ValidationError) as exc:
+            raise LLMSchemaError(
+                f"model output does not match {schema.__name__}: {self._redact(str(exc))}"
+            ) from None
 
         usage = response.usage
         return LLMResult(
-            parsed=response.output_parsed,
+            parsed=parsed,
             model=response.model or self._model,
             usage=None
             if usage is None
@@ -98,6 +118,11 @@ class OpenAIClient:
         if isinstance(key, str) and key:
             return text.replace(key, _REDACTED)
         return text
+
+
+def _format_name(schema: type[BaseModel]) -> str:
+    # The API only accepts letters, digits, underscores and dashes, at most 64 characters.
+    return re.sub(r"[^A-Za-z0-9_-]", "_", schema.__name__)[:64]
 
 
 def _import_openai() -> ModuleType:

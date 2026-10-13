@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import httpx2
 import openai
 import pytest
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from prep_agent.llm.base import (
     LLMAPIError,
@@ -17,12 +17,19 @@ from prep_agent.llm.base import (
     TokenUsage,
 )
 from prep_agent.llm.openai import DEFAULT_MODEL, OpenAIClient
+from prep_agent.llm.strict_schema import to_strict_schema
+from prep_agent.plan import Plan
 
 SECRET = "sk-test-SECRET-0123456789"
 
 
 class Answer(BaseModel):
     value: int
+
+
+class WithDefault(BaseModel):
+    value: int
+    size: int = 3
 
 
 def _request() -> httpx2.Request:
@@ -37,27 +44,30 @@ def _message(*content):
     return SimpleNamespace(type="message", content=list(content))
 
 
-def _text_item(parsed):
-    return SimpleNamespace(type="output_text", parsed=parsed)
+def _text_item(text):
+    return SimpleNamespace(type="output_text", text=text)
 
 
 def _reply(
     parsed=None,
     *,
+    text=None,
     content=None,
     model="gpt-test-2026",
     usage=(11, 7),
     status="completed",
     reason=None,
 ):
-    """Shape of the parts of a parsed Responses API result that the adapter reads."""
+    """Shape of the parts of a Responses API result that the adapter reads."""
+    if text is None:
+        text = "" if parsed is None else parsed.model_dump_json()
     if content is None:
-        content = [_text_item(parsed)]
+        content = [_text_item(text)]
     return SimpleNamespace(
         status=status,
         incomplete_details=None if reason is None else SimpleNamespace(reason=reason),
         output=[_message(*content)],
-        output_parsed=parsed,
+        output_text="" if content and content[0].type == "refusal" else text,
         model=model,
         usage=None
         if usage is None
@@ -66,15 +76,15 @@ def _reply(
 
 
 class FakeSDK:
-    """Stands in for `openai.OpenAI`: records `responses.parse` kwargs, replays one outcome."""
+    """Stands in for `openai.OpenAI`: records `responses.create` kwargs, replays one outcome."""
 
     def __init__(self, outcome):
         self.api_key = SECRET
         self.calls: list[dict] = []
         self._outcome = outcome
-        self.responses = SimpleNamespace(parse=self._parse)
+        self.responses = SimpleNamespace(create=self._create)
 
-    def _parse(self, **kwargs):
+    def _create(self, **kwargs):
         self.calls.append(kwargs)
         if isinstance(self._outcome, BaseException):
             raise self._outcome
@@ -84,12 +94,6 @@ class FakeSDK:
 def make_client(outcome, **kwargs) -> tuple[OpenAIClient, FakeSDK]:
     sdk = FakeSDK(outcome)
     return OpenAIClient(client=sdk, **kwargs), sdk
-
-
-def validation_error(value) -> ValidationError:
-    with pytest.raises(ValidationError) as caught:
-        Answer.model_validate({"value": value})
-    return caught.value
 
 
 @pytest.fixture(autouse=True)
@@ -104,7 +108,7 @@ def test_satisfies_the_protocol():
     assert isinstance(client, LLMClient)
 
 
-def test_sends_messages_schema_and_model_to_the_responses_api():
+def test_sends_messages_and_the_strict_schema_to_the_responses_api():
     client, sdk = make_client(_reply(Answer(value=1)), model="gpt-explicit")
 
     client.generate("the system", "the user", Answer)
@@ -113,7 +117,48 @@ def test_sends_messages_schema_and_model_to_the_responses_api():
     assert call["model"] == "gpt-explicit"
     assert call["instructions"] == "the system"
     assert call["input"] == "the user"
-    assert call["text_format"] is Answer
+    assert call["text"] == {
+        "format": {
+            "type": "json_schema",
+            "name": "Answer",
+            "strict": True,
+            "schema": to_strict_schema(Answer),
+        }
+    }
+
+
+def test_the_schema_sent_for_plan_is_the_converted_one():
+    plan = Plan.model_validate(
+        {"target": "t", "task_type": "regression", "model_family": "any", "steps": []}
+    )
+    client, sdk = make_client(_reply(plan))
+
+    client.generate("s", "u", Plan)
+
+    sent = sdk.calls[0]["text"]["format"]["schema"]
+    assert sent == to_strict_schema(Plan)
+    assert "oneOf" not in json.dumps(sent)
+
+
+def test_schema_name_is_safe_for_the_api():
+    class Odd(BaseModel):
+        value: int
+
+    Odd.__name__ = "Odd Name.v2"
+    client, sdk = make_client(_reply(Odd(value=1)))
+
+    client.generate("s", "u", Odd)
+
+    assert sdk.calls[0]["text"]["format"]["name"] == "Odd_Name_v2"
+
+
+def test_null_for_an_optional_field_means_use_the_default():
+    client, sdk = make_client(_reply(text='{"value": 1, "size": null}'))
+
+    result = client.generate("s", "u", WithDefault)
+
+    assert result.parsed == WithDefault(value=1, size=3)
+    assert "default" not in json.dumps(sdk.calls[0]["text"]["format"]["schema"])
 
 
 def test_does_not_ask_the_provider_to_store_the_exchange():
@@ -194,10 +239,14 @@ def test_content_filter_stop_raises_refusal_error():
         client.generate("s", "u", Answer)
 
 
-def test_validation_error_from_the_sdk_raises_schema_error():
-    client, _ = make_client(validation_error("x"))
+@pytest.mark.parametrize(
+    "text",
+    ['{"value": "not a number"}', '{"other": 1}', '{"value": ', "not json", "[1, 2]", "null"],
+)
+def test_output_that_does_not_fit_the_model_raises_schema_error(text):
+    client, _ = make_client(_reply(text=text))
 
-    with pytest.raises(LLMSchemaError):
+    with pytest.raises(LLMSchemaError, match="Answer"):
         client.generate("s", "u", Answer)
 
 
@@ -243,8 +292,8 @@ def test_api_error_message_names_the_status_code():
         client.generate("s", "u", Answer)
 
 
-def test_real_sdk_client_sends_a_strict_json_schema_request_and_parses_the_reply():
-    seen = []
+def real_sdk_replying(text: str, seen: list) -> openai.OpenAI:
+    """A real SDK client whose HTTP transport records requests and answers with `text`."""
 
     def handler(request: httpx2.Request) -> httpx2.Response:
         seen.append(request)
@@ -260,7 +309,7 @@ def test_real_sdk_client_sends_a_strict_json_schema_request_and_parses_the_reply
                     "id": "msg_1",
                     "role": "assistant",
                     "status": "completed",
-                    "content": [{"type": "output_text", "text": '{"value": 3}', "annotations": []}],
+                    "content": [{"type": "output_text", "text": text, "annotations": []}],
                 }
             ],
             "usage": {
@@ -273,11 +322,16 @@ def test_real_sdk_client_sends_a_strict_json_schema_request_and_parses_the_reply
         }
         return httpx2.Response(200, json=body)
 
-    sdk = openai.OpenAI(
+    return openai.OpenAI(
         api_key=SECRET,
         max_retries=0,
         http_client=httpx2.Client(transport=httpx2.MockTransport(handler)),
     )
+
+
+def test_real_sdk_client_sends_a_strict_json_schema_request_and_parses_the_reply():
+    seen = []
+    sdk = real_sdk_replying('{"value": 3}', seen)
 
     result = OpenAIClient(model="gpt-x", client=sdk).generate("the system", "the user", Answer)
 
@@ -291,10 +345,39 @@ def test_real_sdk_client_sends_a_strict_json_schema_request_and_parses_the_reply
     assert body["instructions"] == "the system"
     assert body["input"] == "the user"
     assert body["store"] is False
-    assert body["text"]["format"]["type"] == "json_schema"
-    assert body["text"]["format"]["strict"] is True
-    assert body["text"]["format"]["schema"]["required"] == ["value"]
-    assert body["text"]["format"]["schema"]["additionalProperties"] is False
+    assert body["text"]["format"] == {
+        "type": "json_schema",
+        "name": "Answer",
+        "strict": True,
+        "schema": to_strict_schema(Answer),
+    }
+
+
+def test_real_sdk_client_sends_the_converted_plan_schema_and_parses_a_plan():
+    seen = []
+    answer = {
+        "target": "churned",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+            {
+                "op": "split",
+                "reason": "hold out a test set",
+                "test_size": None,
+                "stratify": True,
+                "random_state": None,
+            }
+        ],
+    }
+    sdk = real_sdk_replying(json.dumps(answer), seen)
+
+    result = OpenAIClient(model="gpt-x", client=sdk).generate("s", "u", Plan)
+
+    assert result.parsed.steps[0].test_size == 0.2
+    sent = json.loads(seen[0].content)["text"]["format"]["schema"]
+    assert sent == to_strict_schema(Plan)
+    for keyword in ("oneOf", "discriminator", '"default"'):
+        assert keyword not in json.dumps(sent)
 
 
 def test_missing_api_key_raises_config_error_that_names_the_variable():
@@ -356,7 +439,7 @@ def test_key_echoed_by_the_provider_is_redacted_from_api_errors():
 
 
 def test_key_is_redacted_from_schema_errors():
-    client, _ = make_client(validation_error(SECRET))
+    client, _ = make_client(_reply(text=f'{{"value": "{SECRET}"}}'))
 
     with pytest.raises(LLMSchemaError) as raised:
         client.generate("s", "u", Answer)
