@@ -265,3 +265,11 @@ def test_revision_without_warnings_has_no_warning_heading(profile):
     assert "Warnings: fix these too" not in user_prompt(
         profile, revision=revision_with(plan, warnings=[])
     )
+
+
+def test_system_prompt_tells_any_to_use_onehot_because_ordinal_suits_only_trees():
+    prompt = build_system_prompt()
+
+    [line] = [ln for ln in prompt.splitlines() if ln.startswith("- any:")]
+    assert "onehot" in line
+    assert "ordinal" in line and "only" in line and "tree" in line

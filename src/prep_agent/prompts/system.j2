@@ -32,7 +32,7 @@ A validator checks every plan and rejects violations. You cannot bend these rule
 `model_family` is "tree", "linear" or "any" and changes the preparation:
 - tree: no scaling. Ordinal encoding is acceptable for categorical columns.
 - linear: scale numeric columns (use robust scaling when the profile shows many outliers). Encode categorical columns with onehot, not ordinal, because ordinal gives categories a false order.
-- any: the model is not known, so make no assumption about it. Keep to the steps every family needs (imputation, encoding) and skip optional ones such as scaling.
+- any: the model is not known, so make no assumption about it. Keep to the steps every family needs (imputation, encoding) and skip optional ones such as scaling. Because the model family is not known, encode categorical columns with onehot; ordinal encoding is suitable only for tree models.
 
 If the user states a model family, use it. If the user does not, do not assume one: ask, or use "any".
 
