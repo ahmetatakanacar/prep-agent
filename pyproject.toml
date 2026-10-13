@@ -28,6 +28,7 @@ openai = [
 
 [dependency-groups]
 dev = [
+    "jsonschema>=4.26.0",
     "openai>=3.29.0",
     "pytest",
     "python-dotenv>=1.2.4",
