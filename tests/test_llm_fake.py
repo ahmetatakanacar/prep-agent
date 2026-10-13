@@ -6,6 +6,7 @@ from prep_agent.llm.base import (
     LLMClient,
     LLMResult,
     LLMSchemaError,
+    TokenUsage,
 )
 from prep_agent.llm.fake import FakeLLM, FakeLLMExhaustedError
 
@@ -116,3 +117,11 @@ def test_remaining_counts_unused_responses():
     llm.generate("s", "u", Answer)
 
     assert llm.remaining == 1
+
+
+def test_usage_given_to_the_fake_is_reported_on_every_call():
+    llm = FakeLLM([Answer(value=1), Answer(value=2)], usage=TokenUsage(100, 10))
+
+    results = [llm.generate("s", "u", Answer) for _ in range(2)]
+
+    assert [r.usage for r in results] == [TokenUsage(100, 10)] * 2

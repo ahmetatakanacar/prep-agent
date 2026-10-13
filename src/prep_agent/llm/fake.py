@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, ValidationError
 
-from prep_agent.llm.base import LLMResult, LLMSchemaError
+from prep_agent.llm.base import LLMResult, LLMSchemaError, TokenUsage
 
 FakeResponse = BaseModel | dict | str | BaseException
 
@@ -31,11 +31,13 @@ class FakeLLM:
 
     A response is a model instance, a dict, a JSON string or an exception to raise. Dicts and
     JSON strings are validated against the requested schema exactly like a real adapter would,
-    so a wrong fake fails with `LLMSchemaError` instead of passing silently.
+    so a wrong fake fails with `LLMSchemaError` instead of passing silently. `usage`, if given,
+    is reported on every call; by default the fake reports none, like a provider that does not.
     """
 
-    def __init__(self, responses: Iterable[FakeResponse]) -> None:
+    def __init__(self, responses: Iterable[FakeResponse], usage: TokenUsage | None = None) -> None:
         self._queue: deque[FakeResponse] = deque(responses)
+        self._usage = usage
         self.calls: list[FakeCall] = []
 
     @property
@@ -51,7 +53,7 @@ class FakeLLM:
         response = self._queue.popleft()
         if isinstance(response, BaseException):
             raise response
-        return LLMResult(parsed=_validate(response, schema), model="fake")
+        return LLMResult(parsed=_validate(response, schema), model="fake", usage=self._usage)
 
 
 def _validate[T: BaseModel](response: BaseModel | dict | str, schema: type[T]) -> T:
