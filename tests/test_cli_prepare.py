@@ -222,7 +222,7 @@ def test_a_custom_option_is_offered_last_when_allowed(invoke_cli, monkeypatch, t
 
     assert "1) churned (recommended)" in result.output
     assert "2) plan" in result.output
-    assert "3) Diğer (kendin yaz)" in result.output
+    assert "3) Other (type your own)" in result.output
     assert "Choose 1-3" in result.output
 
 
@@ -231,7 +231,7 @@ def test_no_custom_option_when_not_allowed(invoke_cli, monkeypatch, tmp_path):
 
     result = invoke_cli(prepare_args(tmp_path), input="\n")
 
-    assert "Diğer" not in result.output
+    assert "Other (type your own)" not in result.output
     assert "Choose 1-3" in result.output
 
 

@@ -142,7 +142,7 @@ def run_command(
     console.print(Text(f"Run folder: {run_dir}"), soft_wrap=True)
 
 
-CUSTOM_OPTION_LABEL = "Diğer (kendin yaz)"
+CUSTOM_OPTION_LABEL = "Other (type your own)"
 
 
 class ModelFamily(StrEnum):
