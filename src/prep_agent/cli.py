@@ -293,13 +293,11 @@ def _read_choice(console: Console, question: Question) -> str:
 def _report_agent_failure(
     console: Console, error: AgentError, csv_path: Path, out_dir: Path
 ) -> NoReturn:
-    """Print what went wrong, save the failed run if there is a plan to save, and exit 1."""
+    """Print what went wrong, save the failed run and exit 1."""
     Console(stderr=True).print(Text.assemble(("Error: ", "red"), str(error)))
-    if error.plan is None:
-        console.print(Text("The planner produced no plan, so no run was saved."))
-        raise typer.Exit(1)
-    _print_plan(console, error.plan)
-    _print_issues(console, error.issues)
+    if error.plan is not None:
+        _print_plan(console, error.plan)
+        _print_issues(console, error.issues)
     try:
         run_dir = save_run(
             out_dir,
@@ -309,6 +307,7 @@ def _report_agent_failure(
             result=error.execution,
             plan_issues=error.issues,
             trace=error.trace,
+            error=str(error),
         )
     except RunExistsError as exc:
         _fail(str(exc))

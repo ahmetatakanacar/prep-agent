@@ -6,7 +6,8 @@ result issues) and run.json (see `RunInfo`). A run made by the agent also gets l
 
 A run whose plan never got to execute (the agent ran out of revisions on plan errors) is saved
 with `result=None`: no train.csv, test.csv or pipeline.joblib, status "failed", and the plan
-issues passed in.
+issues passed in. A run that never got a plan (the LLM failed or kept asking) is saved with
+`plan=None`: only profile.json, run.json, llm_trace.json and qa.json, status "failed".
 
 `pipeline.joblib` holds only the fitted stateful steps (impute, encode, scale). It does not
 include the stateless steps or the split, so it can only be applied to a frame that has gone
@@ -63,7 +64,8 @@ class RunInfo(BaseModel):
     prep_agent_version: str
     input_path: str
     input_sha256: str
-    target: str
+    # None when the planner never produced a plan.
+    target: str | None
     rows: Counts
     columns: Counts
     status: Literal["ok", "failed"]
@@ -73,6 +75,8 @@ class RunInfo(BaseModel):
     goal: str | None = None
     model: str | None = None
     token_usage: TokenUsage | None = None
+    # Why a failed agent run stopped; None for runs that succeeded.
+    error: str | None = None
 
 
 def save_run(
@@ -80,17 +84,19 @@ def save_run(
     *,
     input_path: Path,
     profile: DatasetProfile,
-    plan: Plan,
+    plan: Plan | None,
     result: ExecutionResult | None,
     run_id: str | None = None,
     trace: AgentTrace | None = None,
     plan_issues: list[ValidationIssue] | None = None,
+    error: str | None = None,
 ) -> Path:
     """Write the artifacts of one execution and return the run directory.
 
     `status` is "failed" if the result has validation errors or there is no result; the
     artifacts are still written so the run can be inspected. `plan_issues` only applies without
-    a result, which has its own. `run_id` defaults to the UTC timestamp.
+    a result, which has its own. `error` says why a failed run stopped. `run_id` defaults to
+    the UTC timestamp.
     """
     created_at = datetime.now(UTC)
     run_id = run_id if run_id is not None else created_at.strftime("%Y%m%d-%H%M%S")
@@ -106,7 +112,7 @@ def save_run(
         prep_agent_version=__version__,
         input_path=str(input_path),
         input_sha256=_sha256(Path(input_path)),
-        target=plan.target,
+        target=plan.target if plan else None,
         rows=Counts(before=profile.n_rows),
         columns=Counts(before=profile.n_columns),
         status="failed" if result is None or has_errors(result.result_issues) else "ok",
@@ -114,6 +120,7 @@ def save_run(
         goal=trace.goal if trace else None,
         model=trace.model if trace else None,
         token_usage=trace.total_usage if trace else None,
+        error=error,
     )
     if result is not None:
         info.rows.train, info.rows.test = len(result.train), len(result.test)
@@ -139,13 +146,14 @@ def _write_artifacts(
     run_dir: Path,
     info: RunInfo,
     profile: DatasetProfile,
-    plan: Plan,
+    plan: Plan | None,
     result: ExecutionResult | None,
     plan_issues: list[ValidationIssue],
     trace: AgentTrace | None,
 ) -> None:
     _write_text(run_dir / "profile.json", profile.model_dump_json(indent=2))
-    _write_text(run_dir / "plan.json", plan.model_dump_json(indent=2))
+    if plan is not None:
+        _write_text(run_dir / "plan.json", plan.model_dump_json(indent=2))
     result_issues: list[ValidationIssue] = []
     if result is not None:
         result.train.to_csv(run_dir / "train.csv", index=False, lineterminator="\n")
@@ -156,7 +164,8 @@ def _write_artifacts(
         "plan_issues": [issue.model_dump() for issue in plan_issues],
         "result_issues": [issue.model_dump() for issue in result_issues],
     }
-    _write_text(run_dir / "issues.json", json.dumps(issues, indent=2))
+    if plan is not None:
+        _write_text(run_dir / "issues.json", json.dumps(issues, indent=2))
     if trace is not None:
         usage = trace.total_usage
         llm_trace = {

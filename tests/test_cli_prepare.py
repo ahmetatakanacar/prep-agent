@@ -293,14 +293,43 @@ def test_an_llm_failure_after_a_plan_still_saves_the_trace(invoke_cli, monkeypat
     assert len(read_json(run_dir / "llm_trace.json")["calls"]) == 1
 
 
-def test_an_llm_failure_before_any_plan_saves_nothing(invoke_cli, monkeypatch, tmp_path):
+def test_an_llm_failure_before_any_plan_saves_a_failed_run_without_a_plan(
+    invoke_cli, monkeypatch, tmp_path
+):
     use_llm(monkeypatch, [LLMAPIError("rate limited")])
 
     result = invoke_cli(prepare_args(tmp_path, "--non-interactive"))
 
     assert result.exit_code == 1
     assert "rate limited" in result.output
-    assert not (tmp_path / "runs").exists()
+    run_dir = only_run(tmp_path)
+    assert {p.name for p in run_dir.iterdir()} == {
+        "profile.json",
+        "run.json",
+        "llm_trace.json",
+        "qa.json",
+    }
+    info = read_json(run_dir / "run.json")
+    assert info["status"] == "failed"
+    assert "rate limited" in info["error"]
+    assert str(run_dir) in result.output.replace("\n", "")
+
+
+def test_questions_past_the_limit_save_the_questions_in_a_failed_run(
+    invoke_cli, monkeypatch, tmp_path
+):
+    # Two question rounds are allowed; the planner keeps asking, also after being told not to.
+    replies = [questions_reply(family_question(qid)) for qid in "abcd"]
+    use_llm(monkeypatch, replies)
+
+    result = invoke_cli(prepare_args(tmp_path, "--non-interactive"))
+
+    assert result.exit_code == 1
+    run_dir = only_run(tmp_path)
+    assert not (run_dir / "plan.json").exists()
+    assert [q["question"]["id"] for q in read_json(run_dir / "qa.json")] == ["a", "b"]
+    calls = read_json(run_dir / "llm_trace.json")["calls"]
+    assert {c["response"]["kind"] for c in calls} == {"questions"}
 
 
 def test_a_missing_api_key_fails_cleanly(invoke_cli, monkeypatch, tmp_path):

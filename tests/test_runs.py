@@ -310,3 +310,82 @@ def test_a_failed_run_without_a_result_still_writes_plan_issues_and_trace(tmp_pa
     issues = json.loads((run_dir / "issues.json").read_text(encoding="utf-8"))
     assert [i["code"] for i in issues["plan_issues"]] == ["stateful_before_split"]
     assert issues["result_issues"] == []
+
+
+def test_a_run_without_a_plan_writes_profile_trace_qa_and_run_json(tmp_path, executed):
+    _, _, profile, _ = executed
+
+    run_dir = save_run(
+        tmp_path / "runs",
+        input_path=CUSTOMERS_CSV,
+        profile=profile,
+        plan=None,
+        result=None,
+        trace=make_trace(),
+        error="the LLM call failed: rate limited",
+        run_id="r1",
+    )
+
+    assert {p.name for p in run_dir.iterdir()} == {
+        "profile.json",
+        "run.json",
+        "llm_trace.json",
+        "qa.json",
+    }
+    info = RunInfo.model_validate_json((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info.status == "failed"
+    assert info.target is None
+    assert info.error == "the LLM call failed: rate limited"
+    assert info.goal == "prepare for churn"
+    assert (info.rows.before, info.rows.train, info.rows.test) == (20, None, None)
+    assert info.pipeline_joblib is None
+
+
+def test_a_run_without_a_plan_and_without_calls_still_has_an_empty_trace(tmp_path, executed):
+    _, _, profile, _ = executed
+    trace = AgentTrace(goal="g", calls=[], qa_history=[])
+
+    run_dir = save_run(
+        tmp_path / "runs",
+        input_path=CUSTOMERS_CSV,
+        profile=profile,
+        plan=None,
+        result=None,
+        trace=trace,
+        error="boom",
+        run_id="r1",
+    )
+
+    assert json.loads((run_dir / "llm_trace.json").read_text(encoding="utf-8")) == {
+        "model": None,
+        "total_usage": None,
+        "calls": [],
+    }
+    assert json.loads((run_dir / "qa.json").read_text(encoding="utf-8")) == []
+    info = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info["model"] is None and info["goal"] == "g"
+
+
+def test_error_is_recorded_for_a_run_that_has_a_plan(tmp_path, executed):
+    _, plan, profile, _ = executed
+
+    run_dir = save_run(
+        tmp_path / "runs",
+        input_path=CUSTOMERS_CSV,
+        profile=profile,
+        plan=plan,
+        result=None,
+        plan_issues=[],
+        error="the plan still has 1 error(s)",
+        run_id="r1",
+    )
+
+    info = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info["error"] == "the plan still has 1 error(s)"
+    assert info["target"] == "churned"
+
+
+def test_a_successful_run_has_no_error(tmp_path, executed):
+    run_dir = save(tmp_path, executed, run_id="r1")
+
+    assert json.loads((run_dir / "run.json").read_text(encoding="utf-8"))["error"] is None
