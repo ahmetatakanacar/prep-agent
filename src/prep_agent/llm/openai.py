@@ -30,7 +30,7 @@ from prep_agent.llm.strict_schema import drop_added_nulls, to_strict_schema
 
 # The middle tier: close to the flagship's quality at a lower price, which suits a planner that
 # runs many times in benchmarks. PREP_AGENT_MODEL overrides it without a code change.
-DEFAULT_MODEL = "gpt-6-sol"
+DEFAULT_MODEL = "gpt-6.1-sol"
 
 API_KEY_VARIABLE = "OPENAI_API_KEY"
 MODEL_VARIABLE = "PREP_AGENT_MODEL"
