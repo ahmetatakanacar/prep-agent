@@ -62,6 +62,7 @@ IssueCode = Literal[
     "ordinal_for_linear",
     "scale_for_tree",
     "repeated_op",
+    "impute_without_missing",
     "uninformative_column_kept",
     "missing_values_remain",
     "unencoded_column_remains",
@@ -101,6 +102,7 @@ SEVERITY: dict[IssueCode, Severity] = {
     "ordinal_for_linear": "warning",
     "scale_for_tree": "warning",
     "repeated_op": "warning",
+    "impute_without_missing": "warning",
     "uninformative_column_kept": "warning",
     "missing_values_remain": "warning",
     "unencoded_column_remains": "warning",
@@ -381,6 +383,16 @@ class _Validation:
         for name in self._resolve(index, step.columns):
             self._note_repeat(index, step, name)
             column = self.columns[name]
+            # A warning, not an error: the step may be there on purpose for data that arrives later.
+            if not column.has_missing:
+                self._add(
+                    "impute_without_missing",
+                    f"column {name!r} has no missing values in the profile or after the earlier "
+                    "steps, so imputing it changes nothing on this data; remove it from "
+                    "'columns' unless the step is meant for missing values in new data.",
+                    step_index=index,
+                    column=name,
+                )
             if step.strategy in NUMERIC_ONLY_IMPUTE_STRATEGIES and not column.numeric:
                 self._add(
                     "impute_non_numeric",

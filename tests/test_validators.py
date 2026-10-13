@@ -238,6 +238,35 @@ def test_model_family_is_not_checked_without_an_expected_one(family):
     assert find(validate_plan(plan, PROFILE), "model_family_mismatch") == []
 
 
+def test_impute_on_a_column_without_missing_values_is_a_warning():
+    issues = validate(split(), impute(["age"]))
+
+    [issue] = find(issues, "impute_without_missing")
+    assert issue.severity == "warning"
+    assert issue.step_index == 1
+    assert issue.column == "age"
+    assert "no missing values" in issue.message
+
+
+def test_impute_on_a_column_with_missing_values_is_fine():
+    issues = validate(split(), impute(["income"]), impute(["job"], "most_frequent"))
+
+    assert find(issues, "impute_without_missing") == []
+
+
+def test_only_the_columns_without_missing_values_are_flagged_in_step_order():
+    issues = validate(split(), impute(["age", "income", "price"]))
+
+    assert [i.column for i in find(issues, "impute_without_missing")] == ["age", "price"]
+
+
+def test_imputing_a_column_twice_flags_the_second_step():
+    issues = validate(split(), impute(["income"]), impute(["income"], "mean"))
+
+    [issue] = find(issues, "impute_without_missing")
+    assert issue.step_index == 2 and issue.column == "income"
+
+
 def test_plan_without_a_split_is_an_error():
     issues = validate(dedupe(), drop("country"))
 

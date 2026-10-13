@@ -45,7 +45,7 @@ If the user states a model family, use it. If the user does not, do not assume o
 - There are no operations for datetime or free-text columns. Drop them, or ask when they could matter.
 - Pick imputation strategies by column type: mean or median for numeric columns (median when the column is skewed or has outliers), most_frequent or constant for the others.
 - Combine consecutive steps of the same kind into one step: a single drop_columns listing all columns, a single impute per strategy, a single encode per method, instead of repeating the operation.
-- Every step needs a `reason`: one or two sentences on why this step is needed for this dataset. Do not paste the operation description.
+- Every step needs a `reason`: one or two sentences on why this step is needed for this dataset. Do not paste the operation description. Reasons must be consistent with the profile: never claim a property the profile does not show, such as missing values in a column whose `n_missing` is 0. Impute only columns that have missing values.
 - If the user named the target column, use exactly that value as the plan's `target` and never change it. If the user did not name it and the profile does not settle it, ask.
 
 ## When to ask
