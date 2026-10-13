@@ -142,6 +142,9 @@ def run_command(
     console.print(Text(f"Run folder: {run_dir}"), soft_wrap=True)
 
 
+CUSTOM_OPTION_LABEL = "Diğer (kendin yaz)"
+
+
 class ModelFamily(StrEnum):
     tree = "tree"
     linear = "linear"
@@ -269,6 +272,8 @@ def _ask_interactively(console: Console) -> AskFn:
             for number, option in enumerate(question.options, start=1):
                 suffix = " (recommended)" if option == question.recommended else ""
                 console.print(Text(f"  {number}) {option}{suffix}"))
+            if question.allow_custom:
+                console.print(Text(f"  {len(question.options) + 1}) {CUSTOM_OPTION_LABEL}"))
             answers[question.id] = _read_choice(console, question)
         return answers
 
@@ -277,17 +282,32 @@ def _ask_interactively(console: Console) -> AskFn:
 
 def _read_choice(console: Console, question: Question) -> str:
     count = len(question.options)
+    total = count + 1 if question.allow_custom else count
     default = question.options.index(question.recommended) + 1
     while True:
-        try:
-            raw = console.input(Text(f"Choose 1-{count} [Enter = {default}]: ")).strip()
-        except EOFError:
-            _fail("input ended while waiting for an answer")
+        raw = _read_line(console, f"Choose 1-{total} [Enter = {default}]: ")
         if not raw:
             return question.recommended
         if raw.isdecimal() and 1 <= int(raw) <= count:
             return question.options[int(raw) - 1]
-        console.print(Text(f"Enter a number from 1 to {count}, or press Enter for {default}."))
+        if raw.isdecimal() and int(raw) == total and question.allow_custom:
+            return _read_custom_answer(console)
+        console.print(Text(f"Enter a number from 1 to {total}, or press Enter for {default}."))
+
+
+def _read_custom_answer(console: Console) -> str:
+    while True:
+        answer = _read_line(console, "Your answer: ")
+        if answer:
+            return answer
+        console.print(Text("The answer must not be empty."))
+
+
+def _read_line(console: Console, prompt: str) -> str:
+    try:
+        return console.input(Text(prompt)).strip()
+    except EOFError:
+        _fail("input ended while waiting for an answer")
 
 
 def _report_agent_failure(

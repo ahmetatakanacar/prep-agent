@@ -271,9 +271,14 @@ class _Agent:
                 raise AgentError(
                     f"no answer was given for question {question.id!r}", **self._failure()
                 )
-            if answers[question.id] not in question.options:
+            answer = answers[question.id]
+            if question.allow_custom and not answer.strip():
                 raise AgentError(
-                    f"the answer {answers[question.id]!r} to question {question.id!r} is not "
+                    f"the answer to question {question.id!r} is empty", **self._failure()
+                )
+            if not question.allow_custom and answer not in question.options:
+                raise AgentError(
+                    f"the answer {answer!r} to question {question.id!r} is not "
                     f"one of the options: {question.options}",
                     **self._failure(),
                 )

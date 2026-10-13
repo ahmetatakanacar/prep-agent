@@ -98,6 +98,7 @@ def test_system_prompt_states_the_rules():
         "Use only columns listed in the profile",
         "never change it",  # the user's target
         "same kind",  # merge consecutive steps
+        "allow_custom",  # free-text answers
     ):
         assert expected in prompt, expected
 

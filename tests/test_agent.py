@@ -313,6 +313,31 @@ def test_an_answer_outside_the_options_is_rejected(df):
         run(df, [questions_reply(question("family"))], ask=Asker({"family": "gradient boosting"}))
 
 
+def test_a_custom_answer_is_accepted_when_allowed_and_reaches_the_prompt_verbatim(df):
+    ask = Asker({"target": "  churned_flag  "})
+    asked = question(
+        "target", options=["churned", "plan"], recommended="churned", allow_custom=True
+    )
+
+    result, llm, _ = run(df, [questions_reply(asked), plan_reply(VALID_PLAN)], ask=ask)
+
+    assert "Answer:   churned_flag  " in llm.calls[1].user
+    assert result.qa_history[0].answer == "  churned_flag  "
+
+
+def test_a_custom_answer_is_rejected_when_not_allowed(df):
+    with pytest.raises(AgentError, match="not one of the options"):
+        run(df, [questions_reply(question("family"))], ask=Asker({"family": "my own"}))
+
+
+@pytest.mark.parametrize("answer", ["", "   "])
+def test_a_blank_custom_answer_is_rejected(df, answer):
+    asked = question("target", allow_custom=True)
+
+    with pytest.raises(AgentError, match="empty"):
+        run(df, [questions_reply(asked)], ask=Asker({"target": answer}))
+
+
 def test_a_planner_that_has_to_ask_for_the_target_gets_the_profile_of_its_choice(df):
     ask = Asker({"target": "churned"})
     responses = [

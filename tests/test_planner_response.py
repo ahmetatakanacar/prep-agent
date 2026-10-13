@@ -132,7 +132,7 @@ def test_schema_converts_to_strict_mode_and_accepts_a_typical_answer():
     schema = to_strict_schema(PlannerResponse)
 
     Draft202012Validator.check_schema(schema)
-    answer = {"kind": "questions", "plan": None, "questions": [question()]}
+    answer = {"kind": "questions", "plan": None, "questions": [question(allow_custom=False)]}
     assert not list(Draft202012Validator(schema).iter_errors(answer))
 
 
@@ -145,3 +145,19 @@ def test_strict_schema_answer_with_added_nulls_validates_after_cleanup():
 
     parsed = PlannerResponse.model_validate(cleaned)
     assert parsed.plan is not None and parsed.plan.steps[0].test_size == 0.2
+
+
+def test_allow_custom_defaults_to_false_and_can_be_set():
+    assert Question.model_validate(question()).allow_custom is False
+    assert Question.model_validate(question(allow_custom=True)).allow_custom is True
+
+
+def test_strict_mode_null_for_allow_custom_means_false():
+    answer = {"kind": "questions", "plan": None, "questions": [question(allow_custom=None)]}
+
+    cleaned = drop_added_nulls(answer, PlannerResponse)
+
+    parsed = PlannerResponse.model_validate(cleaned)
+    assert parsed.questions is not None and parsed.questions[0].allow_custom is False
+    schema = to_strict_schema(PlannerResponse)
+    assert not list(Draft202012Validator(schema).iter_errors(answer))

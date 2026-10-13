@@ -56,6 +56,10 @@ class Question(BaseModel):
     options: OptionList = Field(description="The answers the user can pick from.")
     recommended: Text = Field(description="The option you would pick; must be one of options.")
     reason: Text = Field(description="Why this cannot be decided from the profile and the goal.")
+    allow_custom: bool = Field(
+        default=False,
+        description="True if the user may type an answer of their own instead of an option.",
+    )
 
     @model_validator(mode="after")
     def _check_recommended(self) -> Self:
