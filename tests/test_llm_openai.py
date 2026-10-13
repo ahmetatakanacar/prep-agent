@@ -189,6 +189,10 @@ def test_missing_usage_and_model_fall_back_gracefully():
     assert result.model == "gpt-configured"
 
 
+def test_default_model_is_gpt_6_sol():
+    assert DEFAULT_MODEL == "gpt-6-sol"
+
+
 def test_model_defaults_to_the_documented_default():
     client, sdk = make_client(_reply(Answer(value=1)))
 

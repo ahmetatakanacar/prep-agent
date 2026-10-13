@@ -49,7 +49,19 @@ The LLM layer is a small `LLMClient` interface with an OpenAI adapter (Responses
 uv sync --extra openai
 ```
 
-Put `OPENAI_API_KEY` in your environment or in a `.env` file in the working directory (`.env` is git-ignored). `PREP_AGENT_MODEL` overrides the default model and `PREP_AGENT_PROVIDER` selects the provider (only `openai` exists). Check the setup with one small request; it prints the model and token usage, and exits 1 with a message if the key is missing or the request fails:
+Put `OPENAI_API_KEY` in your environment or in a `.env` file in the working directory (`.env` is git-ignored). The default model is `gpt-6-sol`. Set `PREP_AGENT_MODEL` to pick another one, for example:
+
+| Model | Use |
+|---|---|
+| `gpt-6-astra` | flagship, for the most demanding work |
+| `gpt-6-sol` | default, close to the flagship at a lower cost |
+| `gpt-6-luna` | most efficient, for focused high-volume tasks |
+
+```powershell
+$env:PREP_AGENT_MODEL="gpt-6-astra"
+```
+
+`PREP_AGENT_PROVIDER` selects the provider (only `openai` exists). Check the setup with one small request; it prints the model and token usage, and exits 1 with a message if the key is missing or the request fails:
 
 ```powershell
 uv run prep-agent llm-check
