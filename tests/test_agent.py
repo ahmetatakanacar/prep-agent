@@ -536,8 +536,20 @@ def test_call_records_hold_the_model_and_the_planner_response_only(df):
         "usage",
         "issue_codes",
         "warning_codes",
+        "response_kind",
         "response",
     }
+
+
+def test_each_call_record_says_whether_the_answer_was_questions_or_a_plan(df):
+    responses = [questions_reply(question("a")), plan_reply(VALID_PLAN)]
+
+    result, _, _ = run(df, responses)
+
+    assert [c.response_kind for c in result.calls] == ["questions", "plan"]
+    assert [c.purpose for c in result.calls] == ["plan", "plan"]
+    dumped = json.loads(result.calls[0].model_dump_json())
+    assert dumped["response_kind"] == "questions"
 
 
 def test_the_input_frame_is_not_modified(df):

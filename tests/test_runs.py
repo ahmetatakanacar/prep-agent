@@ -230,6 +230,7 @@ def make_trace(*, usage: TokenUsage | None = DEFAULT_USAGE) -> AgentTrace:
         usage=usage,
         issue_codes=[],
         warning_codes=[],
+        response_kind="plan",
         response=PlannerResponse(kind="plan", plan=plan),
     )
     return AgentTrace(
@@ -248,6 +249,7 @@ def test_a_trace_adds_the_trace_and_qa_files(tmp_path, executed):
     assert trace["total_usage"] == {"input_tokens": 120, "output_tokens": 30}
     [call] = trace["calls"]
     assert call["purpose"] == "plan" and call["issue_codes"] == []
+    assert call["response_kind"] == "plan"
     assert call["response"]["kind"] == "plan"
     [qa] = json.loads((run_dir / "qa.json").read_text(encoding="utf-8"))
     assert qa["question"]["id"] == "family" and qa["answer"] == "any"

@@ -51,6 +51,8 @@ class LLMCallRecord(BaseModel):
     issue_codes: list[str]
     # Codes of the warnings it was asked to fix too if it could.
     warning_codes: list[str]
+    # What the planner answered with; `purpose` only says why it was called.
+    response_kind: Literal["plan", "questions"]
     response: PlannerResponse
 
 
@@ -252,6 +254,7 @@ class _Agent:
                 usage=result.usage,
                 issue_codes=[issue.code for issue in revision.issues] if revision else [],
                 warning_codes=[issue.code for issue in revision.warnings] if revision else [],
+                response_kind=result.parsed.kind,
                 response=result.parsed,
             )
         )
