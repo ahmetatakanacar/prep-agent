@@ -391,15 +391,27 @@ def test_any_model_family_is_not_enforced_when_the_user_gave_none(df):
     assert len(llm.calls) == 1
 
 
-def test_only_errors_are_sent_for_revision(df):
+def test_warnings_ride_along_with_the_errors_in_a_revision(df):
     plan = plan_with_impute_before_split()
     split = next(step for step in plan["steps"] if step["op"] == "split")
     split["stratify"] = False
 
-    _, llm, _ = run(df, [plan_reply(plan), plan_reply(VALID_PLAN)])
+    result, llm, _ = run(df, [plan_reply(plan), plan_reply(VALID_PLAN)])
 
-    assert "stateful_before_split" in llm.calls[1].user
-    assert "stratify_disabled" not in llm.calls[1].user
+    second = llm.calls[1].user
+    errors_part, warnings_part = second.split("Warnings: fix these too if you can")
+    assert "stateful_before_split" in errors_part
+    assert "stratify_disabled" not in errors_part
+    assert "code=stratify_disabled" in warnings_part
+    assert result.calls[1].issue_codes == ["stateful_before_split"]
+    assert "stratify_disabled" in result.calls[1].warning_codes
+
+
+def test_a_first_call_has_no_warning_section(df):
+    result, llm, _ = run(df, [plan_reply(VALID_PLAN)])
+
+    assert "Warnings: fix these too" not in llm.calls[0].user
+    assert result.calls[0].warning_codes == []
 
 
 def test_a_different_target_than_the_users_is_revised(df):
@@ -523,6 +535,7 @@ def test_call_records_hold_the_model_and_the_planner_response_only(df):
         "model",
         "usage",
         "issue_codes",
+        "warning_codes",
         "response",
     }
 

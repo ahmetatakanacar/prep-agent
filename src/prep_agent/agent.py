@@ -2,7 +2,8 @@
 
 Flow: profile -> planner (LLM) -> [questions -> user -> planner]* -> plan validation ->
 execution -> result validation. A plan or result with errors goes back to the planner together
-with the validator's issues. Warnings never do.
+with the validator's errors, and its warnings ride along. Warnings alone never trigger a
+revision.
 
 Two limits keep the loop finite. `max_question_rounds` caps how often the user is asked; once it
 is reached the planner is told to answer with a plan. If it asks anyway, it gets one more call
@@ -48,6 +49,8 @@ class LLMCallRecord(BaseModel):
     usage: TokenUsage | None
     # Codes of the validator errors this call was asked to fix; empty for a first plan.
     issue_codes: list[str]
+    # Codes of the warnings it was asked to fix too if it could.
+    warning_codes: list[str]
     response: PlannerResponse
 
 
@@ -211,7 +214,7 @@ class _Agent:
             plan = response.plan
             assert plan is not None  # guaranteed by PlannerResponse for kind "plan"
             attempt = self._try(plan)
-            errors, _ = partition_issues(attempt.issues)
+            errors, warnings = partition_issues(attempt.issues)
             if not errors:
                 assert attempt.execution is not None
                 return AgentResult(
@@ -224,7 +227,7 @@ class _Agent:
                     **self._failure(attempt),
                 )
             self.revisions += 1
-            revision = Revision(plan=plan, issues=errors)
+            revision = Revision(plan=plan, issues=errors, warnings=warnings)
 
     def _call_planner(self, revision: Revision | None, plan_only: bool) -> PlannerResponse:
         user = build_user_prompt(
@@ -248,6 +251,7 @@ class _Agent:
                 model=result.model,
                 usage=result.usage,
                 issue_codes=[issue.code for issue in revision.issues] if revision else [],
+                warning_codes=[issue.code for issue in revision.warnings] if revision else [],
                 response=result.parsed,
             )
         )

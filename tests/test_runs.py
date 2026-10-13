@@ -229,6 +229,7 @@ def make_trace(*, usage: TokenUsage | None = DEFAULT_USAGE) -> AgentTrace:
         model="fake-model",
         usage=usage,
         issue_codes=[],
+        warning_codes=[],
         response=PlannerResponse(kind="plan", plan=plan),
     )
     return AgentTrace(

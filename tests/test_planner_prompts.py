@@ -223,3 +223,44 @@ def test_plan_only_notice_says_the_previous_answer_was_refused(profile):
 
     assert "Your previous answer asked questions, but no more questions are allowed" in prompt
     assert 'Answer with kind "plan" now' in prompt
+
+
+def revision_with(plan, *, warnings) -> Revision:
+    error = ValidationIssue(code="unknown_column", severity="error", column="ghost", message="m1")
+    return Revision(plan=plan, issues=[error], warnings=warnings)
+
+
+def test_revision_lists_warnings_under_their_own_heading(profile):
+    plan = Plan.model_validate(
+        {
+            "target": "churned",
+            "task_type": "classification",
+            "model_family": "any",
+            "steps": [{"op": "dedupe", "keep": "first", "reason": "r"}],
+        }
+    )
+    warning = ValidationIssue(
+        code="stratify_disabled", severity="warning", step_index=3, message="turn it on"
+    )
+
+    prompt = user_prompt(profile, revision=revision_with(plan, warnings=[warning]))
+
+    fix, also = prompt.split("Warnings: fix these too if you can")
+    assert "code=unknown_column" in fix
+    assert "code=stratify_disabled step=3 column=none: turn it on" in also
+    assert "code=stratify_disabled" not in fix
+
+
+def test_revision_without_warnings_has_no_warning_heading(profile):
+    plan = Plan.model_validate(
+        {
+            "target": "churned",
+            "task_type": "classification",
+            "model_family": "any",
+            "steps": [{"op": "dedupe", "keep": "first", "reason": "r"}],
+        }
+    )
+
+    assert "Warnings: fix these too" not in user_prompt(
+        profile, revision=revision_with(plan, warnings=[])
+    )

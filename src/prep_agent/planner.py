@@ -9,7 +9,7 @@ the registry, so a new op shows up in it without editing the template. The user 
 only place where data-derived content (the profile) reaches the LLM.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Literal, Self
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
@@ -108,10 +108,12 @@ class QARecord(BaseModel):
 
 @dataclass(frozen=True)
 class Revision:
-    """A rejected plan and the validator errors the planner has to fix."""
+    """A rejected plan, the validator errors the planner has to fix and, optionally, the
+    warnings of the same plan that it should fix too if it can."""
 
     plan: Plan
     issues: list[ValidationIssue]
+    warnings: list[ValidationIssue] = field(default_factory=list)
 
 
 _ENV = Environment(

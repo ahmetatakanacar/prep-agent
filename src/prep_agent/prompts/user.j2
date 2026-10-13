@@ -30,6 +30,14 @@
 
 - code={{ issue.code }} step={{ issue.step_index if issue.step_index is not none else "none" }} column={{ issue.column if issue.column is not none else "none" }}: {{ issue.message }}
 {% endfor %}
+{% if revision.warnings %}
+
+## Warnings: fix these too if you can
+{% for issue in revision.warnings %}
+
+- code={{ issue.code }} step={{ issue.step_index if issue.step_index is not none else "none" }} column={{ issue.column if issue.column is not none else "none" }}: {{ issue.message }}
+{% endfor %}
+{% endif %}
 {% endif %}
 
 {% if plan_only %}
