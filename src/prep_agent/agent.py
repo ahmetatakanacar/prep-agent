@@ -269,7 +269,7 @@ class _Agent:
         profile = self._profile_for(plan)
         # `execute` validates the plan itself and refuses to run one with errors.
         try:
-            execution = execute(self.df, plan, profile)
+            execution = execute(self.df, plan, profile, self.model_family)
         except PlanValidationError as exc:
             self.attempt = _Attempt(plan, profile, exc.issues, None)
             return self.attempt

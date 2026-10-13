@@ -207,6 +207,37 @@ def test_target_mismatch_is_not_checked_when_the_profile_has_no_target(target):
     assert find(validate(split(), profile=profile, target=target), "target_mismatch") == []
 
 
+def check_family(expected, plan_family="any") -> list[ValidationIssue]:
+    plan = make_plan(*VALID_STEPS, model_family=plan_family)
+    return validate_plan(plan, PROFILE, expected_model_family=expected)
+
+
+def test_plan_model_family_different_from_the_expected_one_is_an_error():
+    [issue] = find(check_family("tree", plan_family="linear"), "model_family_mismatch")
+
+    assert issue.severity == "error"
+    assert issue.step_index is None
+    assert issue.column is None
+    assert "'linear'" in issue.message and "'tree'" in issue.message
+    assert "user" in issue.message
+
+
+def test_any_is_not_accepted_in_place_of_a_specific_expected_family():
+    assert find(check_family("tree", plan_family="any"), "model_family_mismatch")
+
+
+@pytest.mark.parametrize("family", ["tree", "linear", "any"])
+def test_plan_model_family_equal_to_the_expected_one_is_fine(family):
+    assert find(check_family(family, plan_family=family), "model_family_mismatch") == []
+
+
+@pytest.mark.parametrize("family", ["tree", "linear", "any"])
+def test_model_family_is_not_checked_without_an_expected_one(family):
+    plan = make_plan(*VALID_STEPS, model_family=family)
+
+    assert find(validate_plan(plan, PROFILE), "model_family_mismatch") == []
+
+
 def test_plan_without_a_split_is_an_error():
     issues = validate(dedupe(), drop("country"))
 
@@ -765,6 +796,19 @@ def test_plan_level_issues_come_before_step_issues():
     assert [i.code for i in issues[:3]] == [
         "target_mismatch",
         "target_not_in_profile",
+        "invalid_split_count",
+    ]
+
+
+def test_model_family_mismatch_comes_between_the_target_checks_and_the_split_check():
+    plan = make_plan(scale(["age"]), target="nope", model_family="any")
+
+    issues = validate_plan(plan, PROFILE, expected_model_family="tree")
+
+    assert [i.code for i in issues[:4]] == [
+        "target_mismatch",
+        "target_not_in_profile",
+        "model_family_mismatch",
         "invalid_split_count",
     ]
 

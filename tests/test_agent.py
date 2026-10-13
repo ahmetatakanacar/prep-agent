@@ -277,6 +277,25 @@ def test_a_plan_with_errors_is_revised_with_the_issue_codes(df):
     assert result.plan == Plan.model_validate(VALID_PLAN)
 
 
+def test_a_different_model_family_than_the_users_is_revised(df):
+    tree_plan = {**copy.deepcopy(VALID_PLAN), "model_family": "tree"}
+    responses = [plan_reply(VALID_PLAN), plan_reply(tree_plan)]
+
+    result, llm, _ = run(df, responses, model_family="tree")
+
+    assert "model_family_mismatch" in llm.calls[1].user
+    assert result.calls[1].issue_codes == ["model_family_mismatch"]
+    assert result.plan.model_family == "tree"
+
+
+def test_any_model_family_is_not_enforced_when_the_user_gave_none(df):
+    plan = {**copy.deepcopy(VALID_PLAN), "model_family": "linear"}
+
+    _, llm, _ = run(df, [plan_reply(plan)])
+
+    assert len(llm.calls) == 1
+
+
 def test_only_errors_are_sent_for_revision(df):
     plan = plan_with_impute_before_split()
     split = next(step for step in plan["steps"] if step["op"] == "split")

@@ -210,3 +210,12 @@ def test_data_that_does_not_match_the_profile_raises_execution_error(make_plan):
 
     with pytest.raises(executor.ExecutionError):
         execute(df.drop(columns="x"), plan, profile)
+
+
+def test_expected_model_family_is_checked_before_anything_runs():
+    df = load_csv(CUSTOMERS_CSV)
+    plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
+    profile = profile_dataframe(df, target=plan.target)
+
+    with pytest.raises(PlanValidationError, match="model_family_mismatch"):
+        execute(df, plan, profile, expected_model_family="tree")

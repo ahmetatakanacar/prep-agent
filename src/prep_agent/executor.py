@@ -68,9 +68,17 @@ class ExecutionResult:
     result_issues: list[ValidationIssue] = field(default_factory=list)
 
 
-def execute(df: pd.DataFrame, plan: Plan, profile: DatasetProfile) -> ExecutionResult:
-    """Run `plan` on `df`. The input frame is not modified."""
-    plan_issues = validate_plan(plan, profile)
+def execute(
+    df: pd.DataFrame,
+    plan: Plan,
+    profile: DatasetProfile,
+    expected_model_family: str | None = None,
+) -> ExecutionResult:
+    """Run `plan` on `df`. The input frame is not modified.
+
+    `expected_model_family` is passed on to the plan validator (see `validate_plan`).
+    """
+    plan_issues = validate_plan(plan, profile, expected_model_family)
     if has_errors(plan_issues):
         raise PlanValidationError(plan_issues)
 

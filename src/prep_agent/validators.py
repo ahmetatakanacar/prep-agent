@@ -45,6 +45,7 @@ IssueCode = Literal[
     # errors
     "target_mismatch",
     "target_not_in_profile",
+    "model_family_mismatch",
     "invalid_split_count",
     "stateless_after_split",
     "stateful_before_split",
@@ -84,6 +85,7 @@ IssueCode = Literal[
 SEVERITY: dict[IssueCode, Severity] = {
     "target_mismatch": "error",
     "target_not_in_profile": "error",
+    "model_family_mismatch": "error",
     "invalid_split_count": "error",
     "stateless_after_split": "error",
     "stateful_before_split": "error",
@@ -147,9 +149,15 @@ def partition_issues(
     return errors, warnings
 
 
-def validate_plan(plan: Plan, profile: DatasetProfile) -> list[ValidationIssue]:
-    """Check `plan` against `profile` without running anything. Inputs are not modified."""
-    return _Validation(plan, profile).run()
+def validate_plan(
+    plan: Plan, profile: DatasetProfile, expected_model_family: str | None = None
+) -> list[ValidationIssue]:
+    """Check `plan` against `profile` without running anything. Inputs are not modified.
+
+    `expected_model_family` is the family the user asked for, if any; a plan with another one
+    gets `model_family_mismatch`. Without it, the plan's family is not questioned.
+    """
+    return _Validation(plan, profile, expected_model_family).run()
 
 
 @dataclass
@@ -173,9 +181,12 @@ def _needs_encoding(column: _Column) -> bool:
 
 
 class _Validation:
-    def __init__(self, plan: Plan, profile: DatasetProfile) -> None:
+    def __init__(
+        self, plan: Plan, profile: DatasetProfile, expected_model_family: str | None
+    ) -> None:
         self.plan = plan
         self.profile = profile
+        self.expected_model_family = expected_model_family
         self.issues: list[ValidationIssue] = []
         self.columns = {
             c.name: _Column(c.inferred_type, _starts_numeric(c), c.n_missing > 0)
@@ -189,6 +200,7 @@ class _Validation:
     def run(self) -> list[ValidationIssue]:
         self._check_target_matches_profile()
         self._check_target_exists()
+        self._check_model_family()
         self._check_split_count()
         for index, step in enumerate(self.plan.steps):
             self._check_order(index, step)
@@ -235,6 +247,16 @@ class _Validation:
                 f"target {target!r} is not a column of the dataset; set 'target' to one of: "
                 f"{', '.join(self.columns)}.",
                 column=target,
+            )
+
+    def _check_model_family(self) -> None:
+        expected = self.expected_model_family
+        if expected is not None and expected != self.plan.model_family:
+            self._add(
+                "model_family_mismatch",
+                f"the plan's model_family {self.plan.model_family!r} differs from "
+                f"{expected!r}, which is the one the user specified; set the plan's "
+                "'model_family' to the user's model family and choose the steps for it.",
             )
 
     def _check_split_count(self) -> None:

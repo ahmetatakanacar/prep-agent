@@ -122,7 +122,7 @@ def test_warnings_are_printed_and_do_not_fail(invoke_cli, monkeypatch, tmp_path)
 
 
 def test_target_and_model_family_reach_the_planner(invoke_cli, monkeypatch, tmp_path):
-    llm = use_llm(monkeypatch, [plan_reply(VALID_PLAN)])
+    llm = use_llm(monkeypatch, [plan_reply({**VALID_PLAN, "model_family": "tree"})])
 
     invoke_cli(
         prepare_args(tmp_path, "--target", "churned", "--model-family", "tree", "--non-interactive")
