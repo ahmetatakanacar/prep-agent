@@ -99,6 +99,10 @@ def test_system_prompt_states_the_rules():
         "never change it",  # the user's target
         "same kind",  # merge consecutive steps
         "allow_custom",  # free-text answers
+        "Every option must be achievable with the operations listed above",
+        "binary columns stored as text",
+        "ask all of them in one answer",
+        "only for new questions that follow from the user's earlier answers",
     ):
         assert expected in prompt, expected
 
