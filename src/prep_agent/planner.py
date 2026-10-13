@@ -3,10 +3,16 @@
 On every call the planner answers with a `PlannerResponse`: either a complete plan or a list of
 questions for the user. The plan model itself is the one from `prep_agent.plan` and is not
 touched here.
+
+The prompts are Jinja2 templates in `prep_agent/prompts/`. The system prompt lists the ops from
+the registry, so a new op shows up in it without editing the template. The user prompt is the
+only place where data-derived content (the profile) reaches the LLM.
 """
 
+from dataclasses import dataclass
 from typing import Annotated, Literal, Self
 
+from jinja2 import Environment, PackageLoader, StrictUndefined
 from pydantic import (
     AfterValidator,
     BaseModel,
@@ -16,7 +22,10 @@ from pydantic import (
     model_validator,
 )
 
+from prep_agent.ops import list_ops
 from prep_agent.plan import Plan
+from prep_agent.profiler import DatasetProfile
+from prep_agent.validators import ValidationIssue
 
 MIN_OPTIONS = 2
 MAX_OPTIONS = 5
@@ -84,3 +93,56 @@ class PlannerResponse(BaseModel):
             if len(set(ids)) != len(ids):
                 raise ValueError("question ids must be distinct")
         return self
+
+
+class QARecord(BaseModel):
+    """A question the planner asked and the answer the user gave."""
+
+    question: Question
+    answer: str
+
+
+@dataclass(frozen=True)
+class Revision:
+    """A rejected plan and the validator errors the planner has to fix."""
+
+    plan: Plan
+    issues: list[ValidationIssue]
+
+
+_ENV = Environment(
+    loader=PackageLoader("prep_agent", "prompts"),
+    undefined=StrictUndefined,
+    trim_blocks=True,
+    lstrip_blocks=True,
+    keep_trailing_newline=True,
+    # Prompts are plain text, not HTML.
+    autoescape=False,
+)
+
+
+def build_system_prompt() -> str:
+    return _ENV.get_template("system.j2").render(ops=list_ops())
+
+
+def build_user_prompt(
+    *,
+    goal: str,
+    profile: DatasetProfile,
+    target: str | None,
+    model_family: str | None,
+    qa_history: list[QARecord],
+    revision: Revision | None,
+    question_rounds_left: int,
+) -> str:
+    """Render the user message. `question_rounds_left == 0` tells the planner to stop asking."""
+    return _ENV.get_template("user.j2").render(
+        goal=goal,
+        target=target,
+        model_family=model_family,
+        profile_json=profile.model_dump_json(exclude_none=True),
+        qa_history=qa_history,
+        revision=revision,
+        previous_plan_json=revision.plan.model_dump_json(exclude_none=True) if revision else "",
+        question_rounds_left=question_rounds_left,
+    )

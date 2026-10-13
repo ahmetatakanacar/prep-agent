@@ -1,0 +1,42 @@
+## Goal
+
+{{ goal }}
+
+## Settings given by the user
+
+- Target column: {{ target ~ " (use exactly this as the plan's `target`)" if target else "not specified" }}
+- Model family: {{ model_family ~ " (use exactly this as the plan's `model_family`)" if model_family else "not specified" }}
+
+## Dataset profile
+
+{{ profile_json }}
+{% if qa_history %}
+
+## Questions already asked and the user's answers
+{% for item in qa_history %}
+
+- [{{ item.question.id }}] {{ item.question.question }}
+  Answer: {{ item.answer }}
+{% endfor %}
+{% endif %}
+{% if revision %}
+
+## Previous plan, rejected
+
+{{ previous_plan_json }}
+
+## Validator issues to fix
+{% for issue in revision.issues %}
+
+- code={{ issue.code }} step={{ issue.step_index if issue.step_index is not none else "none" }} column={{ issue.column if issue.column is not none else "none" }}: {{ issue.message }}
+{% endfor %}
+{% endif %}
+
+## What to do now
+
+{% if revision %}Return a complete corrected plan that fixes every issue above.
+{% else %}Prepare this dataset for the goal above.
+{% endif %}
+{% if question_rounds_left > 0 %}You may still ask questions ({{ question_rounds_left }} round(s) left), but only about decisions that are genuinely open.
+{% else %}Do not ask any more questions. Answer with kind "plan". Where a decision is still open, apply the option you would recommend; if the model family is unknown, use "any".
+{% endif %}
