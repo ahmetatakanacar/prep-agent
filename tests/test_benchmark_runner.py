@@ -2,7 +2,6 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-import pandas as pd
 import pytest
 
 from bench_cost import ModelPrice
@@ -10,95 +9,26 @@ from bench_datasets import DatasetSpec
 from bench_naive import naive_plan
 from bench_results import BenchmarkResults
 from bench_runner import BenchmarkError, plan_jobs, plan_run, run_benchmark
-from prep_agent.baseline import BaselineResult, BaselineScore, ModelBaseline, evaluate_baselines
+from benchmark_support import (
+    answer,
+    classification_frame,
+    classification_plan,
+    questions_answer,
+    regression_plan,
+    stub_baseline,
+    write_workspace,
+)
+from prep_agent.baseline import evaluate_baselines
 from prep_agent.executor import execute
 from prep_agent.llm.base import LLMAPIError, TokenUsage
 from prep_agent.llm.fake import FakeLLM
 from prep_agent.plan import Plan
-from prep_agent.planner import PlannerResponse, Question
 from prep_agent.profiler import profile_dataframe
 
 MODEL = "fake-model"
 PRICE = ModelPrice(input_per_million=2.0, output_per_million=8.0)
 USAGE = TokenUsage(input_tokens=1000, output_tokens=200)
 CALL_COST = (1000 * 2.0 + 200 * 8.0) / 1_000_000
-
-
-def classification_frame(n=80) -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "uid": range(n),
-            "age": [float(20 + i % 30) if i % 7 else float("nan") for i in range(n)],
-            "city": [["a", "b", "c", "d"][i % 4] for i in range(n)],
-            "income": [float((i * 37) % 101) for i in range(n)],
-            "y": ["yes" if i % 2 else "no" for i in range(n)],
-        }
-    )
-
-
-def regression_frame(n=60) -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "rid": range(n),
-            "size": [i * 1.5 for i in range(n)],
-            "kind": [["x", "y", "z"][i % 3] for i in range(n)],
-            "price": [3 * i * 1.5 + i % 5 for i in range(n)],
-        }
-    )
-
-
-def classification_plan(drop="uid") -> dict:
-    return {
-        "target": "y",
-        "task_type": "classification",
-        "model_family": "any",
-        "steps": [
-            {"op": "drop_columns", "columns": [drop], "reason": "The id carries no signal."},
-            {"op": "split", "test_size": 0.2, "stratify": True, "random_state": 42, "reason": "s"},
-            {"op": "impute", "columns": ["age"], "strategy": "median", "reason": "Age has gaps."},
-            {"op": "encode", "columns": ["city"], "method": "onehot", "reason": "Text column."},
-        ],
-    }
-
-
-def regression_plan() -> dict:
-    return {
-        "target": "price",
-        "task_type": "regression",
-        "model_family": "any",
-        "steps": [
-            {"op": "drop_columns", "columns": ["rid"], "reason": "The id carries no signal."},
-            {"op": "split", "test_size": 0.2, "stratify": False, "random_state": 42, "reason": "s"},
-            {"op": "encode", "columns": ["kind"], "method": "onehot", "reason": "Text column."},
-        ],
-    }
-
-
-def answer(plan: dict) -> PlannerResponse:
-    return PlannerResponse(kind="plan", plan=Plan.model_validate(plan))
-
-
-def questions_answer() -> PlannerResponse:
-    question = Question(
-        id="q1", question="Keep outliers?", options=["yes", "no"], recommended="no", reason="r"
-    )
-    return PlannerResponse(kind="questions", questions=[question])
-
-
-def spec(name, target, task_type, n_rows, n_columns) -> DatasetSpec:
-    return DatasetSpec(
-        name=name,
-        openml_id={"cls": 1, "reg": 2}.get(name, 3),
-        openml_name=name,
-        openml_version=1,
-        target=target,
-        task_type=task_type,
-        goal=f"Prepare {name} for modelling.",
-        license="Public",
-        challenge="Tiny.",
-        n_rows=n_rows,
-        n_columns=n_columns,
-    )
 
 
 @dataclass
@@ -136,43 +66,7 @@ class Workspace:
 
 @pytest.fixture
 def ws(tmp_path) -> Workspace:
-    root = tmp_path
-    (root / "datasets").mkdir()
-    (root / "reference").mkdir()
-    classification_frame().to_csv(root / "datasets" / "cls.csv", index=False)
-    regression_frame().to_csv(root / "datasets" / "reg.csv", index=False)
-    (root / "reference" / "cls.plan.json").write_text(
-        Plan.model_validate(classification_plan()).model_dump_json(), encoding="utf-8"
-    )
-    (root / "reference" / "reg.plan.json").write_text(
-        Plan.model_validate(regression_plan()).model_dump_json(), encoding="utf-8"
-    )
-    specs = [
-        spec("cls", "y", "classification", 80, 5),
-        spec("reg", "price", "regression", 60, 4),
-    ]
-    return Workspace(root, specs)
-
-
-def _stub_baseline(train, pipeline, target, task_type, **kwargs) -> BaselineResult:
-    """A canned baseline: the real cross-validation takes seconds per plan."""
-    names = (
-        ("dummy_most_frequent", "logistic_regression", "random_forest")
-        if task_type == "classification"
-        else ("dummy_mean", "ridge", "random_forest")
-    )
-    metric = "f1_macro" if task_type == "classification" else "r2"
-    return BaselineResult(
-        task_type=task_type,
-        n_rows=len(train),
-        random_state=42,
-        n_folds=5,
-        metrics=[metric],
-        models=[
-            ModelBaseline(name=name, scores={metric: BaselineScore(mean=0.1 * i, std=0.0)})
-            for i, name in enumerate(names)
-        ],
-    )
+    return Workspace(tmp_path, write_workspace(tmp_path))
 
 
 @pytest.fixture
@@ -183,7 +77,7 @@ def real_baseline():
 @pytest.fixture(autouse=True)
 def fast_baseline(request, monkeypatch):
     if "real_baseline" not in request.fixturenames:
-        monkeypatch.setattr("bench_runner.evaluate_baselines", _stub_baseline)
+        monkeypatch.setattr("bench_runner.evaluate_baselines", stub_baseline)
 
 
 def good_llm(**kwargs) -> FakeLLM:
