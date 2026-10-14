@@ -1,0 +1,354 @@
+from datetime import UTC, datetime
+
+from bench_results import AgentMetrics, BenchmarkResults, JobResult, RunConfig
+from bench_summary import render_summary
+from prep_agent.baseline import BaselineResult, BaselineScore, ModelBaseline
+
+CLASSIFIERS = ("dummy_most_frequent", "logistic_regression", "random_forest")
+REGRESSORS = ("dummy_mean", "ridge", "random_forest")
+
+
+def _scores(**means) -> dict:
+    return {metric: BaselineScore(mean=mean, std=0.01) for metric, mean in means.items()}
+
+
+def _baseline(task_type, linear: dict, forest: dict) -> BaselineResult:
+    names = CLASSIFIERS if task_type == "classification" else REGRESSORS
+    return BaselineResult(
+        task_type=task_type,
+        n_rows=100,
+        random_state=42,
+        n_folds=5,
+        metrics=list(linear),
+        models=[
+            ModelBaseline(name=names[0], scores=_scores(**{m: 0.0 for m in linear})),
+            ModelBaseline(name=names[1], scores=_scores(**linear)),
+            ModelBaseline(name=names[2], scores=_scores(**forest)),
+        ],
+    )
+
+
+def classification_baseline(linear_f1, forest_f1, linear_auc=None, forest_auc=None):
+    linear, forest = {"f1_macro": linear_f1}, {"f1_macro": forest_f1}
+    if linear_auc is not None:
+        linear["roc_auc"], forest["roc_auc"] = linear_auc, forest_auc
+    return _baseline("classification", linear, forest)
+
+
+def regression_baseline(linear_r2, forest_r2):
+    return _baseline("regression", {"r2": linear_r2}, {"r2": forest_r2})
+
+
+def job(dataset="d1", method="agent", model="m1", repeat=1, status="ok", **kwargs) -> JobResult:
+    kwargs.setdefault("task_type", "classification")
+    if method != "agent":
+        model = None
+    return JobResult(
+        dataset=dataset, method=method, model=model, repeat=repeat, status=status, **kwargs
+    )
+
+
+def agent_metrics(**overrides) -> AgentMetrics:
+    values = {
+        "reported_model": "m1",
+        "calls": 1,
+        "revisions": 0,
+        "questions": 0,
+        "first_plan_error_codes": [],
+        "input_tokens": 1000,
+        "output_tokens": 200,
+        "cost": 0.01,
+        "qa": [],
+    }
+    return AgentMetrics(**(values | overrides))
+
+
+def results(jobs, models=("m1",), repeats=1, datasets=("d1",)) -> BenchmarkResults:
+    return BenchmarkResults(
+        started_at=datetime(2026, 10, 14, 12, 0, tzinfo=UTC),
+        finished_at=datetime(2026, 10, 14, 12, 30, tzinfo=UTC),
+        config=RunConfig(
+            models=list(models), repeats=repeats, datasets=list(datasets), currency="EUR", prices={}
+        ),
+        jobs=jobs,
+    )
+
+
+def table(markdown: str, heading: str) -> list[list[str]]:
+    """The cells of the table under `heading`, header row first, separator row removed."""
+    lines = markdown.splitlines()
+    start = lines.index(heading) + 1
+    rows = []
+    for line in lines[start:]:
+        if line.startswith("|"):
+            rows.append([cell.strip() for cell in line.strip().strip("|").split(" | ")])
+        elif rows:
+            break
+    return [row for row in rows if not set("".join(row)) <= set("-: ")]
+
+
+def row(rows: list[list[str]], first_cell: str) -> list[str]:
+    return next(r for r in rows if r[0] == first_cell)
+
+
+class TestScores:
+    def test_one_table_per_metric_with_linear_and_forest_in_each_cell(self):
+        jobs = [
+            job("d1", "reference", baseline=classification_baseline(0.6, 0.7, 0.8, 0.9)),
+            job("d1", "naive", baseline=classification_baseline(0.5, 0.6, 0.7, 0.8)),
+            job("d1", "agent", baseline=classification_baseline(0.65, 0.75, 0.85, 0.95)),
+        ]
+        md = render_summary(results(jobs))
+        f1 = table(md, "### f1_macro ↑")
+        assert f1[0] == ["dataset", "reference", "naive", "agent: m1"]
+        assert row(f1, "d1") == ["d1", "0.600 / 0.700", "0.500 / 0.600", "0.650 / 0.750"]
+        auc = table(md, "### roc_auc ↑")
+        assert row(auc, "d1")[1:] == ["0.800 / 0.900", "0.700 / 0.800", "0.850 / 0.950"]
+
+    def test_regression_datasets_only_appear_under_r2(self):
+        jobs = [
+            job("c", "naive", baseline=classification_baseline(0.5, 0.6)),
+            job("r", "naive", task_type="regression", baseline=regression_baseline(0.4, 0.8)),
+        ]
+        md = render_summary(results(jobs, models=(), datasets=("c", "r")))
+        assert [r[0] for r in table(md, "### r2 ↑")[1:]] == ["r"]
+        assert [r[0] for r in table(md, "### f1_macro ↑")[1:]] == ["c"]
+        assert "### roc_auc" not in md
+
+    def test_failed_and_errored_jobs_are_named_instead_of_scored(self):
+        jobs = [
+            job("d1", "reference", status="failed", error_codes=["unknown_column"]),
+            job("d1", "naive", status="error", error="boom"),
+            job("d1", "agent", baseline=classification_baseline(0.6, 0.7)),
+        ]
+        cells = row(table(render_summary(results(jobs)), "### f1_macro ↑"), "d1")
+        assert cells[1:] == ["failed", "error", "0.600 / 0.700"]
+
+    def test_repeats_are_averaged_and_partial_success_is_marked(self):
+        jobs = [
+            job("d1", "agent", repeat=1, baseline=classification_baseline(0.6, 0.7)),
+            job("d1", "agent", repeat=2, baseline=classification_baseline(0.8, 0.9)),
+            job("d1", "agent", repeat=3, status="failed"),
+        ]
+        md = render_summary(results(jobs, repeats=3))
+        assert row(table(md, "### f1_macro ↑"), "d1")[-1] == "0.700 / 0.800 (2/3 ok)"
+
+    def test_a_skipped_baseline_leaves_no_score_table(self):
+        skipped = BaselineResult(
+            task_type="classification",
+            n_rows=3,
+            random_state=42,
+            n_folds=None,
+            metrics=[],
+            models=[],
+            skipped_reason="too small",
+        )
+        md = render_summary(results([job("d1", "naive", baseline=skipped)], models=()))
+        assert "### f1_macro" not in md
+        assert "No plan has scores yet." in md
+
+    def test_methods_follow_the_models_of_the_run(self):
+        jobs = [
+            job("d1", "agent", model="b", baseline=classification_baseline(0.6, 0.7)),
+            job("d1", "agent", model="a", baseline=classification_baseline(0.6, 0.7)),
+        ]
+        header = table(render_summary(results(jobs, models=("b", "a"))), "### f1_macro ↑")[0]
+        assert header == ["dataset", "reference", "naive", "agent: b", "agent: a"]
+
+
+class TestAgainstNaive:
+    HEADING = "## Agent against the naive plan"
+
+    def test_shows_the_difference_in_the_forest_score_of_the_main_metric(self):
+        jobs = [
+            job("d1", "naive", baseline=classification_baseline(0.5, 0.60)),
+            job("d1", "agent", baseline=classification_baseline(0.5, 0.65)),
+            job(
+                "r",
+                "naive",
+                task_type="regression",
+                baseline=regression_baseline(0.5, 0.80),
+            ),
+            job(
+                "r",
+                "agent",
+                task_type="regression",
+                baseline=regression_baseline(0.5, 0.75),
+            ),
+        ]
+        rows = table(render_summary(results(jobs, datasets=("d1", "r"))), self.HEADING)
+        assert rows[0] == ["dataset", "metric", "agent: m1"]
+        assert row(rows, "d1") == ["d1", "f1_macro", "+0.050"]
+        assert row(rows, "r") == ["r", "r2", "-0.050"]
+        assert row(rows, "better than naive")[2] == "1 of 2"
+
+    def test_a_dash_stands_in_when_either_side_has_no_score(self):
+        jobs = [
+            job("d1", "naive", status="failed"),
+            job("d1", "agent", baseline=classification_baseline(0.5, 0.65)),
+        ]
+        assert row(table(render_summary(results(jobs)), self.HEADING), "d1")[2] == "–"
+
+    def test_is_left_out_without_agent_runs(self):
+        jobs = [job("d1", "naive", baseline=classification_baseline(0.5, 0.6))]
+        assert self.HEADING not in render_summary(results(jobs, models=()))
+
+
+class TestAgentRuns:
+    HEADING = "## Agent runs"
+
+    def test_summarises_success_revisions_questions_tokens_cost_and_time(self):
+        jobs = [
+            job(
+                "d1",
+                "agent",
+                repeat=1,
+                agent=agent_metrics(revisions=2, questions=1, cost=0.02),
+                plan_seconds=10.0,
+                baseline_seconds=2.0,
+            ),
+            job(
+                "d2",
+                "agent",
+                repeat=1,
+                agent=agent_metrics(
+                    revisions=0, questions=0, input_tokens=3000, output_tokens=400, cost=0.04
+                ),
+                plan_seconds=20.0,
+                baseline_seconds=4.0,
+            ),
+            job("d3", "agent", status="failed", agent=agent_metrics(revisions=2, cost=0.03)),
+        ]
+        rows = table(render_summary(results(jobs, datasets=("d1", "d2", "d3"))), self.HEADING)
+        header = rows[0]
+        values = dict(zip(header, row(rows, "m1"), strict=True))
+        assert values["runs"] == "3"
+        assert values["ok"] == "2 (67%)"
+        assert values["revisions"] == "1.3"
+        assert values["questions"] == "0.3"
+        assert values["input tokens"] == "1667"
+        assert values["output tokens"] == "267"
+        assert values["cost (EUR)"] == "0.0900"
+        assert values["plan seconds"] == "15.0"
+
+    def test_cost_is_marked_incomplete_when_some_runs_reported_no_usage(self):
+        jobs = [
+            job("d1", "agent", agent=agent_metrics(cost=0.02)),
+            job("d1", "agent", repeat=2, agent=agent_metrics(cost=None, input_tokens=None)),
+        ]
+        rows = table(render_summary(results(jobs, repeats=2)), self.HEADING)
+        assert (
+            dict(zip(rows[0], row(rows, "m1"), strict=True))["cost (EUR)"] == "0.0200+ (1 unknown)"
+        )
+
+    def test_cost_and_tokens_are_not_available_without_any_usage(self):
+        jobs = [
+            job(
+                "d1", "agent", agent=agent_metrics(cost=None, input_tokens=None, output_tokens=None)
+            )
+        ]
+        rows = table(render_summary(results(jobs)), self.HEADING)
+        values = dict(zip(rows[0], row(rows, "m1"), strict=True))
+        assert (values["cost (EUR)"], values["input tokens"]) == ("n/a", "n/a")
+
+    def test_errored_runs_count_as_runs_but_not_as_successes(self):
+        jobs = [job("d1", "agent", status="error", error="boom")]
+        rows = table(render_summary(results(jobs)), self.HEADING)
+        values = dict(zip(rows[0], row(rows, "m1"), strict=True))
+        assert (values["runs"], values["ok"]) == ("1", "0 (0%)")
+
+    def test_says_so_without_agent_runs(self):
+        md = render_summary(results([job("d1", "naive")], models=()))
+        assert "No agent runs." in md
+
+
+class TestIssueCodes:
+    def test_counts_the_runs_a_code_appeared_in_most_frequent_first(self):
+        jobs = [
+            job(
+                "d1",
+                "agent",
+                repeat=i,
+                agent=agent_metrics(first_plan_error_codes=codes),
+                warning_codes=warnings,
+            )
+            for i, (codes, warnings) in enumerate(
+                [
+                    (
+                        ["unknown_column", "unknown_column", "stateless_after_split"],
+                        ["scale_for_tree"],
+                    ),
+                    (["unknown_column"], []),
+                    ([], ["scale_for_tree", "repeated_op"]),
+                ],
+                start=1,
+            )
+        ]
+        md = render_summary(results(jobs, repeats=3))
+        errors = table(md, "### First-plan errors of agent runs")
+        assert errors[0] == ["code", "runs", "share of runs"]
+        assert errors[1:] == [
+            ["unknown_column", "2", "67%"],
+            ["stateless_after_split", "1", "33%"],
+        ]
+        warnings = table(md, "### Final-plan warnings of agent runs")
+        assert warnings[1:] == [["scale_for_tree", "2", "67%"], ["repeated_op", "1", "33%"]]
+
+    def test_says_none_when_there_is_nothing_to_count(self):
+        md = render_summary(results([job("d1", "agent", agent=agent_metrics())]))
+        assert "No first-plan errors." in md
+        assert "No final-plan warnings." in md
+
+    def test_lists_the_warnings_of_reference_and_naive_plans_per_dataset(self):
+        jobs = [
+            job("d1", "reference", warning_codes=["repeated_op"]),
+            job("d1", "naive", warning_codes=[]),
+            job("d2", "naive", warning_codes=["impute_without_missing", "repeated_op"]),
+        ]
+        md = render_summary(results(jobs, models=(), datasets=("d1", "d2")))
+        rows = table(md, "### Warnings of reference and naive plans")
+        assert rows[0] == ["dataset", "reference", "naive"]
+        assert row(rows, "d1") == ["d1", "repeated_op", "–"]
+        assert row(rows, "d2") == ["d2", "–", "impute_without_missing, repeated_op"]
+
+
+class TestFailures:
+    def test_lists_every_job_that_is_not_ok_with_its_reason(self):
+        jobs = [
+            job(
+                "d1",
+                "agent",
+                status="failed",
+                error="out of revisions",
+                error_codes=["unknown_column"],
+            ),
+            job("d2", "reference", status="error", error="plan file | not found\nreally"),
+            job("d1", "naive"),
+        ]
+        rows = table(render_summary(results(jobs, datasets=("d1", "d2"))), "## Failures")
+        assert rows[0] == ["dataset", "method", "run", "status", "reason"]
+        assert len(rows) == 3
+        assert row(rows, "d1")[1:4] == ["agent: m1", "1", "failed"]
+        assert "out of revisions" in row(rows, "d1")[4]
+        assert "unknown_column" in row(rows, "d1")[4]
+        reason = row(rows, "d2")[4]
+        assert "\n" not in reason
+        assert "plan file \\| not found really" in reason
+
+    def test_says_so_when_nothing_failed(self):
+        assert "No failures." in render_summary(results([job("d1", "naive")], models=()))
+
+
+class TestHeaderAndNotes:
+    def test_names_the_run_and_the_ground_rules(self):
+        md = render_summary(results([job("d1", "naive")], models=("m1",), repeats=3))
+        assert md.startswith("# Benchmark summary")
+        assert "m1" in md
+        assert "3" in md
+        assert "5-fold" in md
+        assert "reference/README.md" in md
+        assert "test set" in md
+
+    def test_is_deterministic(self):
+        data = results([job("d1", "naive", baseline=classification_baseline(0.5, 0.6))], models=())
+        assert render_summary(data) == render_summary(data)
