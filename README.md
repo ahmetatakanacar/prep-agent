@@ -2,7 +2,7 @@
 
 Prepares a CSV dataset for machine learning from a natural-language goal: it profiles the data, has an LLM propose a structured preparation plan, validates the plan, and executes it.
 
-**Status:** under development. The `profile`, `run`, `prepare` and `llm-check` commands work. `prepare` has the LLM plan the preparation; `run` takes a hand-written plan. The report, the standalone `pipeline.py` and the baseline scores are not implemented yet.
+**Status:** under development. The `profile`, `run`, `prepare` and `llm-check` commands work. `prepare` has the LLM plan the preparation; `run` takes a hand-written plan. Both write a `report.md` and baseline scores into the run folder. The standalone `pipeline.py` is not implemented yet.
 
 ## Planned features
 
@@ -37,7 +37,7 @@ Run a hand-written plan on a CSV file. The plan's `target` is the target column.
 uv run prep-agent run tests/fixtures/customers.csv --plan tests/fixtures/customers_plan.json --out-dir runs
 ```
 
-This writes `runs/<run_id>/` with `profile.json`, `plan.json`, `train.csv`, `test.csv`, `pipeline.joblib`, `issues.json` and `run.json`. The exit code is 1 if the plan has errors or the result fails validation (in the second case the files are still written, with status `failed` in `run.json`); warnings do not fail a run. Pass `--dry-run` to only validate the plan.
+This writes `runs/<run_id>/` with `profile.json`, `plan.json`, `train.csv`, `test.csv`, `pipeline.joblib`, `issues.json`, `report.md`, `baseline.json` and `run.json`. The exit code is 1 if the plan has errors or the result fails validation (in the second case the files are still written, with status `failed` in `run.json`); warnings do not fail a run. Pass `--dry-run` to only validate the plan and `--no-baseline` to skip the baseline scores.
 
 `pipeline.joblib` contains only the fitted impute, encode and scale steps. It does not include the stateless steps or the split, so it cannot be applied to a raw file. A standalone `pipeline.py` is not generated yet.
 
@@ -48,6 +48,17 @@ uv run prep-agent prepare tests/fixtures/customers.csv --goal "prepare for churn
 ```
 
 The model only sees the profile, never the raw data. Questions are asked in the terminal with numbered options; the recommended one is marked and Enter picks it. `--non-interactive` answers every question with the recommended option. `--max-revisions N` (default 2) limits how often a plan or result with errors is sent back; if errors remain, the command exits 1 and still saves the run with status `failed` (without `plan.json`, train and test files if the planner never produced a plan or the plan never ran). A question can allow a typed answer of your own (the last option); `--model-family` is enforced, so a plan for another family is sent back. Besides the usual files, the run folder has `llm_trace.json` (every model call: purpose, model, token usage, the issue codes it was asked to fix, and its answer) and `qa.json` (the questions and your answers), and `run.json` records the goal, the model, the total token usage and, for a failed run, the error.
+
+## Report and baseline
+
+Every run folder gets a `report.md`, including failed runs. It is built from the run's own data, not written by an LLM: goal, input file and short sha256, date, model and token use, row and column counts before and after (with the dropped columns), the questions and answers, the plan with each step's parameters and reason, the validator issues (or an explicit "no issues"), the baseline scores, and notes on the leakage guarantees. A failed run's report names the reason and has no baseline section.
+
+The agent does not choose a model. On a successful run it only computes reference scores with 5-fold cross-validation (stratified for classification, fewer folds if the smallest class is smaller) and writes them to `baseline.json` and the report:
+
+- classification: a dummy model (most frequent class), logistic regression and a random forest; accuracy, macro F1 and, for a binary target, ROC AUC
+- regression: a dummy model (mean), ridge and a random forest; R², RMSE and MAE
+
+The dummy model ignores the features, so it is the floor the others should beat. Cross-validation runs on the raw train split with a fresh copy of the impute, encode and scale steps in every fold, so those steps never see a fold's validation rows. The test set is not used. A model that cannot run on the prepared data (a column left with missing values or text, for example) is listed as skipped with the reason, and if the target allows no cross-validation at all the whole baseline is skipped. Pass `--no-baseline` to `run` or `prepare` to leave the baseline out; the report then says so.
 
 ## LLM provider
 
