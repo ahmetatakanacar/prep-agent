@@ -25,7 +25,7 @@ CUSTOMERS_CSV = FIXTURES / "customers.csv"
 CUSTOMERS_PLAN = FIXTURES / "customers_plan.json"
 
 RUN_ID = "test-run"
-ALLOWED_IMPORTS = {"argparse", "pandas", "pathlib", "sklearn"}
+ALLOWED_IMPORTS = {"argparse", "hashlib", "pandas", "pathlib", "sklearn", "sys"}
 
 
 def raw_frame(n: int = 150, seed: int = 0) -> pd.DataFrame:
@@ -426,6 +426,46 @@ def test_one_existing_file_is_named_and_nothing_is_written(workdirs, existing):
     assert other not in done.stderr
     assert (run_dir / existing).read_text(encoding="utf-8") == "mine"
     assert not (run_dir / other).exists()
+
+
+def test_the_input_hash_is_a_constant_equal_to_the_header(tmp_path):
+    csv_path = tmp_path / "raw.csv"
+    raw_frame().to_csv(csv_path, index=False)
+    sha = hashlib.sha256(csv_path.read_bytes()).hexdigest()
+
+    source = make_script(tmp_path, csv_path, build_plan(PLANS["no_stateful_steps"])).read_text(
+        encoding="utf-8"
+    )
+
+    assert f"# input sha256: {sha}" in source.splitlines()
+    assert f'INPUT_SHA256 = "{sha}"' in source.splitlines()
+    assert load_module(tmp_path / "pipeline.py").INPUT_SHA256 == sha
+
+
+def test_the_same_data_gives_no_warning(workdirs):
+    done = run_script_in(workdirs)
+
+    assert done.returncode == 0, done.stderr
+    assert done.stderr == ""
+
+
+def test_other_data_warns_on_stderr_and_still_runs(workdirs, tmp_path):
+    script_dir, run_dir = workdirs
+    other = tmp_path / "other.csv"
+    other.write_text(CUSTOMERS_CSV.read_text(encoding="utf-8"), encoding="utf-8")
+    with other.open("a", encoding="utf-8", newline="") as handle:
+        handle.write("\n")
+    plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
+    script = make_script(script_dir, CUSTOMERS_CSV, plan)
+
+    done = run_python([script, other, "--out-dir", run_dir / "out"], cwd=run_dir)
+
+    assert done.returncode == 0, done.stderr
+    assert "differs" in done.stderr
+    assert "Traceback" not in done.stderr
+    assert (run_dir / "out" / "train.csv").is_file()
+    assert (run_dir / "out" / "test.csv").is_file()
+    assert "differs" not in done.stdout
 
 
 # --- independence from prep-agent ---

@@ -37,7 +37,8 @@ _DOCSTRING = [
     "Usage: python pipeline.py <input.csv> [--out-dir <folder>]",
     "",
     "train.csv and test.csv are written to the folder (default: the current directory).",
-    "Existing files are only replaced with --force.",
+    "Existing files are only replaced with --force. A warning goes to stderr when the input",
+    "is not the file the run was made from (INPUT_SHA256).",
     "",
     "The pieces can also be imported and called one by one: apply_stateless_steps,",
     "split_train_test, build_pipeline and prepare. Only pandas and scikit-learn are needed.",
@@ -48,6 +49,16 @@ _READ_INPUT = [
     "def read_input(path: Path) -> pd.DataFrame:",
     '    """Read the raw CSV file the way prep-agent did."""',
     "    return pd.read_csv(path, low_memory=False)",
+]
+
+_FILE_SHA256 = [
+    "def file_sha256(path: Path) -> str:",
+    '    """The sha256 of a file as hex, read in chunks."""',
+    "    digest = hashlib.sha256()",
+    '    with path.open("rb") as handle:',
+    "        while chunk := handle.read(1 << 20):",
+    "            digest.update(chunk)",
+    "    return digest.hexdigest()",
 ]
 
 _PREPARE = [
@@ -80,6 +91,13 @@ _MAIN = [
     '        "--force", action="store_true", help="overwrite existing train.csv and test.csv"',
     "    )",
     "    args = parser.parse_args(argv)",
+    "    actual = file_sha256(args.input)",
+    "    if actual != INPUT_SHA256:",
+    "        print(",
+    '            "warning: this data differs from the data the plan was prepared on "',
+    '            f"(input sha256 {actual[:12]}, expected {INPUT_SHA256[:12]}).",',
+    "            file=sys.stderr,",
+    "        )",
     '    existing = [n for n in ("train.csv", "test.csv") if (args.out_dir / n).exists()]',
     "    if existing and not args.force:",
     '        names = " and ".join(existing)',
@@ -111,7 +129,9 @@ def generate_pipeline_script(
 
     imports = {
         Import("argparse"),
+        Import("hashlib"),
         Import("pathlib", "Path"),
+        Import("sys"),
         Import("pandas", alias="pd"),
         Import("sklearn.pipeline", "Pipeline"),
     }
@@ -143,8 +163,14 @@ def generate_pipeline_script(
     sections = [
         _header(plan, run_id, prep_agent_version, input_sha256) + _DOCSTRING,
         render_imports(imports),
-        render_statements([Assign("TARGET", literal(plan.target))]),
+        render_statements(
+            [
+                Assign("TARGET", literal(plan.target)),
+                Assign("INPUT_SHA256", literal(input_sha256)),
+            ]
+        ),
         _READ_INPUT,
+        _FILE_SHA256,
         [
             "def apply_stateless_steps(df: pd.DataFrame) -> pd.DataFrame:",
             '    """Apply the steps that learn nothing from the data, before the split."""',
