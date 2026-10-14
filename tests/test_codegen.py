@@ -227,6 +227,82 @@ def hard_plan() -> dict:
     }
 
 
+def category_frame(n: int = 160, seed: int = 2) -> pd.DataFrame:
+    """Numbers that are categories: integers, whole numbers stored as floats because of gaps,
+    and floats with fractions."""
+    rng = np.random.default_rng(seed)
+    code = rng.choice([10, 20, 30, 40], n).astype(float)
+    code[rng.random(n) < 0.15] = np.nan
+    size = rng.choice([0.5, 1.0, 1.5], n)
+    score = rng.normal(0, 1, n).round(3)
+    hour = rng.integers(0, 24, n)
+    return pd.DataFrame(
+        {
+            "hour": hour,
+            "code": code,
+            "size": size,
+            "score": score,
+            "city": rng.choice(["a", "b", "c"], n),
+            "price": (score * 3 + hour / 4 + np.nan_to_num(code) / 10).round(3),
+            "label": rng.choice(["yes", "no"], n),
+        }
+    )
+
+
+CATEGORY_PLANS = {
+    "cast_with_gaps_then_onehot": {
+        "target": "price",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+            {"op": "drop_columns", "columns": ["label"]},
+            {"op": "cast_to_category", "columns": ["hour", "code", "size"]},
+            split(),
+            {"op": "impute", "columns": ["code"], "strategy": "most_frequent"},
+            {"op": "encode", "columns": ["hour", "code", "size", "city"], "method": "onehot"},
+            {"op": "scale", "columns": ["score"], "method": "standard"},
+        ],
+    },
+    "cast_then_ordinal_in_two_steps": {
+        "target": "label",
+        "task_type": "classification",
+        "model_family": "tree",
+        "steps": [
+            {"op": "cast_to_category", "columns": ["hour"]},
+            {"op": "dedupe", "subset": None, "keep": "first"},
+            {"op": "cast_to_category", "columns": ["size", "city"]},
+            split(stratify=True),
+            {"op": "encode", "columns": ["hour", "size", "city"], "method": "ordinal"},
+        ],
+    },
+}
+
+
+def hard_cast_plan() -> dict:
+    n = HARD_NAMES
+    return {
+        "target": n["target"],
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+            {"op": "cast_to_category", "columns": [n["tab"]]},
+            split(stratify=True),
+            {"op": "impute", "columns": [n["age"]], "strategy": "median"},
+            {"op": "impute", "columns": [n["injection"]], "strategy": "most_frequent"},
+            {
+                "op": "encode",
+                "columns": [n["apostrophe"], n["backslash"], n["injection"], n["tab"]],
+                "method": "onehot",
+            },
+            {
+                "op": "scale",
+                "columns": [n["age"], n["quoted"], n["newline"], n["cjk"], n["payload"]],
+                "method": "standard",
+            },
+        ],
+    }
+
+
 def build_plan(raw: dict) -> Plan:
     return Plan.model_validate(
         {
@@ -332,6 +408,58 @@ def test_generated_functions_match_the_executor_exactly(tmp_path, name):
 
     pd.testing.assert_frame_equal(train, expected.train)
     pd.testing.assert_frame_equal(test, expected.test)
+
+
+@pytest.mark.parametrize("name", CATEGORY_PLANS)
+def test_generated_script_matches_the_executor_for_cast_plans(workdirs, tmp_path, name):
+    csv_path = tmp_path / "raw.csv"
+    category_frame().to_csv(csv_path, index=False)
+
+    check_subprocess_run(workdirs, csv_path, build_plan(CATEGORY_PLANS[name]))
+
+
+@pytest.mark.parametrize("name", CATEGORY_PLANS)
+def test_generated_functions_match_the_executor_exactly_for_cast_plans(tmp_path, name):
+    csv_path = tmp_path / "raw.csv"
+    category_frame().to_csv(csv_path, index=False)
+    plan = build_plan(CATEGORY_PLANS[name])
+    expected = reference(csv_path, plan)
+
+    module = load_module(make_script(tmp_path, csv_path, plan))
+    train, test = module.prepare(module.read_input(csv_path))
+
+    pd.testing.assert_frame_equal(train, expected.train)
+    pd.testing.assert_frame_equal(test, expected.test)
+
+
+def test_a_cast_integer_column_with_gaps_gives_the_categories_of_the_integers(tmp_path):
+    csv_path = tmp_path / "raw.csv"
+    category_frame().to_csv(csv_path, index=False)
+    plan = build_plan(CATEGORY_PLANS["cast_with_gaps_then_onehot"])
+
+    columns = set(reference(csv_path, plan).train.columns)
+    script = make_script(tmp_path, csv_path, plan)
+    module = load_module(script)
+    produced = set(module.prepare(module.read_input(csv_path))[0].columns)
+
+    expected = {"code_10", "code_20", "code_30", "code_40", "size_0.5", "size_1", "size_1.5"}
+    assert expected <= columns
+    assert expected <= produced
+    assert not {c for c in columns | produced if c.endswith(".0")}
+
+
+def test_cast_hard_column_names_work_and_are_never_executed(workdirs, tmp_path):
+    csv_path = tmp_path / "hard.csv"
+    hard_frame().to_csv(csv_path, index=False)
+    plan = build_plan(hard_cast_plan())
+
+    check_subprocess_run(workdirs, csv_path, plan)
+
+    script_dir, run_dir = workdirs
+    source = (script_dir / "pipeline.py").read_text(encoding="utf-8")
+    assert "cast_to_category(df, [" in source
+    assert not (run_dir / "pwned.txt").exists()
+    assert imported_modules(source) <= ALLOWED_IMPORTS
 
 
 @pytest.mark.parametrize(
@@ -481,12 +609,13 @@ def imported_modules(source: str) -> set[str]:
     return found
 
 
-@pytest.mark.parametrize("name", PLANS)
+@pytest.mark.parametrize("name", [*PLANS, *CATEGORY_PLANS])
 def test_the_script_imports_only_pandas_scikit_learn_and_the_standard_library(tmp_path, name):
     csv_path = tmp_path / "raw.csv"
     raw_frame().to_csv(csv_path, index=False)
+    raw = PLANS.get(name) or CATEGORY_PLANS[name]
 
-    source = make_script(tmp_path, csv_path, build_plan(PLANS[name])).read_text(encoding="utf-8")
+    source = make_script(tmp_path, csv_path, build_plan(raw)).read_text(encoding="utf-8")
 
     assert imported_modules(source) <= ALLOWED_IMPORTS
     assert "prep_agent" not in source
@@ -702,12 +831,18 @@ RUFF_CONFIGS = {
 
 
 @pytest.mark.parametrize("config", RUFF_CONFIGS)
-@pytest.mark.parametrize("name", [*PLANS, "hard_names"])
+@pytest.mark.parametrize("name", [*PLANS, *CATEGORY_PLANS, "hard_names", "hard_cast_names"])
 def test_generated_script_passes_ruff(tmp_path, name, config):
     csv_path = tmp_path / "raw.csv"
     if name == "hard_names":
         hard_frame().to_csv(csv_path, index=False)
         plan = build_plan(hard_plan())
+    elif name == "hard_cast_names":
+        hard_frame().to_csv(csv_path, index=False)
+        plan = build_plan(hard_cast_plan())
+    elif name in CATEGORY_PLANS:
+        category_frame().to_csv(csv_path, index=False)
+        plan = build_plan(CATEGORY_PLANS[name])
     else:
         raw_frame().to_csv(csv_path, index=False)
         plan = build_plan(PLANS[name])

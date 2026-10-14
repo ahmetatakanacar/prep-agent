@@ -213,6 +213,13 @@ PLANS = {
     "dedupe_subset_last": plan_dict(step("dedupe", subset=["a", "b"], keep="last")),
     "drop_columns": plan_dict(step("drop_columns", columns=["a"])),
     "drop_missing_target": plan_dict(step("drop_missing_target")),
+    "cast_to_category": plan_dict(step("cast_to_category", columns=["hour"])),
+    "cast_several_then_onehot": plan_dict(
+        step("cast_to_category", columns=["hour", "month", "weekday"]),
+        step("split", stratify=False),
+        step("encode", columns=["hour", "month", "weekday"], method="onehot"),
+        task_type="regression",
+    ),
     "split_defaults": plan_dict(step("split", stratify=False)),
     "split_custom": plan_dict(step("split", stratify=True, test_size=0.3, random_state=7)),
     "impute_median": plan_dict(step("impute", columns=["a"], strategy="median")),
@@ -248,6 +255,7 @@ PLANS = {
         step("dedupe", subset=["a"], keep="first"),
         step("drop_columns", columns=["id"]),
         step("drop_missing_target"),
+        step("cast_to_category", columns=["d"]),
         step("split", stratify=True, test_size=0.25, random_state=1),
         step("impute", columns=["a"], strategy="constant", fill_value="none", add_indicator=True),
         step("encode", columns=["b"], method="onehot", max_categories=3),
@@ -337,6 +345,23 @@ HAND_WRITTEN = {
             "method": "onehot",
             "max_categories": None,
         }
+    ),
+    "cast_to_category": llm_answer(
+        {"op": "cast_to_category", "reason": "an hour is a category", "columns": ["hour"]},
+        {
+            "op": "split",
+            "reason": "hold out",
+            "test_size": None,
+            "stratify": False,
+            "random_state": None,
+        },
+        {
+            "op": "encode",
+            "reason": "categorical now",
+            "columns": ["hour"],
+            "method": "onehot",
+            "max_categories": None,
+        },
     ),
     "dedupe_with_null_subset": llm_answer(
         {"op": "dedupe", "reason": "duplicates", "subset": None, "keep": "first"}
