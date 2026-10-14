@@ -1,8 +1,8 @@
 # Reference plans
 
-**Status of every plan in this folder: draft, needs human review.**
+**Status of the plans in this folder: draft, needs human review, except bike-sharing-demand, which a human has reviewed.** Every dataset section below starts with its own `Review status` line.
 
-Each `<dataset>.plan.json` is the plan an experienced data scientist might write for the dataset in `benchmarks/datasets.yaml`, drafted from the dataset's profile and a look at its columns. Nobody has reviewed them yet. They are the benchmark's yardstick for the agent, so a wrong decision here becomes a wrong verdict on the agent. Read the `reason` of each step, then the notes below, and change what you disagree with. The files are plain plan JSON; edit them by hand.
+Each `<dataset>.plan.json` is the plan an experienced data scientist might write for the dataset in `benchmarks/datasets.yaml`, drafted from the dataset's profile and a look at its columns. They are the benchmark's yardstick for the agent, so a wrong decision here becomes a wrong verdict on the agent. Read the `reason` of each step, then the notes below, and change what you disagree with. The files are plain plan JSON; edit them by hand.
 
 To check an edited plan against the data without scoring it:
 
@@ -19,9 +19,12 @@ All plans use `model_family: "any"`, a stratified 80/20 split for classification
 - **No `dedupe`.** Datasets with exact duplicate rows (telco 22, bank-marketing 274, adult 52, bike-sharing 2) have no identifier, so a repeated row may be a different customer or hour with the same values. See adult for what happens when duplicates are removed anyway.
 - **High-missing columns are dropped without asking.** A hand-written plan has no user to ask; the agent would have to ask (see CLAUDE.md, rule 5).
 - **Known leakage.** `datasets.yaml` lists `leaky_columns` for titanic (`boat`, `body`) and employee-salaries (`2016_gross_pay_received`). Every reference plan drops them (a test checks it), and the results mark any plan that keeps one. The naive plan keeps them and scores far higher on titanic because of it. The employee-salaries entry is a judgement (see below); remove it from the registry if you disagree.
-- **What no plan can express.** There is no operation to cast a column (numbers stored as text, categories stored as integers), parse dates, extract text parts, take logarithms, clip outliers or turn sentinel values into missing. Where that matters it is noted below.
+- **Categories stored as numbers.** `cast_to_category` turns such a column into text so that it can be one-hot encoded. A plan uses it where the column name says the numbers are labels (hour, month, a class code) and the profile hints at it with the `low_cardinality_numeric` warning; the warning alone is not enough, since a count of rooms triggers it too. Only bike-sharing-demand and house-prices (`MSSubClass`) use it so far.
+- **What no plan can express.** There is no operation to convert numbers stored as text, parse dates, extract text parts, take logarithms, clip outliers or turn sentinel values into missing. Where that matters it is noted below.
 
 ## titanic
+
+**Review status:** draft, needs human review
 
 Drops `name`, `ticket`, `cabin`, `boat`, `body` and `home.dest`; imputes `age` (median, with a missing indicator), `fare` (median) and `embarked` (most frequent); one-hot encodes `sex` and `embarked`; robust-scales the numeric columns.
 
@@ -31,6 +34,8 @@ Drops `name`, `ticket`, `cabin`, `boat`, `body` and `home.dest`; imputes `age` (
 
 ## credit-g
 
+**Review status:** draft, needs human review
+
 No drops and no imputation (the table is clean). One-hot encodes the 13 categorical columns and robust-scales the 7 numeric ones.
 
 - `checking_status`, `savings_status` and `employment` are ordered scales; one-hot throws the order away.
@@ -38,11 +43,15 @@ No drops and no imputation (the table is clean). One-hot encodes the 13 categori
 
 ## diabetes
 
+**Review status:** draft, needs human review
+
 Only the split and a robust scaling of the 8 numeric columns.
 
 - Zeros in `plas` (5 rows), `pres` (35), `skin` (227), `insu` (374) and `mass` (11) cannot be real measurements; they are missing values. No operation turns a value into missing, so they stay. Dropping `insu` and `skin` is a defensible alternative; this draft keeps them because tree models can still use the zeros as a marker.
 
 ## telco-customer-churn
+
+**Review status:** draft, needs human review
 
 Drops `TotalCharges`; stratified split; one-hot encodes the 15 text columns; standard-scales `tenure` and `MonthlyCharges`.
 
@@ -50,6 +59,8 @@ Drops `TotalCharges`; stratified split; one-hot encodes the 15 text columns; sta
 - The 22 duplicate rows are kept (see above). `PhoneService` is a yes/no column; the profiler used to flag it `possible_pii` because of "phone" in its name and no longer does, since a name only counts when the values are mostly distinct. `SeniorCitizen` is a 0/1 number and is left as it is.
 
 ## adult
+
+**Review status:** draft, needs human review
 
 Drops `fnlwgt` (census sampling weight) and `education` (repeats `education-num`); fills the missing `workclass`, `occupation` and `native-country` with the category "Unknown"; one-hot encodes the categorical columns, grouping `native-country` into 10; standard-scales the 5 numeric columns.
 
@@ -59,6 +70,8 @@ Drops `fnlwgt` (census sampling weight) and `education` (repeats `education-num`
 
 ## bank-marketing
 
+**Review status:** draft, needs human review
+
 Stratified split; one-hot encodes 8 text columns; robust-scales `age`, `balance`, `campaign`, `pdays` and `previous`.
 
 - Only 11.7% of the clients subscribe. The split is stratified; nothing else is done about the imbalance (the agent does not choose models or weights).
@@ -67,14 +80,18 @@ Stratified split; one-hot encodes 8 text columns; robust-scales `age`, `balance`
 
 ## house-prices
 
+**Review status:** draft, needs human review. Only the `MSSubClass` change below was made on request; everything else in the plan is still the unreviewed draft.
+
 Drops `Id`, `GarageYrBlt`, `Utilities`, `Alley`, `PoolQC` and `MiscFeature`; fills the missing values of 12 categorical columns with the category "None" (the feature is absent), `Electrical` with the most frequent value, `MasVnrArea` with the median (0) and `LotFrontage` with the median plus an indicator; one-hot encodes every text column; robust-scales every numeric column.
 
 - Most "missing" values here are not lost data: no alley, no pool, no basement, no fence. Treating them as the category "None" is the key call of this plan. Check the 12 columns listed in the first `impute` step. `MasVnrType` is a special case: 864 of its houses have the text "None" (no veneer). The loader used to read that text as missing (872 missing values, 60%); it now keeps it as a category, so only the 8 real gaps are missing (0.5%) and the first `impute` step fills just those.
 - `Alley`, `PoolQC` and `MiscFeature` are dropped because they are 94% to 99.5% empty; `Utilities` because one house differs from the rest. Low-count signals are lost.
-- `MSSubClass` is a building-class code stored as a number and `MoSold`/`YrSold` are calendar values; none can be encoded, so they are scaled as numbers.
+- `MSSubClass` is a building-class code stored as a number, so a `cast_to_category` step turns it into text and a separate one-hot `encode` step follows (a change made on request, the only one to this draft; it is no longer scaled). `MoSold` and `YrSold` are calendar values and are still scaled as numbers; `MoSold` is also a category stored as a number, and nobody has decided yet whether it should be cast too.
 - The sale price is skewed (1.9) and has no log transform; large houses are outliers that nothing clips.
 
 ## employee-salaries
+
+**Review status:** draft, needs human review
 
 Drops `full_name`, `department_name`, `underfilled_job_title`, `date_first_hired` and `2016_gross_pay_received`; imputes `gender` (most frequent) and `2016_overtime_pay` (0); one-hot encodes 3 small columns and, grouped to 50 categories, `division` and `employee_position_title`; robust-scales the 2 numeric columns.
 
@@ -84,7 +101,9 @@ Drops `full_name`, `department_name`, `underfilled_job_title`, `date_first_hired
 
 ## bike-sharing-demand
 
-Drops `feel_temp` (correlation 0.99 with `temp`); one-hot encodes `season` and `weather`; standard-scales `month`, `hour`, `weekday`, `temp`, `humidity` and `windspeed`.
+**Review status:** reviewed by human
 
-- `month`, `hour` and `weekday` are categories (and cyclic) stored as integers. An encode step rejects numeric columns, so they stay ordered numbers, which hurts a linear model. Nothing in the operation set can fix that.
+Drops `feel_temp` (correlation 0.99 with `temp`); casts `hour`, `month` and `weekday` to categories; makes a plain 80/20 split (regression); one-hot encodes `season`, `weather`, `hour`, `month` and `weekday`; standard-scales `temp`, `humidity` and `windspeed`.
+
+- `month`, `hour` and `weekday` are categories stored as integers. An encode step rejects numeric columns, so before the cast step existed they stayed ordered numbers and the linear model scored R² 0.396. Now they are cast to text and one-hot encoded. One-hot ignores that they are cyclic (hour 23 is next to hour 0); that is a known simplification.
 - The 2 duplicate rows are kept: two hours can have identical weather and demand.

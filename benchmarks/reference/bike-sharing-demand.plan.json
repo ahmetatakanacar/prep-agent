@@ -11,6 +11,15 @@
       ]
     },
     {
+      "reason": "hour, month and weekday are categories stored as integers. Mean demand is 6 at hour 4, 359 at hour 8 and 461 at hour 17, and it climbs towards the summer months and falls again, so one number per column, which a linear model can only weight by a straight line, cannot follow either pattern. Casting them to text lets the encode step treat them as categories.",
+      "op": "cast_to_category",
+      "columns": [
+        "hour",
+        "month",
+        "weekday"
+      ]
+    },
+    {
       "reason": "The target is continuous, so there are no classes to stratify on; a seeded random 80/20 split keeps the run reproducible.",
       "op": "split",
       "test_size": 0.2,
@@ -18,21 +27,21 @@
       "random_state": 42
     },
     {
-      "reason": "Text categories with four values and no missing values; one-hot is the family-neutral encoding.",
+      "reason": "One-hot encodes season and weather, which are text, and hour, month and weekday, which are text after the cast. One-hot gives every value its own column and invents no order, which suits any model family; there are no missing values, so no impute step is needed. Hour adds 24 columns, which is small next to the number of rows.",
       "op": "encode",
       "columns": [
         "season",
-        "weather"
+        "weather",
+        "hour",
+        "month",
+        "weekday"
       ],
       "method": "onehot"
     },
     {
-      "reason": "Numeric columns on different scales. month, hour and weekday are categories stored as integers; no step can encode a numeric column, so they stay ordered numbers. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+      "reason": "temp, humidity and windspeed are the numeric measurements left, on different scales (degrees against a share between 0 and 1), and the model family is open and may include linear models. Standard scaling puts them on comparable footing and costs trees nothing. year, holiday and workingday have two values and are left as they are, like the one-hot columns.",
       "op": "scale",
       "columns": [
-        "month",
-        "hour",
-        "weekday",
         "temp",
         "humidity",
         "windspeed"

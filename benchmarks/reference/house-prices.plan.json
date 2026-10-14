@@ -16,6 +16,13 @@
       ]
     },
     {
+      "reason": "MSSubClass is a building-class code stored as a number (20 is a one-story house built 1946 or later, 60 a two-story one), not an amount: class 120 is not six times class 20. Casting it to text lets it be one-hot encoded, so that a linear model does not read the code as a quantity.",
+      "op": "cast_to_category",
+      "columns": [
+        "MSSubClass"
+      ]
+    },
+    {
       "reason": "Regression: no stratification. 20% of 1460 houses is 292 test rows.",
       "op": "split",
       "test_size": 0.2,
@@ -117,12 +124,19 @@
       "method": "onehot"
     },
     {
-      "reason": "Areas and counts are skewed with many outliers, so the robust scaler is used. MSSubClass and the year columns are numeric codes that cannot be encoded by any available step and are scaled as numbers. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+      "reason": "MSSubClass became text in the cast step and has 15 codes and no missing values; one-hot gives each code its own column and invents no order between the codes.",
+      "op": "encode",
+      "columns": [
+        "MSSubClass"
+      ],
+      "method": "onehot"
+    },
+    {
+      "reason": "Areas and counts are skewed with many outliers, so the robust scaler is used. The year columns are calendar values and are scaled as numbers. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
       "op": "scale",
       "columns": [
         "LotFrontage",
         "MasVnrArea",
-        "MSSubClass",
         "LotArea",
         "OverallQual",
         "OverallCond",

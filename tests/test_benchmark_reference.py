@@ -66,6 +66,73 @@ def test_the_readme_marks_every_plan_as_a_draft_and_has_a_section_for_each():
         assert f"## {name}" in text, name
 
 
+def readme_section(name: str) -> str:
+    text = (DEFAULT_REFERENCE_DIR / "README.md").read_text(encoding="utf-8")
+    _, _, rest = text.partition(f"\n## {name}\n")
+    return rest.split("\n## ", 1)[0]
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_every_readme_section_states_the_review_status_of_its_plan(name):
+    [status] = [
+        line for line in readme_section(name).splitlines() if line.startswith("**Review status:**")
+    ]
+    if name == "bike-sharing-demand":
+        assert status == "**Review status:** reviewed by human"
+    else:
+        assert status.startswith("**Review status:** draft, needs human review")
+
+
+def steps_of(name: str, op: str) -> list:
+    return [step for step in load_plan(name).steps if step.op == op]
+
+
+def test_the_bike_sharing_plan_casts_hour_month_and_weekday_and_one_hot_encodes_them():
+    plan = load_plan("bike-sharing-demand")
+
+    assert [step.op for step in plan.steps] == [
+        "drop_columns",
+        "cast_to_category",
+        "split",
+        "encode",
+        "scale",
+    ]
+    drop, cast, _, encode, scale = plan.steps
+    assert drop.columns == ["feel_temp"]
+    assert cast.columns == ["hour", "month", "weekday"]
+    assert (encode.method, encode.columns) == (
+        "onehot",
+        ["season", "weather", "hour", "month", "weekday"],
+    )
+    assert (scale.method, scale.columns) == ("standard", ["temp", "humidity", "windspeed"])
+
+
+def test_the_house_prices_plan_casts_mssubclass_and_does_not_scale_it():
+    [cast] = steps_of("house-prices", "cast_to_category")
+    assert cast.columns == ["MSSubClass"]
+    onehot = [s for s in steps_of("house-prices", "encode") if "MSSubClass" in s.columns]
+    assert [s.method for s in onehot] == ["onehot"]
+    [scale] = steps_of("house-prices", "scale")
+    assert "MSSubClass" not in scale.columns
+
+
+def test_every_cast_comes_before_the_split_and_its_columns_are_encoded_after_it():
+    for name in NAMES:
+        steps = load_plan(name).steps
+        ops = [step.op for step in steps]
+        for index, step in enumerate(steps):
+            if step.op != "cast_to_category":
+                continue
+            assert index < ops.index("split"), name
+            encoded = {
+                column
+                for later in steps[ops.index("split") :]
+                if later.op == "encode"
+                for column in later.columns
+            }
+            assert set(step.columns) <= encoded, name
+
+
 def test_there_is_a_plan_file_for_every_dataset_and_for_nothing_else():
     on_disk = {
         path.name.removesuffix(".plan.json") for path in DEFAULT_REFERENCE_DIR.glob("*.plan.json")
@@ -93,6 +160,12 @@ class TestAgainstTheDownloadedData:
         df, profile = data
         result = execute(df, load_plan(name), profile)
         assert not has_errors(result.result_issues), [i.code for i in result.result_issues]
+
+    def test_the_cast_columns_are_numbers_the_profiler_hints_at(self, name, data):
+        _, profile = data
+        hinted = {c.name for c in profile.columns if "low_cardinality_numeric" in c.warnings}
+        for step in steps_of(name, "cast_to_category"):
+            assert set(step.columns) <= hinted
 
     def test_the_naive_plan_passes_the_validator_without_errors(self, name, data):
         _, profile = data
