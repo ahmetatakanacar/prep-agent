@@ -57,6 +57,15 @@ def test_keeps_the_target_even_when_it_looks_like_an_identifier():
     assert "y" not in drop.columns
 
 
+def test_never_casts_numbers_to_categories_even_when_the_profile_hints_at_it():
+    df = _frame(hour=[i % 24 for i in range(N)], rooms=[1 + i % 5 for i in range(N)])
+    plan, profile = _plan(df)
+
+    assert "low_cardinality_numeric" in _column(profile, "hour").warnings
+    assert {step.op for step in plan.steps}.isdisjoint({"cast_to_category"})
+    assert "hour" not in {c for s in _steps(plan, EncodeStep) for c in s.columns}
+
+
 def test_has_no_drop_step_when_there_is_nothing_to_drop():
     plan, _ = _plan(_frame().drop(columns=["row_id", "const"]))
     assert _steps(plan, DropColumnsStep) == []
