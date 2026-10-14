@@ -1,6 +1,9 @@
 import json
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+
 from prep_agent.baseline import BaselineResult
 from prep_agent.llm.base import TokenUsage
 from prep_agent.llm.fake import FakeLLM
@@ -220,3 +223,77 @@ def test_baseline_results_are_the_same_on_a_second_run(invoke_cli, tmp_path):
     assert (first / "baseline.json").read_text(encoding="utf-8") == (
         second / "baseline.json"
     ).read_text(encoding="utf-8")
+
+
+# --- regression, end to end ---
+
+
+def baseline_section(report: str) -> str:
+    return report.split("## Baseline\n", 1)[1].split("\n## ", 1)[0]
+
+
+def run_regression(invoke_cli, tmp_path, n_rows: int):
+    rng = np.random.default_rng(7)
+    x1 = rng.normal(size=n_rows)
+    x2 = rng.normal(size=n_rows)
+    x2[::10] = np.nan
+    price = 3 * x1 - 2 * np.nan_to_num(x2) + rng.normal(scale=0.5, size=n_rows)
+    csv = tmp_path / "prices.csv"
+    pd.DataFrame({"x1": x1, "x2": x2, "price": price}).to_csv(csv, index=False)
+    steps = [
+        {"op": "split", "stratify": False, "reason": "hold out a test set"},
+        {"op": "impute", "columns": ["x2"], "strategy": "median", "reason": "x2 has gaps"},
+        {"op": "scale", "columns": ["x1", "x2"], "method": "standard", "reason": "linear model"},
+    ]
+    plan = tmp_path / "prices_plan.json"
+    plan.write_text(
+        json.dumps(
+            {
+                "target": "price",
+                "task_type": "regression",
+                "model_family": "linear",
+                "steps": steps,
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = invoke_cli(run_args(tmp_path, csv=str(csv), plan=str(plan)))
+    assert result.exit_code == 0, result.output
+    return result, only_run(tmp_path)
+
+
+def test_a_small_regression_run_reports_directions_dummy_and_small_data(invoke_cli, tmp_path):
+    result, run_dir = run_regression(invoke_cli, tmp_path, n_rows=60)
+
+    text = baseline_section((run_dir / "report.md").read_text(encoding="utf-8"))
+    assert "| Model | r2 ↑ | rmse ↓ | mae ↓ |" in text
+    for name in ("dummy_mean", "ridge", "random_forest"):
+        assert f"| {name} |" in text
+    assert "always predicts the training mean" in text
+    assert "most frequent class" not in text
+    assert "Higher is better" not in text
+    assert "> **Small data:** only 48 training rows" in text
+    for header in ("r2 ↑", "rmse ↓", "mae ↓"):
+        assert header in result.output
+    baseline = json.loads((run_dir / "baseline.json").read_text(encoding="utf-8"))
+    assert baseline["task_type"] == "regression"
+    assert baseline["n_rows"] == 48
+
+
+def test_the_ridge_beats_the_dummy_in_the_regression_report(invoke_cli, tmp_path):
+    _, run_dir = run_regression(invoke_cli, tmp_path, n_rows=60)
+
+    baseline = BaselineResult.model_validate_json(
+        (run_dir / "baseline.json").read_text(encoding="utf-8")
+    )
+    scores = {model.name: model.scores for model in baseline.models}
+    assert scores["ridge"]["r2"].mean > 0.8
+    assert scores["ridge"]["rmse"].mean < scores["dummy_mean"]["rmse"].mean
+
+
+def test_a_regression_run_with_enough_rows_has_no_small_data_note(invoke_cli, tmp_path):
+    _, run_dir = run_regression(invoke_cli, tmp_path, n_rows=150)
+
+    text = baseline_section((run_dir / "report.md").read_text(encoding="utf-8"))
+    assert "Small data" not in text
+    assert "| Model | r2 ↑ | rmse ↓ | mae ↓ |" in text
