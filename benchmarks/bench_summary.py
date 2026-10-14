@@ -294,7 +294,9 @@ def _notes() -> str:
             "The spread between folds is in results.json; a difference smaller than that "
             "spread is not evidence that one plan is better.",
             "- Plans differ in the rows they keep and the columns they produce, so a score "
-            "compares what a plan hands to the same models, not the models themselves.",
+            "compares what a plan hands to the same models, not the models themselves. The "
+            "logistic regression may stop before it converges on unscaled features; that "
+            "lowers the score of a plan without scaling and is not reported separately.",
             "- The reference plans are hand-written drafts; see reference/README.md for the "
             "state of their review.",
             "- The naive plan is rule-based: drop identifier and constant columns, split, "

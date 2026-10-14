@@ -14,6 +14,7 @@ anything unexpected as `error`, both with the reason; the run goes on with the n
 
 import os
 import time
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -21,6 +22,7 @@ from pathlib import Path
 
 import pandas as pd
 from pydantic import ValidationError
+from sklearn.exceptions import ConvergenceWarning
 
 from bench_cost import (
     MAX_QUESTION_ROUNDS,
@@ -361,9 +363,14 @@ def _scored(
 
 
 def _evaluate(plan: Plan, execution: ExecutionResult) -> BaselineResult:
-    return evaluate_baselines(
-        execution.split_train, execution.pipeline, plan.target, plan.task_type
-    )
+    # A plan that does not scale makes the baseline's logistic regression stop before it
+    # converges. That is a fair part of what the score measures, and the warning would only
+    # bury the progress lines.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", ConvergenceWarning)
+        return evaluate_baselines(
+            execution.split_train, execution.pipeline, plan.target, plan.task_type
+        )
 
 
 def _load_reference(spec: DatasetSpec, reference_dir: Path) -> Plan:

@@ -1,8 +1,10 @@
 import json
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from sklearn.exceptions import ConvergenceWarning
 
 from bench_cost import ModelPrice
 from bench_datasets import DatasetSpec
@@ -361,6 +363,17 @@ class TestFailuresStayLocal:
         results = ws.run(good_llm())
         assert [j.status for j in results.jobs] == ["error"] * 6
         assert all("too big" in j.error for j in results.jobs)
+
+
+class TestConvergenceWarnings:
+    def test_a_baseline_that_does_not_converge_is_scored_without_noise(self, ws, monkeypatch):
+        def noisy(train, pipeline, target, task_type, **kwargs):
+            warnings.warn("did not converge", ConvergenceWarning, stacklevel=2)
+            return stub_baseline(train, pipeline, target, task_type)
+
+        monkeypatch.setattr("bench_runner.evaluate_baselines", noisy)
+        results = ws.run(models=())
+        assert [j.status for j in results.jobs] == ["ok"] * 4
 
 
 class TestPlanRun:
