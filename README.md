@@ -2,7 +2,7 @@
 
 Prepares a CSV dataset for machine learning from a natural-language goal: it profiles the data, has an LLM propose a structured preparation plan, validates the plan, and executes it.
 
-**Status:** under development. The `profile`, `run`, `prepare` and `llm-check` commands work. `prepare` has the LLM plan the preparation; `run` takes a hand-written plan. Both write a `report.md` and baseline scores into the run folder. The standalone `pipeline.py` is not implemented yet.
+**Status:** under development. The `profile`, `run`, `prepare` and `llm-check` commands work. `prepare` has the LLM plan the preparation; `run` takes a hand-written plan. Both write a `report.md`, baseline scores and, for a successful run, a standalone `pipeline.py` into the run folder.
 
 ## Planned features
 
@@ -37,9 +37,17 @@ Run a hand-written plan on a CSV file. The plan's `target` is the target column.
 uv run prep-agent run tests/fixtures/customers.csv --plan tests/fixtures/customers_plan.json --out-dir runs
 ```
 
-This writes `runs/<run_id>/` with `profile.json`, `plan.json`, `train.csv`, `test.csv`, `pipeline.joblib`, `issues.json`, `report.md`, `baseline.json` and `run.json`. The exit code is 1 if the plan has errors or the result fails validation (in the second case the files are still written, with status `failed` in `run.json`); warnings do not fail a run. Pass `--dry-run` to only validate the plan and `--no-baseline` to skip the baseline scores.
+This writes `runs/<run_id>/` with `profile.json`, `plan.json`, `train.csv`, `test.csv`, `pipeline.joblib`, `pipeline.py`, `issues.json`, `report.md`, `baseline.json` and `run.json`. The exit code is 1 if the plan has errors or the result fails validation (in the second case the files are still written, with status `failed` in `run.json`); warnings do not fail a run. Pass `--dry-run` to only validate the plan and `--no-baseline` to skip the baseline scores.
 
-`pipeline.joblib` contains only the fitted impute, encode and scale steps. It does not include the stateless steps or the split, so it cannot be applied to a raw file. A standalone `pipeline.py` is not generated yet.
+`pipeline.joblib` contains only the fitted impute, encode and scale steps. It does not include the stateless steps or the split, so it cannot be applied to a raw file.
+
+`pipeline.py` is the complete version. It needs only pandas and scikit-learn (prep-agent does not have to be installed) and repeats every step on a raw CSV file:
+
+```powershell
+python runs/<run_id>/pipeline.py tests/fixtures/customers.csv --out-dir out
+```
+
+It writes `train.csv` and `test.csv` to `--out-dir` (the current directory if left out), identical to the files in the run folder when run on the same input with the same pandas and scikit-learn versions. The functions `apply_stateless_steps`, `split_train_test`, `build_pipeline` and `prepare` can also be imported and called one by one. The header of the script records the prep-agent version, the run id, the sha256 of the input, the target, the task type, the model family and the library versions it was generated with, and the reason of every step stands above its code as a comment. Each op writes its own code (`codegen` in its registry entry), and column names and parameters are written as literals, never as code. The script is only written for runs with status `ok`.
 
 Let the LLM write the plan. `prepare` needs an LLM provider (see below). It profiles the data, asks the model for a plan, asks you when a decision is open, validates the plan, sends it back to the model if it has errors, then runs it and saves the same run folder as `run`:
 
@@ -51,7 +59,7 @@ The model only sees the profile, never the raw data. Questions are asked in the 
 
 ## Report and baseline
 
-Every run folder gets a `report.md`, including failed runs. It is built from the run's own data, not written by an LLM: goal, input file and short sha256, date, model and token use, row and column counts before and after (with the dropped columns), the questions and answers, the plan with each step's parameters and reason, the validator issues (or an explicit "no issues"), the baseline scores, and notes on the leakage guarantees. A failed run's report names the reason and has no baseline section.
+Every run folder gets a `report.md`, including failed runs. It is built from the run's own data, not written by an LLM: goal, input file and short sha256, date, model and token use, row and column counts before and after (with the dropped columns), the questions and answers, the plan with each step's parameters and reason, the validator issues (or an explicit "no issues"), the baseline scores, notes on the leakage guarantees, and how to reproduce the run with `pipeline.py`. A failed run's report names the reason and has no baseline or reproduce section.
 
 The agent does not choose a model. On a successful run it only computes reference scores with 5-fold cross-validation (stratified for classification, fewer folds if the smallest class is smaller) and writes them to `baseline.json` and the report:
 
