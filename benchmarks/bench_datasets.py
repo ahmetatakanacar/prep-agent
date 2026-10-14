@@ -26,6 +26,7 @@ from pydantic import (
 BENCHMARKS_DIR = Path(__file__).resolve().parent
 DEFAULT_REGISTRY = BENCHMARKS_DIR / "datasets.yaml"
 DEFAULT_DATASETS_DIR = BENCHMARKS_DIR / "datasets"
+DEFAULT_MANIFEST = BENCHMARKS_DIR / "manifest.json"
 DEFAULT_REFERENCE_DIR = BENCHMARKS_DIR / "reference"
 
 # The name becomes a file name, so it is restricted to what is safe on every platform.

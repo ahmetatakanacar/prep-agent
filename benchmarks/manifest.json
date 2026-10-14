@@ -1,0 +1,94 @@
+{
+  "datasets": {
+    "titanic": {
+      "file": "titanic.csv",
+      "sha256": "b83ab0b5169ceb660a97f1157bde0951fa7bedfe492ae6686ce8e80a3ff94877",
+      "n_rows": 1309,
+      "n_columns": 14,
+      "openml_id": 40945,
+      "openml_name": "Titanic",
+      "openml_version": 1,
+      "license": "Public"
+    },
+    "credit-g": {
+      "file": "credit-g.csv",
+      "sha256": "38b6dbf6fb4b0311a3ffc005730f42623128591fb36473ab3c22d270c0467632",
+      "n_rows": 1000,
+      "n_columns": 21,
+      "openml_id": 31,
+      "openml_name": "credit-g",
+      "openml_version": 1,
+      "license": "Public"
+    },
+    "diabetes": {
+      "file": "diabetes.csv",
+      "sha256": "3da6d7849e3faeaec68309a79b4f4a12c776a752d286f7f20ae644252ce6d029",
+      "n_rows": 768,
+      "n_columns": 9,
+      "openml_id": 37,
+      "openml_name": "diabetes",
+      "openml_version": 1,
+      "license": "Public"
+    },
+    "telco-customer-churn": {
+      "file": "telco-customer-churn.csv",
+      "sha256": "b79281acebf7351c501cfa05ba3e13780d5b7eb7e37219290b63989bca1c74aa",
+      "n_rows": 7043,
+      "n_columns": 20,
+      "openml_id": 42178,
+      "openml_name": "telco-customer-churn",
+      "openml_version": 1,
+      "license": "Public"
+    },
+    "adult": {
+      "file": "adult.csv",
+      "sha256": "8f970e20c9991979ec0a9ccb65ce97543d678709a2c6f8ef23f7fb32f40adddc",
+      "n_rows": 48842,
+      "n_columns": 15,
+      "openml_id": 1590,
+      "openml_name": "adult",
+      "openml_version": 2,
+      "license": "Public"
+    },
+    "bank-marketing": {
+      "file": "bank-marketing.csv",
+      "sha256": "26e8223397d72a0273e1eff26c2a0e995fc5ea97fca4629fe0e0de0809d4fba7",
+      "n_rows": 45211,
+      "n_columns": 14,
+      "openml_id": 46910,
+      "openml_name": "bank-marketing",
+      "openml_version": 10,
+      "license": "CC BY 4.0"
+    },
+    "house-prices": {
+      "file": "house-prices.csv",
+      "sha256": "b214efc1b289b5675b9f84316549c2a3f44cfaaa1f51ea2f4d0bcdd34fe33882",
+      "n_rows": 1460,
+      "n_columns": 81,
+      "openml_id": 42165,
+      "openml_name": "house_prices",
+      "openml_version": 1,
+      "license": "NA"
+    },
+    "employee-salaries": {
+      "file": "employee-salaries.csv",
+      "sha256": "1e2986c92d16101ca98e367e5252f8d131a61f7da02b4252c63f04c02d7f2f12",
+      "n_rows": 9228,
+      "n_columns": 13,
+      "openml_id": 42125,
+      "openml_name": "employee_salaries",
+      "openml_version": 14,
+      "license": "Public Domain (CC0)"
+    },
+    "bike-sharing-demand": {
+      "file": "bike-sharing-demand.csv",
+      "sha256": "5a9bab53fc480dabe09dfc4e7e95c449f9b00dd5561c78eb4eb5e0845ade43eb",
+      "n_rows": 17379,
+      "n_columns": 13,
+      "openml_id": 42712,
+      "openml_name": "Bike_Sharing_Demand",
+      "openml_version": 2,
+      "license": "Public"
+    }
+  }
+}

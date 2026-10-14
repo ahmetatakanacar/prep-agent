@@ -122,7 +122,7 @@ uv run python benchmarks/run_benchmark.py --models gpt-6-luna --dry-run
 uv run python benchmarks/run_benchmark.py --models gpt-6-luna --repeats 3 --out-dir benchmarks/results/first
 ```
 
-`download.py` writes `benchmarks/datasets/<name>.csv` and a `manifest.json` with the sha256 of every file (the folder is git-ignored). Files that exist are not downloaded again but are checked against the registry; a dataset whose OpenML id, name, version or shape differs from the registry is refused.
+`download.py` writes `benchmarks/datasets/<name>.csv` (the folder is git-ignored). `benchmarks/manifest.json` is committed and holds the sha256 of every file; the downloader compares each file with it and warns when a hash differs, so a change of the data (or of how pandas writes it) does not go unnoticed. The manifest is left as it is until you pass `--update-manifest`. Files that exist are not downloaded again but are checked against the registry; a dataset whose OpenML id, name, version or shape differs from the registry is refused.
 
 `run_benchmark.py` runs the agent non-interactively (questions are answered with the recommended option) with the dataset's target and the model family `any`, once per dataset, model and repeat, plus the reference and naive plans once per dataset. Without `--models` it runs only the reference and naive plans, which calls no model. `--datasets a,b` runs a subset, `--out-dir` sets where `results.json` and `summary.md` go (default `benchmarks/results/<timestamp>`).
 
