@@ -275,7 +275,7 @@ def test_high_skew_warning():
 
 
 def test_symmetric_numeric_has_no_warnings():
-    col = profile_column([float(i) for i in range(N)])
+    col = profile_column([i + 0.5 for i in range(N)])
 
     assert col.warnings == []
 
@@ -293,6 +293,103 @@ def test_infinite_values_are_flagged_and_excluded_from_statistics():
     assert "infinite_values" in col.warnings
     assert col.max == 3.0
     assert col.min == 1.0
+
+
+# --- low_cardinality_numeric -----------------------------------------------------------------
+
+
+def test_few_distinct_whole_numbers_get_the_low_cardinality_warning():
+    hours = [i % 24 for i in range(96)]
+
+    col = profile_column(hours)
+
+    assert col.inferred_type == "numeric"
+    assert "low_cardinality_numeric" in col.warnings
+
+
+def test_whole_numbers_stored_as_floats_because_of_missing_values_get_it_too():
+    col = profile_column([1.0, 2.0, None, 3.0, 4.0, 2.0, None, 1.0] * 3)
+
+    assert col.pandas_dtype == "float64"
+    assert "low_cardinality_numeric" in col.warnings
+
+
+def test_a_real_count_gets_the_warning_too_because_it_is_only_a_hint():
+    col = profile_column([i % 6 for i in range(60)], name="n_children")
+
+    assert "low_cardinality_numeric" in col.warnings
+
+
+def test_the_default_threshold_is_25_distinct_values_and_the_limit_itself_still_warns():
+    assert DEFAULT_CONFIG.low_cardinality_unique == 25
+
+    at_limit = profile_column([i % 25 for i in range(100)])
+    above_limit = profile_column([i % 26 for i in range(104)])
+
+    assert at_limit.n_unique == 25
+    assert "low_cardinality_numeric" in at_limit.warnings
+    assert above_limit.n_unique == 26
+    assert "low_cardinality_numeric" not in above_limit.warnings
+
+
+def test_the_threshold_comes_from_the_config():
+    df = pd.DataFrame({"col": [i % 10 for i in range(100)]})
+
+    strict = profile_dataframe(df, config=ProfilerConfig(low_cardinality_unique=9))
+    lenient = profile_dataframe(df, config=ProfilerConfig(low_cardinality_unique=10))
+
+    assert "low_cardinality_numeric" not in strict.columns[0].warnings
+    assert "low_cardinality_numeric" in lenient.columns[0].warnings
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        [0.5 * (i % 10) for i in range(100)],
+        [float(i % 10) + 0.25 * (i % 2) for i in range(100)],
+        [float(i % 10) for i in range(99)] + [np.inf],
+    ],
+    ids=["fractions", "some_fractions", "infinite"],
+)
+def test_values_that_are_not_all_whole_numbers_get_no_low_cardinality_warning(values):
+    col = profile_column(values)
+
+    assert col.inferred_type == "numeric"
+    assert "low_cardinality_numeric" not in col.warnings
+
+
+def test_binary_constant_and_id_like_columns_get_no_low_cardinality_warning():
+    binary = profile_column([i % 2 for i in range(40)])
+    constant = profile_column([7] * 40)
+    id_like = profile_column(list(range(1, 21)))
+
+    assert (binary.inferred_type, constant.inferred_type, id_like.inferred_type) == (
+        "binary",
+        "constant",
+        "id_like",
+    )
+    for col in (binary, constant, id_like):
+        assert "low_cardinality_numeric" not in col.warnings
+
+
+def test_two_valued_numbers_that_are_not_01_get_the_warning():
+    col = profile_column([1, 5] * 20)
+
+    assert col.inferred_type == "numeric"
+    assert "low_cardinality_numeric" in col.warnings
+
+
+def test_text_columns_of_digits_get_no_low_cardinality_warning():
+    col = profile_column([str(i % 7) + "x" for i in range(70)])
+
+    assert col.inferred_type == "categorical"
+    assert "low_cardinality_numeric" not in col.warnings
+
+
+def test_many_distinct_whole_numbers_get_no_low_cardinality_warning():
+    col = profile_column([i * 3 % 997 for i in range(300)])
+
+    assert "low_cardinality_numeric" not in col.warnings
 
 
 # --- samples ---------------------------------------------------------------------------------

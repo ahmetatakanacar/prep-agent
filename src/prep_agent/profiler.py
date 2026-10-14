@@ -28,6 +28,12 @@ threshold lives in `ProfilerConfig`.
      `text_min_unique_ratio` of the values are distinct (long, mostly unique strings).
    - `categorical` otherwise.
 
+Warning `low_cardinality_numeric`: a `numeric` column (so not binary, not id_like and not
+constant) whose finite values are all whole numbers and which has at most
+`ProfilerConfig.low_cardinality_unique` distinct values. It is only a hint: the numbers may be
+categories stored as numbers (hour, month, a type code) or a real count (rooms, children), and
+the profile cannot tell which.
+
 Privacy: a column is flagged `possible_pii` if most of its string values look like email
 addresses or phone numbers, or if a part of its name (split on `_`, spaces and camelCase) is in
 `ProfilerConfig.pii_name_parts` and more than `pii_name_min_unique_ratio` of its values are
@@ -94,6 +100,7 @@ class ProfilerConfig:
     # Warnings
     high_missing_ratio: float = 0.4
     high_cardinality_unique: int = 50
+    low_cardinality_unique: int = 25
     high_skew_abs: float = 2.0
     many_outliers_ratio: float = 0.05
 
@@ -266,6 +273,8 @@ def _profile_column(
             warnings.append("many_outliers")
         if n_inf:
             warnings.append("infinite_values")
+        if n_unique <= config.low_cardinality_unique and _all_whole_numbers(non_null):
+            warnings.append("low_cardinality_numeric")
     elif inferred in ("categorical", "binary"):
         fields["top_values"] = [] if hide_values else _top_values(non_null, config)
     elif inferred == "text":
@@ -412,6 +421,11 @@ def _numeric_stats(non_null: pd.Series, config: ProfilerConfig) -> tuple[dict, i
         "n_outliers_iqr": int(np.count_nonzero((finite < low) | (finite > high))),
     }
     return stats, n_inf
+
+
+def _all_whole_numbers(non_null: pd.Series) -> bool:
+    values = non_null.to_numpy(dtype="float64")
+    return bool(np.isfinite(values).all() and (values == np.floor(values)).all())
 
 
 def _top_values(non_null: pd.Series, config: ProfilerConfig) -> list[TopValue]:
