@@ -206,9 +206,10 @@ def run_benchmark(
 
 def _load_frame(spec: DatasetSpec, datasets_dir: Path) -> pd.DataFrame | Exception:
     """The dataset's frame, or the error that made it unavailable (raised per job)."""
+    # Raised again for every job of the dataset, where it is recorded.
     try:
         return load_csv(csv_path(spec, datasets_dir))
-    except ProfilerError as exc:
+    except Exception as exc:
         return exc
 
 

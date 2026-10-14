@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from sklearn.exceptions import ConvergenceWarning
 
+import bench_runner
 from bench_cost import ModelPrice
 from bench_datasets import DatasetSpec
 from bench_naive import naive_plan
@@ -329,6 +330,23 @@ class TestFailuresStayLocal:
         failed = [j for j in results.jobs if j.dataset == "cls"]
         assert [j.status for j in failed] == ["error"] * 3
         assert all("not found" in j.error for j in failed)
+        assert [j.status for j in results.jobs if j.dataset == "reg"] == ["ok"] * 3
+
+    def test_an_unexpected_error_while_loading_a_dataset_fails_only_that_dataset(
+        self, ws, monkeypatch
+    ):
+        real = bench_runner.load_csv
+
+        def flaky(path):
+            if Path(path).name == "cls.csv":
+                raise RuntimeError("disk on fire")
+            return real(path)
+
+        monkeypatch.setattr("bench_runner.load_csv", flaky)
+        results = ws.run(FakeLLM([answer(regression_plan())]))
+        broken = [j for j in results.jobs if j.dataset == "cls"]
+        assert [j.status for j in broken] == ["error"] * 3
+        assert all("disk on fire" in j.error for j in broken)
         assert [j.status for j in results.jobs if j.dataset == "reg"] == ["ok"] * 3
 
     def test_a_missing_reference_plan_fails_only_the_reference_job(self, ws):
