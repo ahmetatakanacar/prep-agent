@@ -4,6 +4,8 @@ The validator walks the steps in order and simulates, for every column, whether 
 its type and whether it still contains missing values:
 
 - `drop_columns` removes the columns.
+- `cast_to_category` makes the column categorical: encode is then allowed, mean and median
+  impute and scale are errors, and the missing values stay.
 - `impute` clears the missing values.
 - `encode` with `ordinal` keeps the column under the same name and makes it numeric.
 - `encode` with `onehot` consumes the column: the names of the output columns are only known
@@ -59,6 +61,7 @@ IssueCode = Literal[
     "ordinal_with_missing",
     "stratify_regression",
     # warnings
+    "cast_non_numeric",
     "onehot_before_impute",
     "ordinal_for_linear",
     "scale_for_tree",
@@ -99,6 +102,7 @@ SEVERITY: dict[IssueCode, Severity] = {
     "encode_numeric": "error",
     "ordinal_with_missing": "error",
     "stratify_regression": "error",
+    "cast_non_numeric": "warning",
     "onehot_before_impute": "warning",
     "ordinal_for_linear": "warning",
     "scale_for_tree": "warning",
@@ -123,6 +127,7 @@ NUMERIC_ONLY_IMPUTE_STRATEGIES = frozenset({"mean", "median"})
 UNENCODED_TYPES = frozenset({"categorical", "text", "datetime"})
 UNINFORMATIVE_TYPES = frozenset({"id_like", "constant"})
 UNINFORMATIVE_WARNINGS = frozenset({"possible_id", "constant"})
+LOW_CARDINALITY_WARNING = "low_cardinality_numeric"
 
 
 class ValidationIssue(BaseModel):
@@ -166,6 +171,8 @@ class _Column:
     inferred_type: InferredType
     numeric: bool
     has_missing: bool
+    # The profile saw few distinct whole numbers: a hint that the numbers may be categories.
+    few_distinct_numbers: bool = False
 
 
 def _starts_numeric(column: ColumnProfile) -> bool:
@@ -190,7 +197,12 @@ class _Validation:
         self.expected_model_family = expected_model_family
         self.issues: list[ValidationIssue] = []
         self.columns = {
-            c.name: _Column(c.inferred_type, _starts_numeric(c), c.n_missing > 0)
+            c.name: _Column(
+                c.inferred_type,
+                _starts_numeric(c),
+                c.n_missing > 0,
+                LOW_CARDINALITY_WARNING in c.warnings,
+            )
             for c in profile.columns
         }
         self.gone: dict[str, str] = {}
@@ -306,7 +318,7 @@ class _Validation:
                 del self.columns[name]
                 self.gone[name] = f"dropped by drop_columns at step {index}"
         elif isinstance(step, CastToCategoryStep):
-            self._resolve(index, step.columns)
+            self._cast(index, step)
         elif isinstance(step, DropMissingTargetStep):
             if self.plan.target in self.columns:
                 self.columns[self.plan.target].has_missing = False
@@ -380,6 +392,22 @@ class _Validation:
                 step_index=index,
             )
 
+    def _cast(self, index: int, step: CastToCategoryStep) -> None:
+        for name in self._resolve(index, step.columns):
+            self._note_repeat(index, step, name)
+            column = self.columns[name]
+            if not column.numeric:
+                self._add(
+                    "cast_non_numeric",
+                    f"column {name!r} is already {column.inferred_type}, not a number, so "
+                    "casting it to category changes nothing useful; remove it from 'columns'.",
+                    step_index=index,
+                    column=name,
+                )
+            column.inferred_type = "categorical"
+            column.numeric = False
+            column.few_distinct_numbers = False
+
     def _impute(self, index: int, step: ImputeStep) -> None:
         for name in self._resolve(index, step.columns):
             self._note_repeat(index, step, name)
@@ -443,7 +471,7 @@ class _Validation:
                 self._add(
                     "encode_numeric",
                     f"column {name!r} is already numeric ({column.inferred_type}) and cannot be "
-                    "encoded; remove it from 'columns'.",
+                    f"encoded; {self._encode_numeric_advice(column)}",
                     step_index=index,
                     column=name,
                 )
@@ -469,6 +497,16 @@ class _Validation:
                     )
                 del self.columns[name]
                 self.gone[name] = f"one-hot encoded at step {index}"
+
+    @staticmethod
+    def _encode_numeric_advice(column: _Column) -> str:
+        if column.few_distinct_numbers:
+            return (
+                "it has few distinct values, so if they are categories (an hour, a month, a "
+                "code), add a cast_to_category step for it before the split and keep it here; "
+                "if they are real quantities, remove it from 'columns'."
+            )
+        return "remove it from 'columns'."
 
     def _scale(self, index: int, step: ScaleStep) -> None:
         if self.plan.model_family == "tree":

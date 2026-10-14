@@ -559,6 +559,34 @@ def test_encoding_a_numeric_column_is_an_error(method, column):
     assert issue.column == column
 
 
+def test_encode_numeric_message_suggests_cast_to_category_for_a_few_distinct_values():
+    profile = with_warning(PROFILE, "age", "low_cardinality_numeric")
+
+    issues = validate(split(), encode(["age"]), profile=profile)
+
+    [issue] = find(issues, "encode_numeric")
+    assert "cast_to_category" in issue.message
+    assert "before the split" in issue.message
+
+
+@pytest.mark.parametrize("column", ["age", "flag"])
+def test_encode_numeric_message_does_not_suggest_a_cast_without_the_hint(column):
+    issues = validate(split(), encode([column]))
+
+    [issue] = find(issues, "encode_numeric")
+    assert "cast_to_category" not in issue.message
+
+
+def test_encode_numeric_message_does_not_suggest_a_cast_for_a_column_that_was_cast():
+    profile = with_warning(PROFILE, "age", "low_cardinality_numeric")
+    plan = make_plan(cast("age"), split(), encode(["age"], "ordinal"), encode(["age"], "ordinal"))
+
+    issues = validate_plan(plan, profile)
+
+    [issue] = find(issues, "encode_numeric")
+    assert "cast_to_category" not in issue.message
+
+
 @pytest.mark.parametrize("column", ["city", "gender", "signup"])
 def test_encoding_a_non_numeric_column_is_fine(column):
     assert find(validate(split(), encode([column])), "encode_numeric") == []
@@ -593,6 +621,108 @@ def test_onehot_of_a_column_with_missing_values_is_not_an_error():
     issues = validate(split(), encode(["job"], "onehot"))
 
     assert [i for i in issues if i.column == "job" and i.severity == "error"] == []
+
+
+# --- cast_to_category ------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("method", ["onehot", "ordinal"])
+@pytest.mark.parametrize("column", ["age", "flag"])
+def test_a_cast_numeric_column_can_be_encoded(method, column):
+    issues = validate(cast(column), split(), encode([column], method))
+
+    assert [i for i in issues if i.column == column] == []
+
+
+@pytest.mark.parametrize("column", ["age", "income", "flag"])
+def test_a_cast_column_can_no_longer_be_scaled(column):
+    issues = validate(cast(column), split(), scale([column]))
+
+    [issue] = find(issues, "scale_non_numeric")
+    assert issue.severity == "error"
+    assert issue.column == column
+    assert issue.step_index == 2
+    assert "categorical" in issue.message
+
+
+@pytest.mark.parametrize("strategy", ["mean", "median"])
+def test_a_cast_column_cannot_be_imputed_with_mean_or_median(strategy):
+    issues = validate(cast("income"), split(), impute(["income"], strategy))
+
+    [issue] = find(issues, "impute_non_numeric")
+    assert issue.severity == "error"
+    assert issue.column == "income"
+    assert "categorical" in issue.message
+
+
+def test_a_cast_column_can_be_imputed_with_the_most_frequent_value():
+    issues = validate(
+        cast("income"), split(), impute(["income"], "most_frequent"), encode(["income"])
+    )
+
+    assert [i for i in issues if i.column == "income"] == []
+
+
+def test_a_cast_column_keeps_its_missing_values_until_they_are_imputed():
+    issues = validate(cast("income"), split(), encode(["income"]))
+
+    [issue] = find(issues, "onehot_before_impute")
+    assert issue.column == "income"
+
+
+def test_a_cast_column_with_missing_values_cannot_be_ordinal_encoded_before_imputing():
+    issues = validate(cast("income"), split(), encode(["income"], "ordinal"))
+
+    [issue] = find(issues, "ordinal_with_missing")
+    assert issue.column == "income"
+
+
+def test_a_cast_column_that_is_never_encoded_is_reported_at_the_end():
+    issues = validate(cast("age"), split())
+
+    [issue] = [i for i in find(issues, "unencoded_column_remains") if i.column == "age"]
+    assert "categorical" in issue.message
+
+
+@pytest.mark.parametrize("column", ["age", "income", "flag", "price"])
+def test_casting_a_numeric_column_is_fine(column):
+    issues = validate(cast(column), split())
+
+    assert find(issues, "cast_non_numeric") == []
+
+
+@pytest.mark.parametrize("column", ["city", "gender", "signup", "notes", "customer_id"])
+def test_casting_a_column_that_is_not_numeric_is_a_warning(column):
+    issues = validate(cast(column), split())
+
+    [issue] = find(issues, "cast_non_numeric")
+    assert issue.severity == "warning"
+    assert issue.column == column
+    assert issue.step_index == 0
+    assert "already" in issue.message
+
+
+def test_casting_the_same_column_twice_warns_about_the_repeat_and_the_second_cast():
+    issues = validate(cast("age"), cast("age"), split())
+
+    assert [i.step_index for i in find(issues, "repeated_op")] == [1]
+    assert [i.step_index for i in find(issues, "cast_non_numeric")] == [1]
+
+
+def test_a_plan_that_casts_before_the_split_and_encodes_after_it_has_no_issues():
+    issues = validate(
+        dedupe(),
+        drop("customer_id", "country", "signup", "notes", "price", "segment"),
+        drop_missing_target(),
+        cast("age"),
+        split(),
+        impute(["income"], "median"),
+        impute(["job"], "most_frequent"),
+        encode(["city", "job", "gender", "age"], "onehot"),
+        scale(["income"], "standard"),
+    )
+
+    assert issues == []
 
 
 def test_stratified_split_for_regression_is_an_error():
