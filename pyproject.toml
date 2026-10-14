@@ -32,6 +32,7 @@ dev = [
     "openai>=3.29.0",
     "pytest",
     "python-dotenv>=1.2.4",
+    "pyyaml>=6.0.3",
     "ruff",
 ]
 
@@ -47,13 +48,15 @@ packages = ["src/prep_agent"]
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "tests", "benchmarks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The benchmark scripts import each other as siblings, so tests see them the same way.
+pythonpath = ["benchmarks"]
 filterwarnings = ["error"]
 markers = [
     "llm: calls the real LLM API; skipped unless PREP_AGENT_RUN_LLM_TESTS=1 and an API key is set",

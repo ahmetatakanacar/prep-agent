@@ -1,0 +1,111 @@
+# Datasets of the benchmark, all from OpenML. `license` is the value OpenML reports for the
+# dataset ("Public" and "NA" are OpenML's own labels, not license texts). `n_rows` and
+# `n_columns` (the target included) were checked by downloading each dataset.
+datasets:
+  - name: titanic
+    openml_id: 40945
+    openml_name: Titanic
+    openml_version: 1
+    target: survived
+    task_type: classification
+    goal: I want to predict which passengers survived the Titanic disaster.
+    license: Public
+    challenge: Passenger names (personal data), a lifeboat column that gives survival away, sparse high-cardinality text columns and 20% missing ages on a small table.
+    n_rows: 1309
+    n_columns: 14
+
+  - name: credit-g
+    openml_id: 31
+    openml_name: credit-g
+    openml_version: 1
+    target: class
+    task_type: classification
+    goal: Prepare this credit data so I can predict whether an applicant is a good or a bad credit risk.
+    license: Public
+    challenge: A small, clean table of mostly categorical columns with no missing values, where the right move is to change little.
+    n_rows: 1000
+    n_columns: 21
+
+  - name: diabetes
+    openml_id: 37
+    openml_name: diabetes
+    openml_version: 1
+    target: class
+    task_type: classification
+    goal: I want to predict whether a patient tests positive for diabetes from these medical measurements.
+    license: Public
+    challenge: A tiny all-numeric table where zeros in insulin, skin thickness and blood pressure stand for missing measurements that no op can turn back into missing.
+    n_rows: 768
+    n_columns: 9
+
+  - name: telco-customer-churn
+    openml_id: 42178
+    openml_name: telco-customer-churn
+    openml_version: 1
+    target: Churn
+    task_type: classification
+    goal: I want to predict which telecom customers will churn so we can target retention offers.
+    license: Public
+    challenge: A 26% churn rate, a numeric column (TotalCharges) stored as text that no available op can convert, and a column wrongly flagged as personal data.
+    n_rows: 7043
+    n_columns: 20
+
+  - name: adult
+    openml_id: 1590
+    openml_name: adult
+    openml_version: 2
+    target: class
+    task_type: classification
+    goal: Prepare the census data to predict whether a person earns more than 50K a year.
+    license: Public
+    challenge: A large table with missing values in three categorical columns, a sampling-weight column, a 24% positive class and a categorical column that duplicates a numeric one.
+    n_rows: 48842
+    n_columns: 15
+
+  - name: bank-marketing
+    openml_id: 46910
+    openml_name: bank-marketing
+    openml_version: 10
+    target: SubscribeTermDeposit
+    task_type: classification
+    goal: I want to predict which bank clients will subscribe to a term deposit after a marketing call.
+    license: CC BY 4.0
+    challenge: A large table with an 11.7% positive class and sentinel values ("unknown" categories, and pdays = -1 for clients never contacted before).
+    n_rows: 45211
+    n_columns: 14
+
+  - name: house-prices
+    openml_id: 42165
+    openml_name: house_prices
+    openml_version: 1
+    target: SalePrice
+    task_type: regression
+    goal: Prepare the Ames housing data to predict the sale price of a house.
+    license: NA
+    challenge: 81 columns with an Id column, many missing values that mean the feature is absent (no pool, no alley) and categories stored as numbers (MSSubClass).
+    n_rows: 1460
+    n_columns: 81
+
+  - name: employee-salaries
+    openml_id: 42125
+    openml_name: employee_salaries
+    openml_version: 14
+    target: current_annual_salary
+    task_type: regression
+    goal: I want to predict the annual salary of county employees.
+    license: Public Domain (CC0)
+    challenge: Employee names (personal data), high-cardinality categorical columns, a date stored as text, a nearly duplicate department column and a pay column correlated 0.89 with the target.
+    n_rows: 9228
+    n_columns: 13
+
+  - name: bike-sharing-demand
+    openml_id: 42712
+    openml_name: Bike_Sharing_Demand
+    openml_version: 2
+    target: count
+    task_type: regression
+    goal: Prepare the bike rental data to predict how many bikes will be rented in an hour.
+    license: Public
+    challenge: A mid-sized, clean table where month, hour and weekday are integers although they are categories, and temp and feel_temp are almost the same column.
+    n_rows: 17379
+    n_columns: 13

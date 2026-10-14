@@ -16,9 +16,6 @@ dist/
 # Run outputs
 runs/
 
-# Benchmark data files
-benchmarks/datasets/**/*.csv
-benchmarks/datasets/**/*.tsv
-benchmarks/datasets/**/*.parquet
-benchmarks/datasets/**/*.zip
-benchmarks/datasets/**/*.gz
+# Benchmark data files and results
+benchmarks/datasets/
+benchmarks/results/
