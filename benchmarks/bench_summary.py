@@ -23,7 +23,7 @@ _MAX_REASON = 200
 
 def render_summary(results: BenchmarkResults) -> str:
     agent_jobs = [job for job in results.jobs if job.method == "agent"]
-    sections = [_header(results), _scores(results)]
+    sections = [_header(results), _scores(results), _leaky_columns_kept(results)]
     if agent_jobs:
         sections.append(_against_naive(results))
     sections.append(_agent_runs(results, agent_jobs))
@@ -128,6 +128,39 @@ def _score(baseline: BaselineResult | None, names: tuple[str, ...], metric: str)
         if model.name in names and metric in model.scores:
             return model.scores[metric].mean
     return None
+
+
+# --- leaky columns kept ---
+
+
+def _leaky_columns_kept(results: BenchmarkResults) -> str:
+    labels = ["reference", "naive", *(f"agent: {model}" for model in results.config.models)]
+    rows = []
+    for name in results.config.datasets:
+        leaky = next((job.leaky_columns for job in _of(results, name) if job.leaky_columns), [])
+        if leaky:
+            cells = [_kept_cell(_of(results, name, label), len(leaky)) for label in labels]
+            rows.append([name, ", ".join(leaky), *cells])
+    if not rows:
+        return ""
+    return "\n".join(
+        [
+            "## Leaky columns kept",
+            "",
+            "How many of the columns that give the target away (`leaky_columns` in "
+            "datasets.yaml) the plan still has at its end. An agent cell adds up its runs.",
+            "",
+            _table(["dataset", "leaky columns", *labels], rows),
+        ]
+    )
+
+
+def _kept_cell(jobs: list[JobResult], n_leaky: int) -> str:
+    counted = [job.leaky_columns_kept for job in jobs if job.leaky_columns_kept is not None]
+    if not counted:
+        return DASH
+    cell = f"{sum(counted)} of {n_leaky * len(counted)}"
+    return cell + f" ({len(counted)} runs)" if len(counted) > 1 else cell
 
 
 # --- agent against naive ---

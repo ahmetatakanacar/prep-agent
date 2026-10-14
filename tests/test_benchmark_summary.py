@@ -209,6 +209,69 @@ class TestLeakyPlans:
         assert row(rows, "better than naive")[2] == "1 of 1 (1 excluded †)"
 
 
+class TestLeakyColumnsKept:
+    HEADING = "## Leaky columns kept"
+
+    def leaky_job(self, method, kept, dataset="d1", **kwargs):
+        return job(
+            dataset,
+            method,
+            leaky_columns=["boat", "body"],
+            kept_leaky_columns=kept,
+            leaky_columns_kept=len(kept),
+            baseline=classification_baseline(0.6, 0.7),
+            **kwargs,
+        )
+
+    def test_counts_the_kept_columns_of_every_method(self):
+        jobs = [
+            self.leaky_job("reference", []),
+            self.leaky_job("naive", ["boat", "body"]),
+            self.leaky_job("agent", ["body"]),
+        ]
+
+        rows = table(render_summary(results(jobs)), self.HEADING)
+
+        assert rows[0] == ["dataset", "leaky columns", "reference", "naive", "agent: m1"]
+        assert row(rows, "d1") == ["d1", "boat, body", "0 of 2", "2 of 2", "1 of 2"]
+
+    def test_repeats_of_an_agent_are_added_up(self):
+        jobs = [
+            self.leaky_job("agent", ["body"], repeat=1),
+            self.leaky_job("agent", [], repeat=2),
+            self.leaky_job("agent", ["boat", "body"], repeat=3),
+        ]
+
+        cell = row(table(render_summary(results(jobs, repeats=3)), self.HEADING), "d1")[-1]
+
+        assert cell == "3 of 6 (3 runs)"
+
+    def test_a_method_without_a_plan_shows_a_dash(self):
+        jobs = [
+            self.leaky_job("reference", []),
+            job("d1", "naive", status="error", leaky_columns=["boat", "body"], error="boom"),
+        ]
+
+        cells = row(table(render_summary(results(jobs, models=())), self.HEADING), "d1")
+
+        assert cells[2:] == ["0 of 2", "–"]
+
+    def test_only_datasets_with_leaky_columns_are_listed(self):
+        jobs = [
+            self.leaky_job("reference", []),
+            job("d2", "reference", baseline=classification_baseline(0.6, 0.7)),
+        ]
+
+        rows = table(render_summary(results(jobs, models=(), datasets=("d1", "d2"))), self.HEADING)
+
+        assert [r[0] for r in rows[1:]] == ["d1"]
+
+    def test_the_section_is_left_out_when_no_dataset_has_leaky_columns(self):
+        jobs = [job("d1", "reference", baseline=classification_baseline(0.6, 0.7))]
+
+        assert self.HEADING not in render_summary(results(jobs, models=()))
+
+
 class TestAgainstNaive:
     HEADING = "## Agent against the naive plan"
 

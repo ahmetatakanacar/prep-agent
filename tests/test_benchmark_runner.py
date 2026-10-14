@@ -304,6 +304,35 @@ class TestLeakyColumns:
         for method in ("reference", "naive", "agent"):
             assert job_of(results, "cls", method).kept_leaky_columns == []
 
+    def test_every_job_counts_how_many_of_the_leaky_columns_it_kept(self, ws):
+        self.mark(ws, "income", "uid")
+        results = ws.run(good_llm())
+        for method in ("reference", "naive", "agent"):
+            job = job_of(results, "cls", method)
+            assert job.leaky_columns == ["income", "uid"]
+            assert job.kept_leaky_columns == ["income"]
+            assert job.leaky_columns_kept == 1
+
+    def test_the_count_is_written_to_results_json(self, ws):
+        self.mark(ws, "income", "uid")
+        ws.run(good_llm())
+        on_disk = json.loads((ws.out_dir / "results.json").read_text(encoding="utf-8"))
+        cls_jobs = [j for j in on_disk["jobs"] if j["dataset"] == "cls"]
+        assert [j["leaky_columns_kept"] for j in cls_jobs] == [1, 1, 1]
+        assert [j["leaky_columns_kept"] for j in on_disk["jobs"] if j["dataset"] != "cls"] == [
+            0,
+            0,
+            0,
+        ]
+
+    def test_a_job_without_a_plan_has_no_count_but_still_knows_the_leaky_columns(self, ws):
+        self.mark(ws, "income")
+        (ws.reference_dir / "cls.plan.json").write_text("{not json", encoding="utf-8")
+        job = job_of(ws.run(good_llm()), "cls", "reference")
+        assert job.status == "error"
+        assert job.leaky_columns == ["income"]
+        assert job.leaky_columns_kept is None
+
     def test_datasets_without_leaky_columns_are_never_flagged(self, ws):
         assert all(j.kept_leaky_columns == [] for j in ws.run(good_llm()).jobs)
 

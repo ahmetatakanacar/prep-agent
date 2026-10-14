@@ -61,8 +61,11 @@ class JobResult(BaseModel):
     warning_codes: list[str] = []
     agent: AgentMetrics | None = None
     plan: Plan | None = None
-    # The dataset's known leaky columns (see datasets.yaml) that the plan does not drop.
+    # The dataset's known leaky columns (see datasets.yaml), the ones the plan does not drop and
+    # how many those are. The count is None when there is no plan to look at.
+    leaky_columns: list[str] = []
     kept_leaky_columns: list[str] = []
+    leaky_columns_kept: int | None = None
     n_train: int | None = None
     n_test: int | None = None
     n_features: int | None = None

@@ -227,6 +227,7 @@ def _run_job(
         "method": job.method,
         "model": job.model,
         "repeat": job.repeat,
+        "leaky_columns": list(spec.leaky_columns),
     }
     # Whatever a job raises must end up in its record, not stop the benchmark.
     try:
@@ -242,6 +243,7 @@ def _run_job(
         return JobResult(**base, status="error", error=f"{type(exc).__name__}: {exc}")
     if result.plan is not None:
         result.kept_leaky_columns = _kept_leaky(spec, result.plan)
+        result.leaky_columns_kept = len(result.kept_leaky_columns)
     return result
 
 
