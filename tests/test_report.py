@@ -288,7 +288,7 @@ def test_issues_are_listed_with_severity_code_and_message(executed):
 def test_the_baseline_table_shows_mean_and_std_per_model_and_metric(executed):
     text = section(render(executed, baseline=make_baseline()), "Baseline")
 
-    assert "| Model | accuracy | f1_macro |\n|---|---:|---:|\n| dummy_most_frequent" in text
+    assert "| Model | accuracy ↑ | f1_macro ↑ |\n|---|---:|---:|\n| dummy_most_frequent" in text
     assert "| dummy_most_frequent | 0.6875 ± 0.0500 | 0.4074 ± 0.0123 |" in text
     assert "| logistic_regression | 0.8125 ± 0.0500 | 0.7000 ± 0.0123 |" in text
     assert "4-fold" in text
@@ -333,7 +333,7 @@ def test_without_a_baseline_the_report_says_it_was_turned_off(executed):
     assert "| Model |" not in text
 
 
-def test_regression_metrics_note_which_direction_is_better(executed):
+def test_regression_metric_headers_show_which_direction_is_better(executed):
     baseline = BaselineResult(
         task_type="regression",
         n_rows=50,
@@ -350,9 +350,10 @@ def test_regression_metrics_note_which_direction_is_better(executed):
 
     text = section(render(executed, baseline=baseline), "Baseline")
 
-    assert "| Model | r2 | rmse | mae |" in text
+    assert "| Model | r2 ↑ | rmse ↓ | mae ↓ |" in text
     assert "| ridge | 1.5000 ± 0.2500 | 1.5000 ± 0.2500 | 1.5000 ± 0.2500 |" in text
-    assert "lower is better" in text
+    assert "Higher is better" not in text
+    assert "lower is better" not in text
 
 
 # --- notes ---

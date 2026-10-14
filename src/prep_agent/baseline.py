@@ -36,6 +36,16 @@ RANDOM_STATE = 42
 _MIN_FOLDS = 2
 # sklearn reports these as negated scores so that higher is always better.
 _NEGATED = {"rmse", "mae"}
+# The one place that says which way each metric reads; the report and the CLI take their arrows
+# from here.
+HIGHER_IS_BETTER = {
+    "accuracy": True,
+    "f1_macro": True,
+    "roc_auc": True,
+    "r2": True,
+    "rmse": False,
+    "mae": False,
+}
 
 
 class BaselineScore(BaseModel):
@@ -67,6 +77,11 @@ class BaselineResult(BaseModel):
     metrics: list[str]
     models: list[ModelBaseline]
     skipped_reason: str | None = None
+
+
+def metric_label(metric: str) -> str:
+    """The metric name with an arrow: ↑ when higher is better, ↓ when lower is."""
+    return f"{metric} {'↑' if HIGHER_IS_BETTER[metric] else '↓'}"
 
 
 def evaluate_baselines(

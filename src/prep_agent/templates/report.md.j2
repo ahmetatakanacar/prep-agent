@@ -94,13 +94,13 @@ Baseline scores were not computed (`--no-baseline`).
 {% elif baseline.skipped_reason %}
 The baseline was skipped: {{ baseline.skipped_reason | cell }}.
 {% else %}
-Cross-validation on the train set ({{ baseline.n_rows }} rows): {{ baseline.n_folds }}-fold{{ " stratified" if baseline.task_type == "classification" else "" }}, shuffled, random_state {{ baseline.random_state }}. Cells are the mean ± the standard deviation over the folds.{{ " rmse and mae: lower is better; the other metrics: higher is better." if "rmse" in baseline.metrics else " Higher is better." }}
+Cross-validation on the train set ({{ baseline.n_rows }} rows): {{ baseline.n_folds }}-fold{{ " stratified" if baseline.task_type == "classification" else "" }}, shuffled, random_state {{ baseline.random_state }}. Cells are the mean ± the standard deviation over the folds.
 
 The dummy model ignores the features and always predicts the {{ "most frequent class" if baseline.task_type == "classification" else "training mean" }}, so its score is the reference: the other models only show the data is usable if they beat it.
 
 {% if baseline_table %}
-| Model | {{ baseline_table.metrics | join(" | ") }} |
-|---|{{ "---:|" * (baseline_table.metrics | length) }}
+| Model | {{ baseline_table.headers | join(" | ") }} |
+|---|{{ "---:|" * (baseline_table.headers | length) }}
 {% for row in baseline_table.rows %}
 | {{ row.name }} | {{ row.cells | join(" | ") }} |
 {% endfor %}

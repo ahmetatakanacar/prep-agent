@@ -73,7 +73,7 @@ def test_run_prints_the_baselines_as_a_table(invoke_cli, tmp_path):
 
     for name in MODELS:
         assert name in result.output
-    for header in ("model", "accuracy", "f1_macro", "roc_auc"):
+    for header in ("model", "accuracy ↑", "f1_macro ↑", "roc_auc ↑"):
         assert header in result.output
     assert "±" in result.output
     assert "fold" in result.output

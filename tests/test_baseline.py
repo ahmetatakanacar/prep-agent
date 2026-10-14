@@ -9,7 +9,12 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer
 
-from prep_agent.baseline import BaselineResult, evaluate_baselines
+from prep_agent.baseline import (
+    HIGHER_IS_BETTER,
+    BaselineResult,
+    evaluate_baselines,
+    metric_label,
+)
 from prep_agent.executor import execute
 from prep_agent.plan import Plan
 from prep_agent.profiler import load_csv, profile_dataframe
@@ -126,6 +131,28 @@ def test_the_input_frame_and_pipeline_are_left_alone():
 
     pd.testing.assert_frame_equal(frame, before)
     assert not hasattr(pipeline.steps[0][1], "n_features_in_")
+
+
+# --- metric direction ---
+
+
+def test_the_direction_of_every_reported_metric_is_defined():
+    reported = set(evaluate(classification_frame()).metrics)
+    reported |= set(evaluate(classification_frame(n_classes=3)).metrics)
+    reported |= set(evaluate(regression_frame(), "regression").metrics)
+
+    assert reported <= set(HIGHER_IS_BETTER)
+
+
+def test_error_metrics_are_lower_is_better_and_the_rest_higher():
+    assert {m for m, higher in HIGHER_IS_BETTER.items() if not higher} == {"rmse", "mae"}
+
+
+def test_metric_labels_carry_an_arrow():
+    assert metric_label("accuracy") == "accuracy ↑"
+    assert metric_label("r2") == "r2 ↑"
+    assert metric_label("rmse") == "rmse ↓"
+    assert metric_label("mae") == "mae ↓"
 
 
 # --- no leakage inside cross-validation ---

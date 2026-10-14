@@ -12,7 +12,7 @@ from rich.text import Text
 
 from prep_agent import __version__
 from prep_agent.agent import AgentError, AgentTrace, AskFn, run_agent
-from prep_agent.baseline import BaselineResult, evaluate_baselines
+from prep_agent.baseline import BaselineResult, evaluate_baselines, metric_label
 from prep_agent.env import load_dotenv_file
 from prep_agent.executor import ExecutionError, ExecutionResult, PlanValidationError, execute
 from prep_agent.llm.base import LLMError
@@ -383,7 +383,7 @@ def _print_baseline(console: Console, baseline: BaselineResult) -> None:
         table = Table()
         table.add_column("model", no_wrap=True)
         for metric in baseline.metrics:
-            table.add_column(metric, justify="right")
+            table.add_column(metric_label(metric), justify="right")
         for model in scored:
             table.add_row(
                 Text(model.name),

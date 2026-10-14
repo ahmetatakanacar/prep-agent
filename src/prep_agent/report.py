@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from jinja2 import Environment, PackageLoader, StrictUndefined
 
 from prep_agent.agent import AgentTrace
-from prep_agent.baseline import BaselineResult
+from prep_agent.baseline import BaselineResult, metric_label
 from prep_agent.executor import ExecutionResult
 from prep_agent.plan import (
     DedupeStep,
@@ -171,4 +171,4 @@ def _baseline_table(baseline: BaselineResult) -> dict | None:
         }
         for model in scored
     ]
-    return {"metrics": baseline.metrics, "rows": rows}
+    return {"headers": [metric_label(metric) for metric in baseline.metrics], "rows": rows}
