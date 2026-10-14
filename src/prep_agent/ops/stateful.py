@@ -16,7 +16,8 @@ from sklearn.preprocessing import (
     StandardScaler,
 )
 
-from prep_agent.ops.base import StatefulOpSpec
+from prep_agent.ops.base import StatefulOpSpec, TransformerCode
+from prep_agent.ops.code import Call, Expr, Import, call
 from prep_agent.plan import EncodeStep, ImputeStep, ScaleStep
 
 
@@ -59,6 +60,60 @@ def _build_scaler(step: ScaleStep) -> ColumnTransformer:
     return _on_columns(step.op, step.columns, scalers[step.method]())
 
 
+# The generated code mirrors the builders above, parameter by parameter.
+def _on_columns_code(op: str, columns: list[str], transformer: Expr) -> Call:
+    return call(
+        "ColumnTransformer",
+        [(op, transformer, columns)],
+        remainder="passthrough",
+        verbose_feature_names_out=False,
+    ).then("set_output", transform="pandas")
+
+
+_COLUMN_TRANSFORMER = Import("sklearn.compose", "ColumnTransformer")
+
+
+def _impute_code(step: ImputeStep) -> TransformerCode:
+    imputer = call(
+        "SimpleImputer",
+        strategy=step.strategy,
+        fill_value=step.fill_value,
+        add_indicator=step.add_indicator,
+        keep_empty_features=True,
+    )
+    return TransformerCode(
+        _on_columns_code(step.op, step.columns, imputer),
+        (_COLUMN_TRANSFORMER, Import("sklearn.impute", "SimpleImputer")),
+    )
+
+
+def _encode_code(step: EncodeStep) -> TransformerCode:
+    if step.method == "onehot":
+        name = "OneHotEncoder"
+        encoder = call(
+            name,
+            sparse_output=False,
+            handle_unknown="infrequent_if_exist",
+            max_categories=step.max_categories,
+        )
+    else:
+        name = "OrdinalEncoder"
+        encoder = call(name, handle_unknown="use_encoded_value", unknown_value=-1)
+    return TransformerCode(
+        _on_columns_code(step.op, step.columns, encoder),
+        (_COLUMN_TRANSFORMER, Import("sklearn.preprocessing", name)),
+    )
+
+
+def _scale_code(step: ScaleStep) -> TransformerCode:
+    names = {"standard": "StandardScaler", "minmax": "MinMaxScaler", "robust": "RobustScaler"}
+    name = names[step.method]
+    return TransformerCode(
+        _on_columns_code(step.op, step.columns, call(name)),
+        (_COLUMN_TRANSFORMER, Import("sklearn.preprocessing", name)),
+    )
+
+
 IMPUTE = StatefulOpSpec(
     name="impute",
     step_model=ImputeStep,
@@ -67,6 +122,7 @@ IMPUTE = StatefulOpSpec(
         "learned on train. Can add a missing-value indicator column."
     ),
     build_transformer=_build_imputer,
+    codegen=_impute_code,
 )
 ENCODE = StatefulOpSpec(
     name="encode",
@@ -76,10 +132,12 @@ ENCODE = StatefulOpSpec(
         "train. Categories unseen in train do not raise errors."
     ),
     build_transformer=_build_encoder,
+    codegen=_encode_code,
 )
 SCALE = StatefulOpSpec(
     name="scale",
     step_model=ScaleStep,
     description="Rescale numeric columns (standard, minmax or robust) using statistics from train.",
     build_transformer=_build_scaler,
+    codegen=_scale_code,
 )

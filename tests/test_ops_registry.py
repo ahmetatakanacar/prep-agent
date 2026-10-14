@@ -1,8 +1,8 @@
 import pytest
 
 from prep_agent.ops import OpError, OpRegistry, get_op, list_ops
-from prep_agent.ops.base import StatefulOpSpec, StatelessOpSpec
-from prep_agent.plan import DedupeStep, Plan
+from prep_agent.ops.base import SplitOpSpec, StatefulOpSpec, StatelessOpSpec, StatementCode
+from prep_agent.plan import DedupeStep, ImputeStep, Plan, SplitStep
 
 EXPECTED_KINDS = {
     "dedupe": "stateless",
@@ -82,6 +82,44 @@ def test_each_kind_provides_the_right_callable():
             assert not hasattr(spec, "build_transformer")
 
 
+def test_every_spec_can_generate_code():
+    for spec in list_ops():
+        assert callable(spec.codegen), spec.name
+
+
+@pytest.mark.parametrize(
+    ("spec_type", "extra"),
+    [
+        (StatelessOpSpec, {"apply": lambda df, step, ctx: df}),
+        (StatefulOpSpec, {"build_transformer": lambda step: None}),
+        (SplitOpSpec, {"apply": lambda df, step, ctx: (df, df)}),
+    ],
+)
+def test_an_op_without_code_generation_cannot_be_registered(spec_type, extra):
+    step_model = {
+        StatelessOpSpec: DedupeStep,
+        StatefulOpSpec: ImputeStep,
+        SplitOpSpec: SplitStep,
+    }[spec_type]
+    name = step_model.model_fields["op"].annotation.__args__[0]
+    registry = OpRegistry()
+    fake = spec_type(name=name, step_model=step_model, description="no code", codegen=None, **extra)
+
+    with pytest.raises(OpError, match=f"{name}.*code generation"):
+        registry.register(fake)
+    assert registry.list_ops() == []
+
+
+def test_specs_cannot_even_be_built_without_the_codegen_argument():
+    with pytest.raises(TypeError, match="codegen"):
+        StatelessOpSpec(
+            name="dedupe",
+            step_model=DedupeStep,
+            description="no code",
+            apply=lambda df, step, ctx: df,
+        )
+
+
 def test_registering_the_same_name_twice_raises_op_error():
     registry = OpRegistry()
     spec = get_op("dedupe")
@@ -99,6 +137,7 @@ def test_duplicate_name_with_a_different_spec_is_rejected_too():
         step_model=DedupeStep,
         description="another implementation",
         apply=lambda df, step, ctx: df,
+        codegen=lambda step: StatementCode(()),
     )
 
     with pytest.raises(OpError, match="already registered"):
@@ -112,6 +151,7 @@ def test_spec_name_must_match_the_step_model_op():
         step_model=DedupeStep,
         description="wrong name",
         apply=lambda df, step, ctx: df,
+        codegen=lambda step: StatementCode(()),
     )
 
     with pytest.raises(OpError, match="dedupe_all"):

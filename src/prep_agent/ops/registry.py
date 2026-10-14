@@ -20,6 +20,8 @@ class OpRegistry:
             raise OpError(
                 f"op name {spec.name!r} does not match the op literal of its step model: {declared}"
             )
+        if not callable(getattr(spec, "codegen", None)):
+            raise OpError(f"op {spec.name!r} has no code generation for pipeline.py")
         if spec.name in self._ops:
             raise OpError(f"op is already registered: {spec.name!r}")
         self._ops[spec.name] = spec

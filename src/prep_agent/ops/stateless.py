@@ -8,7 +8,8 @@ from collections.abc import Sequence
 
 import pandas as pd
 
-from prep_agent.ops.base import OpContext, OpError, StatelessOpSpec
+from prep_agent.ops.base import OpContext, OpError, StatelessOpSpec, StatementCode
+from prep_agent.ops.code import Assign, call, ref
 from prep_agent.plan import DedupeStep, DropColumnsStep, DropMissingTargetStep
 
 
@@ -39,21 +40,48 @@ def _drop_missing_target(
     return df.dropna(subset=[ctx.target]).reset_index(drop=True)
 
 
+# A chained call is written as two statements: the generated file then formats the same way
+# whatever the length of the arguments.
+def _dedupe_code(step: DedupeStep) -> StatementCode:
+    return StatementCode(
+        (
+            Assign("df", call("df.drop_duplicates", subset=step.subset, keep=step.keep)),
+            Assign("df", call("df.reset_index", drop=True)),
+        )
+    )
+
+
+def _drop_columns_code(step: DropColumnsStep) -> StatementCode:
+    return StatementCode((Assign("df", call("df.drop", columns=step.columns)),))
+
+
+def _drop_missing_target_code(step: DropMissingTargetStep) -> StatementCode:
+    return StatementCode(
+        (
+            Assign("df", call("df.dropna", subset=[ref("TARGET")])),
+            Assign("df", call("df.reset_index", drop=True)),
+        )
+    )
+
+
 DEDUPE = StatelessOpSpec(
     name="dedupe",
     step_model=DedupeStep,
     description="Remove duplicate rows over all columns or a subset, keeping the first or last.",
     apply=_dedupe,
+    codegen=_dedupe_code,
 )
 DROP_COLUMNS = StatelessOpSpec(
     name="drop_columns",
     step_model=DropColumnsStep,
     description="Remove columns that carry no usable signal, such as identifiers or constants.",
     apply=_drop_columns,
+    codegen=_drop_columns_code,
 )
 DROP_MISSING_TARGET = StatelessOpSpec(
     name="drop_missing_target",
     step_model=DropMissingTargetStep,
     description="Remove rows whose target value is missing.",
     apply=_drop_missing_target,
+    codegen=_drop_missing_target_code,
 )

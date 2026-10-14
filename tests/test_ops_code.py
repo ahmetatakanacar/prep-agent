@@ -13,6 +13,7 @@ from prep_agent.ops.code import (
     ref,
     render_imports,
     render_statements,
+    subscript,
 )
 
 HOSTILE_STRINGS = [
@@ -134,6 +135,13 @@ def test_a_bare_string_argument_is_data_never_code():
     [arg] = tree.body.args
     assert isinstance(arg, ast.Constant)
     assert isinstance(tree.body.keywords[0].value, ast.Constant)
+
+
+def test_subscripts_index_with_literals_or_names():
+    assert subscript("df", ref("TARGET")).flat() == "df[TARGET]"
+    assert subscript("df", 'a"]; import os #').flat() == "df['a\"]; import os #']"
+    with pytest.raises(CodeError):
+        subscript("df[0]", 1)
 
 
 def test_short_statements_stay_on_one_line():

@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from prep_agent.ops import list_ops
-from prep_agent.ops.base import StatelessOpSpec
+from prep_agent.ops.base import StatelessOpSpec, StatementCode
 from prep_agent.plan import DropMissingTargetStep, Plan
 from prep_agent.planner import (
     QARecord,
@@ -78,6 +78,7 @@ def test_system_prompt_follows_the_registry(monkeypatch):
         step_model=DropMissingTargetStep,
         description="Put the rows in random order.",
         apply=lambda df, step, ctx: df,
+        codegen=lambda step: StatementCode(()),
     )
     monkeypatch.setattr("prep_agent.planner.list_ops", lambda: [*list_ops(), extra])
 

@@ -118,6 +118,11 @@ def ref(name: str) -> Atom:
     return Atom(_check(_NAME, name, "name"))
 
 
+def subscript(name: str, key: Any) -> Atom:
+    """`name[key]`, with `key` rendered as a literal unless it is an expression."""
+    return Atom(f"{_check(_NAME, name, 'name')}[{literal(key).flat()}]")
+
+
 def call(func: str, /, *args: Any, **kwargs: Any) -> Call:
     """A call of `func`. Arguments that are not expressions are rendered as literals."""
     return Call(

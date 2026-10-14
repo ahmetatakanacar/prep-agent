@@ -3,7 +3,8 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from prep_agent.ops.base import OpContext, OpError, SplitOpSpec
+from prep_agent.ops.base import OpContext, OpError, SplitOpSpec, StatementCode
+from prep_agent.ops.code import Assign, Import, call, ref, subscript
 from prep_agent.plan import SplitStep
 
 
@@ -27,6 +28,27 @@ def _split(df: pd.DataFrame, step: SplitStep, ctx: OpContext) -> tuple[pd.DataFr
     return train.reset_index(drop=True), test.reset_index(drop=True)
 
 
+def _split_code(step: SplitStep) -> StatementCode:
+    stratify = subscript("df", ref("TARGET")) if step.stratify else None
+    return StatementCode(
+        (
+            Assign(
+                "train, test",
+                call(
+                    "train_test_split",
+                    ref("df"),
+                    test_size=step.test_size,
+                    random_state=step.random_state,
+                    stratify=stratify,
+                ),
+            ),
+            Assign("train", call("train.reset_index", drop=True)),
+            Assign("test", call("test.reset_index", drop=True)),
+        ),
+        (Import("sklearn.model_selection", "train_test_split"),),
+    )
+
+
 SPLIT = SplitOpSpec(
     name="split",
     step_model=SplitStep,
@@ -35,4 +57,5 @@ SPLIT = SplitOpSpec(
         "Every step after it is fit on train only."
     ),
     apply=_split,
+    codegen=_split_code,
 )
