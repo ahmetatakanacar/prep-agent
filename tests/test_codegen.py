@@ -379,6 +379,55 @@ def test_the_default_output_folder_is_the_working_directory(workdirs):
     assert "train.csv" in done.stdout
 
 
+def run_script_in(workdirs, *args):
+    script_dir, run_dir = workdirs
+    plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
+    script = script_dir / "pipeline.py"
+    if not script.exists():
+        make_script(script_dir, CUSTOMERS_CSV, plan)
+    return run_python([script, CUSTOMERS_CSV, *args], cwd=run_dir)
+
+
+def test_a_second_run_into_the_same_folder_is_refused(workdirs):
+    _, run_dir = workdirs
+    assert run_script_in(workdirs).returncode == 0
+    before = {n: (run_dir / n).read_bytes() for n in ("train.csv", "test.csv")}
+
+    again = run_script_in(workdirs)
+
+    assert again.returncode != 0
+    assert "train.csv" in again.stderr and "test.csv" in again.stderr
+    assert "--force" in again.stderr
+    assert "Traceback" not in again.stderr
+    assert {n: (run_dir / n).read_bytes() for n in before} == before
+
+
+def test_force_overwrites_the_existing_files(workdirs):
+    _, run_dir = workdirs
+    assert run_script_in(workdirs).returncode == 0
+    (run_dir / "train.csv").write_text("stale", encoding="utf-8")
+
+    forced = run_script_in(workdirs, "--force")
+
+    assert forced.returncode == 0, forced.stderr
+    assert (run_dir / "train.csv").read_text(encoding="utf-8") != "stale"
+
+
+@pytest.mark.parametrize("existing", ["train.csv", "test.csv"])
+def test_one_existing_file_is_named_and_nothing_is_written(workdirs, existing):
+    _, run_dir = workdirs
+    other = "test.csv" if existing == "train.csv" else "train.csv"
+    (run_dir / existing).write_text("mine", encoding="utf-8")
+
+    done = run_script_in(workdirs)
+
+    assert done.returncode != 0
+    assert existing in done.stderr
+    assert other not in done.stderr
+    assert (run_dir / existing).read_text(encoding="utf-8") == "mine"
+    assert not (run_dir / other).exists()
+
+
 # --- independence from prep-agent ---
 
 
