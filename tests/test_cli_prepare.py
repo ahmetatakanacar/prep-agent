@@ -82,6 +82,7 @@ def test_prepare_runs_the_plan_and_writes_the_run(invoke_cli, monkeypatch, tmp_p
         "train.csv",
         "test.csv",
         "pipeline.joblib",
+        "pipeline.py",
         "issues.json",
         "run.json",
         "llm_trace.json",

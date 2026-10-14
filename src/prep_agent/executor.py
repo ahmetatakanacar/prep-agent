@@ -7,8 +7,8 @@ only and merely applied to the test features. The target never enters the pipeli
 appended as the last column of both outputs.
 
 The fitted pipeline covers the stateful steps only. The stateless steps and the split are
-not part of it, so it cannot be applied to a raw file; a standalone `pipeline.py` is a later
-stage. Its steps are named `<plan step index>_<op>`.
+not part of it, so it cannot be applied to a raw file; the standalone `pipeline.py` that repeats
+every step is written by `codegen`. Its steps are named `<plan step index>_<op>`.
 
 The whole procedure is deterministic: the split is seeded by the plan and no step uses
 randomness of its own.

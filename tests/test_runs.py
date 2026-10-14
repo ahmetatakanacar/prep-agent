@@ -1,7 +1,10 @@
 import dataclasses
 import hashlib
 import json
+import os
 import re
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +15,7 @@ import pytest
 from prep_agent import __version__
 from prep_agent.agent import AgentTrace, LLMCallRecord
 from prep_agent.baseline import BaselineResult, BaselineScore, ModelBaseline
+from prep_agent.codegen import generate_pipeline_script
 from prep_agent.executor import execute
 from prep_agent.llm.base import TokenUsage
 from prep_agent.ops import OpContext, get_op
@@ -31,6 +35,7 @@ EXPECTED_FILES = {
     "train.csv",
     "test.csv",
     "pipeline.joblib",
+    "pipeline.py",
     "issues.json",
     "run.json",
     "report.md",
@@ -106,6 +111,8 @@ def test_run_json_describes_the_run(tmp_path, executed):
     assert isinstance(info.created_at, datetime)
     assert info.created_at.tzinfo is not None
     assert "stateful" in info.pipeline_joblib
+    assert "pipeline.py" in info.pipeline_joblib
+    assert "not generated" not in info.pipeline_joblib
 
 
 def test_relative_input_path_is_stored_as_given(tmp_path, executed, monkeypatch):
@@ -142,7 +149,7 @@ def test_status_is_failed_when_the_result_has_errors(tmp_path, executed):
 
     info = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     assert info["status"] == "failed"
-    assert {p.name for p in run_dir.iterdir()} == EXPECTED_FILES
+    assert {p.name for p in run_dir.iterdir()} == EXPECTED_FILES - {"pipeline.py"}
 
 
 def test_existing_run_is_never_overwritten(tmp_path, executed):
@@ -209,6 +216,56 @@ def test_saved_pipeline_reproduces_the_executor_output(tmp_path, executed):
     transformed[plan.target] = raw_test[plan.target]
 
     pd.testing.assert_frame_equal(transformed, result.test, check_exact=True)
+
+
+def test_pipeline_py_is_generated_from_the_plan_and_the_run_facts(tmp_path, executed):
+    _, plan, _, _ = executed
+    run_dir = save(tmp_path, executed, run_id="r1")
+
+    info = RunInfo.model_validate_json((run_dir / "run.json").read_text(encoding="utf-8"))
+    expected = generate_pipeline_script(
+        plan, run_id="r1", prep_agent_version=__version__, input_sha256=info.input_sha256
+    )
+    assert (run_dir / "pipeline.py").read_text(encoding="utf-8") == expected
+    assert b"\r\n" not in (run_dir / "pipeline.py").read_bytes()
+
+
+def test_the_saved_pipeline_py_reproduces_the_saved_train_and_test(tmp_path, executed):
+    run_dir = save(tmp_path, executed, run_id="r1")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+
+    done = subprocess.run(
+        [sys.executable, str(run_dir / "pipeline.py"), str(CUSTOMERS_CSV), "--out-dir", "out"],
+        cwd=elsewhere,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    assert done.returncode == 0, done.stderr
+    for name in ("train.csv", "test.csv"):
+        assert (elsewhere / "out" / name).read_bytes() == (run_dir / name).read_bytes()
+
+
+def test_a_run_whose_result_failed_validation_gets_no_pipeline_py(tmp_path, executed):
+    _, plan, profile, result = executed
+    error = ValidationIssue(code="target_altered", severity="error", message="x")
+
+    run_dir = save_run(
+        tmp_path / "runs",
+        input_path=CUSTOMERS_CSV,
+        profile=profile,
+        plan=plan,
+        result=dataclasses.replace(result, result_issues=[error]),
+        run_id="r1",
+    )
+
+    assert not (run_dir / "pipeline.py").exists()
+    assert (run_dir / "train.csv").exists()
 
 
 # --- runs that come from the agent ---
@@ -313,6 +370,7 @@ def test_a_failed_run_without_a_result_still_writes_plan_issues_and_trace(tmp_pa
     assert (info.rows.before, info.rows.train, info.rows.test) == (20, None, None)
     assert (info.columns.before, info.columns.train, info.columns.test) == (7, None, None)
     assert info.pipeline_joblib is None
+    assert not (run_dir / "pipeline.py").exists()
     issues = json.loads((run_dir / "issues.json").read_text(encoding="utf-8"))
     assert [i["code"] for i in issues["plan_issues"]] == ["stateful_before_split"]
     assert issues["result_issues"] == []

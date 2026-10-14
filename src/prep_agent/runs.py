@@ -1,19 +1,21 @@
 """Run artifacts: everything one execution leaves on disk under `<runs_dir>/<run_id>/`.
 
-Files: profile.json, plan.json, train.csv, test.csv, pipeline.joblib, issues.json (plan and
-result issues), report.md and run.json (see `RunInfo`). A run made by the agent also gets
+Files: profile.json, plan.json, train.csv, test.csv, pipeline.joblib, pipeline.py, issues.json
+(plan and result issues), report.md and run.json (see `RunInfo`). A run made by the agent also gets
 llm_trace.json (every planner call, no prompts and no data) and qa.json (the questions and the
 answers). baseline.json (the cross-validated baseline scores) is written when a baseline was
 computed. report.md is written for every run, failed ones included.
 
 A run whose plan never got to execute (the agent ran out of revisions on plan errors) is saved
-with `result=None`: no train.csv, test.csv or pipeline.joblib, status "failed", and the plan
-issues passed in. A run that never got a plan (the LLM failed or kept asking) is saved with
+with `result=None`: no train.csv, test.csv, pipeline.joblib or pipeline.py, status "failed", and
+the plan issues passed in. A run that never got a plan (the LLM failed or kept asking) is saved with
 `plan=None`: only profile.json, report.md, run.json, llm_trace.json and qa.json, status "failed".
 
 `pipeline.joblib` holds only the fitted stateful steps (impute, encode, scale). It does not
 include the stateless steps or the split, so it can only be applied to a frame that has gone
-through those already. The full, standalone `pipeline.py` is not generated yet.
+through those already. `pipeline.py` is the complete, standalone version (see `codegen`): it
+repeats every step on a raw CSV file. It is written for runs with status "ok" only, because a
+run whose result failed validation should not be reproduced as if it were good.
 
 A run directory is created exclusively: an existing directory is never written into. If writing
 fails halfway, the directory this call created is removed again.
@@ -34,6 +36,7 @@ from pydantic import BaseModel
 from prep_agent import __version__
 from prep_agent.agent import AgentTrace
 from prep_agent.baseline import BaselineResult
+from prep_agent.codegen import generate_pipeline_script
 from prep_agent.executor import ExecutionResult
 from prep_agent.llm.base import TokenUsage
 from prep_agent.plan import Plan
@@ -43,7 +46,7 @@ from prep_agent.validators import ValidationIssue, has_errors
 
 PIPELINE_JOBLIB_NOTE = (
     "Fitted stateful steps only (impute, encode, scale), fit on train. Stateless steps and "
-    "the split are not included; the full pipeline.py is not generated yet."
+    "the split are not included; pipeline.py runs the whole preparation on a raw CSV file."
 )
 _RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 _HASH_CHUNK = 1 << 20
@@ -167,6 +170,14 @@ def _write_artifacts(
         result.test.to_csv(run_dir / "test.csv", index=False, lineterminator="\n")
         joblib.dump(result.pipeline, run_dir / "pipeline.joblib")
         plan_issues, result_issues = result.plan_issues, result.result_issues
+        if plan is not None and info.status == "ok":
+            script = generate_pipeline_script(
+                plan,
+                run_id=info.run_id,
+                prep_agent_version=info.prep_agent_version,
+                input_sha256=info.input_sha256,
+            )
+            _write_text(run_dir / "pipeline.py", script)
     issues = {
         "plan_issues": [issue.model_dump() for issue in plan_issues],
         "result_issues": [issue.model_dump() for issue in result_issues],
