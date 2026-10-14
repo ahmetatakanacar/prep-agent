@@ -1,0 +1,68 @@
+{
+  "target": "class",
+  "task_type": "classification",
+  "model_family": "any",
+  "steps": [
+    {
+      "reason": "fnlwgt is the census sampling weight, a property of the survey and not of the person. education repeats education-num one to one, so the numeric version is kept.",
+      "op": "drop_columns",
+      "columns": [
+        "fnlwgt",
+        "education"
+      ]
+    },
+    {
+      "reason": "Stratified: 24% of the people earn more than 50K.",
+      "op": "split",
+      "test_size": 0.2,
+      "stratify": true,
+      "random_state": 42
+    },
+    {
+      "reason": "These columns are missing for 2% to 6% of the people and the missingness is itself informative (unknown workclass and occupation go together), so it becomes its own category.",
+      "op": "impute",
+      "columns": [
+        "workclass",
+        "occupation",
+        "native-country"
+      ],
+      "strategy": "constant",
+      "fill_value": "Unknown",
+      "add_indicator": false
+    },
+    {
+      "reason": "Text categories with up to 14 values; one-hot is the family-neutral encoding.",
+      "op": "encode",
+      "columns": [
+        "workclass",
+        "marital-status",
+        "occupation",
+        "relationship",
+        "race",
+        "sex"
+      ],
+      "method": "onehot"
+    },
+    {
+      "reason": "41 countries, 90% of them the United States; rare countries are grouped to avoid dozens of near-empty columns.",
+      "op": "encode",
+      "columns": [
+        "native-country"
+      ],
+      "method": "onehot",
+      "max_categories": 10
+    },
+    {
+      "reason": "Numeric columns are on very different scales (capital-gain reaches the tens of thousands). The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+      "op": "scale",
+      "columns": [
+        "age",
+        "education-num",
+        "capital-gain",
+        "capital-loss",
+        "hours-per-week"
+      ],
+      "method": "standard"
+    }
+  ]
+}

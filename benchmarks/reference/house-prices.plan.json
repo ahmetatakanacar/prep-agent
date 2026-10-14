@@ -1,0 +1,162 @@
+{
+  "target": "SalePrice",
+  "task_type": "regression",
+  "model_family": "any",
+  "steps": [
+    {
+      "reason": "Id is a row counter. GarageYrBlt tracks YearBuilt (correlation 0.83) and is missing exactly when GarageType is, i.e. when there is no garage, which the other garage columns already say. Utilities has one value except for a single house. Alley, PoolQC and MiscFeature are 94% to 99.5% 'none', too few rows to learn from.",
+      "op": "drop_columns",
+      "columns": [
+        "Id",
+        "GarageYrBlt",
+        "Utilities",
+        "Alley",
+        "PoolQC",
+        "MiscFeature"
+      ]
+    },
+    {
+      "reason": "Regression: no stratification. 20% of 1460 houses is 292 test rows.",
+      "op": "split",
+      "test_size": 0.2,
+      "stratify": false,
+      "random_state": 42
+    },
+    {
+      "reason": "In this data a missing value means the house has no such feature (no basement, no garage, no fireplace, no fence, no veneer), not that a value was lost, so it becomes the category 'None'.",
+      "op": "impute",
+      "columns": [
+        "MasVnrType",
+        "BsmtQual",
+        "BsmtCond",
+        "BsmtExposure",
+        "BsmtFinType1",
+        "BsmtFinType2",
+        "FireplaceQu",
+        "GarageType",
+        "GarageFinish",
+        "GarageQual",
+        "GarageCond",
+        "Fence"
+      ],
+      "strategy": "constant",
+      "fill_value": "None",
+      "add_indicator": false
+    },
+    {
+      "reason": "One house has no electrical value; this is a lost value, so the most frequent type is used.",
+      "op": "impute",
+      "columns": [
+        "Electrical"
+      ],
+      "strategy": "most_frequent",
+      "add_indicator": false
+    },
+    {
+      "reason": "Eight houses have no area. For 59% of the houses the area is 0, so the median is 0, the same as 'no veneer'.",
+      "op": "impute",
+      "columns": [
+        "MasVnrArea"
+      ],
+      "strategy": "median",
+      "add_indicator": false
+    },
+    {
+      "reason": "18% of the lot frontages are missing and the column is skewed with outliers, so the median is used. The indicator keeps the fact that it was unknown.",
+      "op": "impute",
+      "columns": [
+        "LotFrontage"
+      ],
+      "strategy": "median",
+      "add_indicator": true
+    },
+    {
+      "reason": "All remaining text columns are encoded with one-hot. Quality grades (Ex, Gd, TA ...) look ordered, but the ordinal encoder would order them alphabetically, which is wrong, so one-hot is the only encoding that does not invent an order.",
+      "op": "encode",
+      "columns": [
+        "MSZoning",
+        "Street",
+        "LotShape",
+        "LandContour",
+        "LotConfig",
+        "LandSlope",
+        "Neighborhood",
+        "Condition1",
+        "Condition2",
+        "BldgType",
+        "HouseStyle",
+        "RoofStyle",
+        "RoofMatl",
+        "Exterior1st",
+        "Exterior2nd",
+        "MasVnrType",
+        "ExterQual",
+        "ExterCond",
+        "Foundation",
+        "BsmtQual",
+        "BsmtCond",
+        "BsmtExposure",
+        "BsmtFinType1",
+        "BsmtFinType2",
+        "Heating",
+        "HeatingQC",
+        "CentralAir",
+        "Electrical",
+        "KitchenQual",
+        "Functional",
+        "FireplaceQu",
+        "GarageType",
+        "GarageFinish",
+        "GarageQual",
+        "GarageCond",
+        "PavedDrive",
+        "Fence",
+        "SaleType",
+        "SaleCondition"
+      ],
+      "method": "onehot"
+    },
+    {
+      "reason": "Areas and counts are skewed with many outliers, so the robust scaler is used. MSSubClass and the year columns are numeric codes that cannot be encoded by any available step and are scaled as numbers. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+      "op": "scale",
+      "columns": [
+        "LotFrontage",
+        "MasVnrArea",
+        "MSSubClass",
+        "LotArea",
+        "OverallQual",
+        "OverallCond",
+        "YearBuilt",
+        "YearRemodAdd",
+        "BsmtFinSF1",
+        "BsmtFinSF2",
+        "BsmtUnfSF",
+        "TotalBsmtSF",
+        "1stFlrSF",
+        "2ndFlrSF",
+        "LowQualFinSF",
+        "GrLivArea",
+        "BsmtFullBath",
+        "BsmtHalfBath",
+        "FullBath",
+        "HalfBath",
+        "BedroomAbvGr",
+        "KitchenAbvGr",
+        "TotRmsAbvGrd",
+        "Fireplaces",
+        "GarageCars",
+        "GarageArea",
+        "WoodDeckSF",
+        "OpenPorchSF",
+        "EnclosedPorch",
+        "3SsnPorch",
+        "ScreenPorch",
+        "PoolArea",
+        "MiscVal",
+        "MoSold",
+        "YrSold"
+      ],
+      "method": "robust"
+    }
+  ]
+}

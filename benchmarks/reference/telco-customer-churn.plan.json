@@ -1,0 +1,52 @@
+{
+  "target": "Churn",
+  "task_type": "classification",
+  "model_family": "any",
+  "steps": [
+    {
+      "reason": "TotalCharges is stored as text with 11 non-numeric entries and no step can convert it. It correlates 0.9996 with tenure times MonthlyCharges, which are kept, so almost nothing is lost.",
+      "op": "drop_columns",
+      "columns": [
+        "TotalCharges"
+      ]
+    },
+    {
+      "reason": "Stratified: only 26% of the customers churn.",
+      "op": "split",
+      "test_size": 0.2,
+      "stratify": true,
+      "random_state": 42
+    },
+    {
+      "reason": "Every remaining text column has two to four values and no missing values; one-hot is the family-neutral encoding. PhoneService is a yes/no column, not personal data.",
+      "op": "encode",
+      "columns": [
+        "gender",
+        "Partner",
+        "Dependents",
+        "PhoneService",
+        "MultipleLines",
+        "InternetService",
+        "OnlineSecurity",
+        "OnlineBackup",
+        "DeviceProtection",
+        "TechSupport",
+        "StreamingTV",
+        "StreamingMovies",
+        "Contract",
+        "PaperlessBilling",
+        "PaymentMethod"
+      ],
+      "method": "onehot"
+    },
+    {
+      "reason": "Tenure (months) and MonthlyCharges are on different scales and neither has strong outliers. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+      "op": "scale",
+      "columns": [
+        "tenure",
+        "MonthlyCharges"
+      ],
+      "method": "standard"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "target": "count",
+  "task_type": "regression",
+  "model_family": "any",
+  "steps": [
+    {
+      "reason": "feel_temp is almost the same column as temp (correlation 0.99); keeping both only adds collinearity for linear models.",
+      "op": "drop_columns",
+      "columns": [
+        "feel_temp"
+      ]
+    },
+    {
+      "reason": "The target is continuous, so there are no classes to stratify on; a seeded random 80/20 split keeps the run reproducible.",
+      "op": "split",
+      "test_size": 0.2,
+      "stratify": false,
+      "random_state": 42
+    },
+    {
+      "reason": "Text categories with four values and no missing values; one-hot is the family-neutral encoding.",
+      "op": "encode",
+      "columns": [
+        "season",
+        "weather"
+      ],
+      "method": "onehot"
+    },
+    {
+      "reason": "Numeric columns on different scales. month, hour and weekday are categories stored as integers; no step can encode a numeric column, so they stay ordered numbers. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+      "op": "scale",
+      "columns": [
+        "month",
+        "hour",
+        "weekday",
+        "temp",
+        "humidity",
+        "windspeed"
+      ],
+      "method": "standard"
+    }
+  ]
+}

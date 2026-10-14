@@ -1,0 +1,41 @@
+{
+  "target": "SubscribeTermDeposit",
+  "task_type": "classification",
+  "model_family": "any",
+  "steps": [
+    {
+      "reason": "Stratified: only 11.7% of the clients subscribe, so an unstratified split could leave the test set with few positives.",
+      "op": "split",
+      "test_size": 0.2,
+      "stratify": true,
+      "random_state": 42
+    },
+    {
+      "reason": "Text categories with two to twelve values and no missing values. 'unknown' is kept as a category of its own because a client whose job or contact is unknown may behave differently.",
+      "op": "encode",
+      "columns": [
+        "job",
+        "marital",
+        "education",
+        "default",
+        "housing",
+        "loan",
+        "contact",
+        "poutcome"
+      ],
+      "method": "onehot"
+    },
+    {
+      "reason": "balance, campaign, pdays and previous are heavily skewed with outliers (pdays is -1 for the 82% never contacted), so the robust scaler is used. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+      "op": "scale",
+      "columns": [
+        "age",
+        "balance",
+        "campaign",
+        "pdays",
+        "previous"
+      ],
+      "method": "robust"
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "target": "current_annual_salary",
+  "task_type": "regression",
+  "model_family": "any",
+  "steps": [
+    {
+      "reason": "full_name is personal data and unique per employee. department_name repeats department one to one. underfilled_job_title is 88% missing. date_first_hired is a date stored as text that no step can parse, and year_first_hired holds the same information. 2016_gross_pay_received is what the employee was paid for the salary being predicted (correlation 0.89), so it would leak the target.",
+      "op": "drop_columns",
+      "columns": [
+        "full_name",
+        "department_name",
+        "underfilled_job_title",
+        "date_first_hired",
+        "2016_gross_pay_received"
+      ]
+    },
+    {
+      "reason": "The target is continuous, so there are no classes to stratify on; a seeded random 80/20 split keeps the run reproducible.",
+      "op": "split",
+      "test_size": 0.2,
+      "stratify": false,
+      "random_state": 42
+    },
+    {
+      "reason": "17 genders are missing; the most frequent value is a safe fill for so few rows.",
+      "op": "impute",
+      "columns": [
+        "gender"
+      ],
+      "strategy": "most_frequent",
+      "add_indicator": false
+    },
+    {
+      "reason": "32% are missing while only 6 rows hold an explicit 0, so a missing overtime pay evidently means no overtime and the fill is 0.",
+      "op": "impute",
+      "columns": [
+        "2016_overtime_pay"
+      ],
+      "strategy": "constant",
+      "fill_value": 0,
+      "add_indicator": false
+    },
+    {
+      "reason": "Text categories with two to 37 values; one-hot is the family-neutral encoding.",
+      "op": "encode",
+      "columns": [
+        "gender",
+        "department",
+        "assignment_category"
+      ],
+      "method": "onehot"
+    },
+    {
+      "reason": "694 divisions and 385 position titles; the position is the strongest signal for pay, so the 50 most frequent are kept and the rest are grouped.",
+      "op": "encode",
+      "columns": [
+        "division",
+        "employee_position_title"
+      ],
+      "method": "onehot",
+      "max_categories": 50
+    },
+    {
+      "reason": "Overtime pay is skewed with many outliers. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+      "op": "scale",
+      "columns": [
+        "2016_overtime_pay",
+        "year_first_hired"
+      ],
+      "method": "robust"
+    }
+  ]
+}

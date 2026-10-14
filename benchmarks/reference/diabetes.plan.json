@@ -1,0 +1,29 @@
+{
+  "target": "class",
+  "task_type": "classification",
+  "model_family": "any",
+  "steps": [
+    {
+      "reason": "Stratified: 35% of the patients are positive and the table has only 768 rows.",
+      "op": "split",
+      "test_size": 0.2,
+      "stratify": true,
+      "random_state": 42
+    },
+    {
+      "reason": "All eight measurements are numeric on very different scales and insu is skewed, so the robust scaler is used. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+      "op": "scale",
+      "columns": [
+        "preg",
+        "plas",
+        "pres",
+        "skin",
+        "insu",
+        "mass",
+        "pedi",
+        "age"
+      ],
+      "method": "robust"
+    }
+  ]
+}

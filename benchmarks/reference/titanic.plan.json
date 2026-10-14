@@ -1,0 +1,74 @@
+{
+  "target": "survived",
+  "task_type": "classification",
+  "model_family": "any",
+  "steps": [
+    {
+      "reason": "name is personal data and unique per passenger; ticket and home.dest are high-cardinality text with no usable structure; cabin is 78% missing. boat (lifeboat) is assigned only to people who survived and body only to people who died, so both leak the target and would not exist when predicting survival.",
+      "op": "drop_columns",
+      "columns": [
+        "name",
+        "ticket",
+        "cabin",
+        "boat",
+        "body",
+        "home.dest"
+      ]
+    },
+    {
+      "reason": "Stratified so the 38% survivors are represented in the same share in train and test.",
+      "op": "split",
+      "test_size": 0.2,
+      "stratify": true,
+      "random_state": 42
+    },
+    {
+      "reason": "20% of the ages are missing; the median is robust to the long right tail. The indicator keeps the fact that age was unknown: ages are missing for 29% of the third-class passengers against 6% of the second-class ones, and survival differs (28% against 41%).",
+      "op": "impute",
+      "columns": [
+        "age"
+      ],
+      "strategy": "median",
+      "add_indicator": true
+    },
+    {
+      "reason": "One fare is missing; the median is robust to the very skewed fares.",
+      "op": "impute",
+      "columns": [
+        "fare"
+      ],
+      "strategy": "median",
+      "add_indicator": false
+    },
+    {
+      "reason": "Two embarkation ports are missing; the most frequent port is the safe fill.",
+      "op": "impute",
+      "columns": [
+        "embarked"
+      ],
+      "strategy": "most_frequent",
+      "add_indicator": false
+    },
+    {
+      "reason": "Text categories with two or three values; one-hot avoids an invented order.",
+      "op": "encode",
+      "columns": [
+        "sex",
+        "embarked"
+      ],
+      "method": "onehot"
+    },
+    {
+      "reason": "Fare, sibsp and parch are skewed with outliers, so the robust scaler is used for all numeric columns. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+      "op": "scale",
+      "columns": [
+        "pclass",
+        "age",
+        "sibsp",
+        "parch",
+        "fare"
+      ],
+      "method": "robust"
+    }
+  ]
+}

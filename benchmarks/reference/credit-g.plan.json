@@ -1,0 +1,48 @@
+{
+  "target": "class",
+  "task_type": "classification",
+  "model_family": "any",
+  "steps": [
+    {
+      "reason": "Stratified: 30% of the applicants are bad credit risks and the sample is small.",
+      "op": "split",
+      "test_size": 0.2,
+      "stratify": true,
+      "random_state": 42
+    },
+    {
+      "reason": "All categorical columns are text with few values and no missing values; one-hot keeps them usable by every model family without an invented order.",
+      "op": "encode",
+      "columns": [
+        "checking_status",
+        "credit_history",
+        "purpose",
+        "savings_status",
+        "employment",
+        "personal_status",
+        "other_parties",
+        "property_magnitude",
+        "other_payment_plans",
+        "housing",
+        "job",
+        "own_telephone",
+        "foreign_worker"
+      ],
+      "method": "onehot"
+    },
+    {
+      "reason": "credit_amount and duration have many outliers, so the robust scaler is used. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+      "op": "scale",
+      "columns": [
+        "duration",
+        "credit_amount",
+        "installment_commitment",
+        "residence_since",
+        "age",
+        "existing_credits",
+        "num_dependents"
+      ],
+      "method": "robust"
+    }
+  ]
+}
