@@ -87,14 +87,17 @@ def require_prices(table: PriceTable, models: list[str], path: Path) -> dict[str
     return {model: table.models[model] for model in models}
 
 
+def token_cost(input_tokens: int, output_tokens: int, price: ModelPrice) -> float:
+    return (
+        input_tokens * price.input_per_million + output_tokens * price.output_per_million
+    ) / _PER_MILLION
+
+
 def price_of_usage(usage: TokenUsage | None, price: ModelPrice) -> float | None:
     """The cost of one run's token use; None when the provider reported no usage."""
     if usage is None:
         return None
-    return (
-        usage.input_tokens * price.input_per_million
-        + usage.output_tokens * price.output_per_million
-    ) / _PER_MILLION
+    return token_cost(usage.input_tokens, usage.output_tokens, price)
 
 
 @dataclass(frozen=True)
@@ -107,10 +110,7 @@ class RunEstimate:
     output_tokens: int
 
     def cost(self, price: ModelPrice) -> float:
-        return (
-            self.input_tokens * price.input_per_million
-            + self.output_tokens * price.output_per_million
-        ) / _PER_MILLION
+        return token_cost(self.input_tokens, self.output_tokens, price)
 
 
 def estimate_agent_run(
