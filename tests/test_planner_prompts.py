@@ -109,6 +109,43 @@ def test_system_prompt_states_the_rules():
         assert expected in prompt, expected
 
 
+def test_system_prompt_lists_cast_to_category_from_the_registry():
+    [spec] = [s for s in list_ops() if s.name == "cast_to_category"]
+
+    prompt = build_system_prompt()
+
+    assert f"- `cast_to_category` (stateless): {spec.description}" in prompt
+
+
+def test_system_prompt_says_when_to_cast_numbers_to_categories():
+    prompt = build_system_prompt()
+
+    for expected in (
+        "stored as numbers",
+        "an hour, a month, a weekday, a code or a type number",
+        "`cast_to_category`",
+        "then encode",
+        "Do not scale a cast column",
+    ):
+        assert expected in prompt, expected
+
+
+def test_system_prompt_presents_the_low_cardinality_warning_as_a_hint_to_judge():
+    prompt = build_system_prompt()
+
+    assert "`low_cardinality_numeric`" in prompt
+    assert "only a hint" in prompt
+    assert "name of the column and the target" in prompt
+    assert "a count (rooms, children" in prompt
+    assert "not sure and the choice would change the result, ask" in prompt
+
+
+def test_system_prompt_forbids_casting_the_target():
+    prompt = build_system_prompt()
+
+    assert "(drop_columns, cast_to_category, impute, encode, scale)" in prompt
+
+
 def test_system_prompt_is_stable():
     assert build_system_prompt() == build_system_prompt()
 
