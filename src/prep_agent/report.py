@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from jinja2 import Environment, PackageLoader, StrictUndefined
 
 from prep_agent.agent import AgentTrace
-from prep_agent.baseline import BaselineResult, metric_label
+from prep_agent.baseline import SMALL_TRAIN_ROWS, BaselineResult, metric_label
 from prep_agent.executor import ExecutionResult
 from prep_agent.plan import (
     DedupeStep,
@@ -65,13 +65,15 @@ def render_report(
     plan_issues: list[ValidationIssue],
     trace: AgentTrace | None,
     baseline: BaselineResult | None,
+    small_train_rows: int = SMALL_TRAIN_ROWS,
 ) -> str:
     """Render report.md for one run.
 
     `plan_issues` is used when there is no `result` (the plan never executed); a result brings
     its own issues. `trace` is None for runs with a hand-written plan. A failed run gets a
     failure section and no baseline, whatever `baseline` holds; for a successful run `baseline`
-    None means the baseline was switched off.
+    None means the baseline was switched off. Scores computed on fewer than `small_train_rows`
+    train rows come with a warning.
     """
     failed = info.status == "failed"
     result_issues = result.result_issues if result is not None else []
@@ -95,6 +97,9 @@ def render_report(
         result_issues=result_issues,
         baseline=None if failed else baseline,
         baseline_table=_baseline_table(baseline) if baseline is not None else None,
+        small_data=baseline is not None
+        and baseline.skipped_reason is None
+        and baseline.n_rows < small_train_rows,
     )
 
 

@@ -32,6 +32,8 @@ from sklearn.model_selection import KFold, StratifiedKFold, cross_validate
 from sklearn.pipeline import Pipeline
 
 DEFAULT_FOLDS = 5
+# Below this many train rows the report warns that the scores are noisy.
+SMALL_TRAIN_ROWS = 100
 RANDOM_STATE = 42
 _MIN_FOLDS = 2
 # sklearn reports these as negated scores so that higher is always better.

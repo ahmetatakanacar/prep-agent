@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from prep_agent.agent import AgentTrace, LLMCallRecord
-from prep_agent.baseline import BaselineResult, BaselineScore, ModelBaseline
+from prep_agent.baseline import SMALL_TRAIN_ROWS, BaselineResult, BaselineScore, ModelBaseline
 from prep_agent.executor import execute
 from prep_agent.llm.base import TokenUsage
 from prep_agent.plan import Plan
@@ -354,6 +354,44 @@ def test_regression_metric_headers_show_which_direction_is_better(executed):
     assert "| ridge | 1.5000 ± 0.2500 | 1.5000 ± 0.2500 | 1.5000 ± 0.2500 |" in text
     assert "Higher is better" not in text
     assert "lower is better" not in text
+
+
+# --- small data ---
+
+
+def baseline_text(executed, *, n_rows, **kwargs) -> str:
+    baseline = make_baseline().model_copy(update={"n_rows": n_rows})
+    return section(render(executed, baseline=baseline, **kwargs), "Baseline")
+
+
+def test_the_small_data_threshold_defaults_to_100():
+    assert SMALL_TRAIN_ROWS == 100
+
+
+def test_a_small_train_set_gets_a_warning_at_the_top_of_the_baseline_section(executed):
+    text = baseline_text(executed, n_rows=SMALL_TRAIN_ROWS - 1)
+
+    first = text.strip().splitlines()[0]
+    assert "99 training rows" in first
+    assert "not reliable" in first
+    assert "between folds" in first
+
+
+def test_a_train_set_at_the_threshold_gets_no_warning(executed):
+    assert "not reliable" not in baseline_text(executed, n_rows=SMALL_TRAIN_ROWS)
+    assert "not reliable" not in baseline_text(executed, n_rows=5000)
+
+
+def test_the_threshold_can_be_changed(executed):
+    assert "not reliable" in baseline_text(executed, n_rows=300, small_train_rows=500)
+    assert "not reliable" not in baseline_text(executed, n_rows=16, small_train_rows=10)
+
+
+def test_no_small_data_warning_without_scores(executed):
+    skipped = make_baseline().model_copy(update={"skipped_reason": "too few rows", "models": []})
+
+    assert "not reliable" not in section(render(executed, baseline=skipped), "Baseline")
+    assert "not reliable" not in section(render(executed, baseline=None), "Baseline")
 
 
 # --- notes ---

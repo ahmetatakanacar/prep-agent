@@ -58,7 +58,7 @@ The agent does not choose a model. On a successful run it only computes referenc
 - classification: a dummy model (most frequent class), logistic regression and a random forest; accuracy, macro F1 and, for a binary target, ROC AUC
 - regression: a dummy model (mean), ridge and a random forest; R², RMSE and MAE
 
-The dummy model ignores the features, so it is the floor the others should beat. Cross-validation runs on the raw train split with a fresh copy of the impute, encode and scale steps in every fold, so those steps never see a fold's validation rows. The test set is not used. A model that cannot run on the prepared data (a column left with missing values or text, for example) is listed as skipped with the reason, and if the target allows no cross-validation at all the whole baseline is skipped. Pass `--no-baseline` to `run` or `prepare` to leave the baseline out; the report then says so.
+The dummy model ignores the features, so it is the floor the others should beat. Metric headers carry an arrow (↑ higher is better, ↓ lower is better), and with fewer than 100 train rows the report warns that the scores are not reliable. Cross-validation runs on the raw train split with a fresh copy of the impute, encode and scale steps in every fold, so those steps never see a fold's validation rows. The test set is not used. A model that cannot run on the prepared data (a column left with missing values or text, for example) is listed as skipped with the reason, and if the target allows no cross-validation at all the whole baseline is skipped. Pass `--no-baseline` to `run` or `prepare` to leave the baseline out; the report then says so.
 
 ## LLM provider
 

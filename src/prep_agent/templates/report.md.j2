@@ -94,6 +94,10 @@ Baseline scores were not computed (`--no-baseline`).
 {% elif baseline.skipped_reason %}
 The baseline was skipped: {{ baseline.skipped_reason | cell }}.
 {% else %}
+{% if small_data %}
+> **Small data:** only {{ baseline.n_rows }} training rows. These scores are not reliable at this size, and the difference between folds can be large.
+
+{% endif %}
 Cross-validation on the train set ({{ baseline.n_rows }} rows): {{ baseline.n_folds }}-fold{{ " stratified" if baseline.task_type == "classification" else "" }}, shuffled, random_state {{ baseline.random_state }}. Cells are the mean ± the standard deviation over the folds.
 
 The dummy model ignores the features and always predicts the {{ "most frequent class" if baseline.task_type == "classification" else "training mean" }}, so its score is the reference: the other models only show the data is usable if they beat it.
