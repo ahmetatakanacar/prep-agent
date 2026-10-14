@@ -1,0 +1,128 @@
+{% macro issue_table(issues) %}
+| Severity | Code | Step | Column | Message |
+|---|---|---:|---|---|
+{% for issue in issues %}
+| {{ issue.severity }} | {{ issue.code }} | {{ "" if issue.step_index is none else issue.step_index }} | {{ (issue.column or "") | cell }} | {{ issue.message | cell }} |
+{% endfor %}
+{% endmacro %}
+# Preparation report
+
+- **Goal:** {{ goal | cell if goal else "not given (the plan was written by hand)" }}
+- **Input:** {{ input_name | cell }} (sha256 {{ sha }})
+- **Date:** {{ date }}
+- **Model:** {{ llm.model }}
+- **Token usage:** {{ llm.tokens }}
+{% if plan is not none %}
+- **Target:** {{ plan.target | cell }} ({{ plan.task_type }}, model family {{ plan.model_family }})
+{% endif %}
+- **Status:** {{ info.status }}
+{% if failed %}
+
+## Failure
+
+This run failed: {{ failure_reason | cell }}
+{% endif %}
+
+## Data summary
+
+| | Rows | Columns |
+|---|---:|---:|
+| Input | {{ info.rows.before }} | {{ info.columns.before }} |
+{% if has_result %}
+| Prepared (train + test) | {{ info.rows.train + info.rows.test }} | {{ info.columns.train }} |
+| Train | {{ info.rows.train }} | {{ info.columns.train }} |
+| Test | {{ info.rows.test }} | {{ info.columns.test }} |
+{% endif %}
+
+{% if has_result %}
+{% if dropped %}
+- **Dropped columns:** {{ dropped | join(", ") | cell }}
+{% else %}
+- **Dropped columns:** none
+{% endif %}
+{% else %}
+No train or test set was produced.
+{% endif %}
+{% if qa %}
+
+## Questions and answers
+
+{% for record in qa %}
+- **{{ record.question.question | cell }}** Answer: {{ record.answer | cell }}. Why it was asked: {{ record.question.reason | cell }}
+{% endfor %}
+{% endif %}
+{% if plan is not none %}
+
+## Plan
+
+| Step | Op | Columns | Parameters | Reason |
+|---:|---|---|---|---|
+{% for row in plan_rows %}
+| {{ loop.index0 }} | {{ row.op }} | {{ row.columns | cell }} | {{ row.parameters | cell }} | {{ row.reason | cell }} |
+{% endfor %}
+{% endif %}
+
+## Validation
+
+{% if plan is none %}
+No plan was produced, so nothing was validated.
+{% else %}
+{% if plan_issues %}
+Plan validation: {{ plan_issues | length }} issue(s).
+
+{{ issue_table(plan_issues) | trim }}
+{% else %}
+Plan validation: no issues.
+{% endif %}
+
+{% if not has_result %}
+Result validation: not run (the plan did not execute).
+{% elif result_issues %}
+Result validation: {{ result_issues | length }} issue(s).
+
+{{ issue_table(result_issues) | trim }}
+{% else %}
+Result validation: no issues.
+{% endif %}
+{% endif %}
+{% if not failed %}
+
+## Baseline
+
+{% if baseline is none %}
+Baseline scores were not computed (`--no-baseline`).
+{% elif baseline.skipped_reason %}
+The baseline was skipped: {{ baseline.skipped_reason | cell }}.
+{% else %}
+Cross-validation on the train set ({{ baseline.n_rows }} rows): {{ baseline.n_folds }}-fold{{ " stratified" if baseline.task_type == "classification" else "" }}, shuffled, random_state {{ baseline.random_state }}. Cells are the mean ± the standard deviation over the folds.{{ " rmse and mae: lower is better; the other metrics: higher is better." if "rmse" in baseline.metrics else " Higher is better." }}
+
+The dummy model ignores the features and always predicts the {{ "most frequent class" if baseline.task_type == "classification" else "training mean" }}, so its score is the reference: the other models only show the data is usable if they beat it.
+
+{% if baseline_table %}
+| Model | {{ baseline_table.metrics | join(" | ") }} |
+|---|{{ "---:|" * (baseline_table.metrics | length) }}
+{% for row in baseline_table.rows %}
+| {{ row.name }} | {{ row.cells | join(" | ") }} |
+{% endfor %}
+{% endif %}
+{% set skipped = baseline.models | selectattr("skipped_reason") | list %}
+{% if skipped %}
+
+Skipped models:
+
+{% for model in skipped %}
+- {{ model.name }}: {{ model.skipped_reason | cell }}
+{% endfor %}
+{% endif %}
+{% endif %}
+{% endif %}
+{% if has_result %}
+
+## Notes
+
+- Stateful steps (impute, encode, scale) were fit on the train set only; the test set was only transformed with what train taught them.
+- The test set was not touched by anything else: no baseline and no model comparison uses it.
+{% if baseline is not none and not failed and not baseline.skipped_reason %}
+- The baselines are computed by cross-validation on the train set. Every fold fits a fresh copy of the stateful steps on its own training part, so nothing leaks from the validation rows.
+{% endif %}
+{% endif %}

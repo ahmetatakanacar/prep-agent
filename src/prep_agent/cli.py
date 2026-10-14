@@ -18,17 +18,15 @@ from prep_agent.llm.base import LLMError
 from prep_agent.llm.factory import create_llm_client
 from prep_agent.llm.ping import PING_SYSTEM, PING_USER, PingReply
 from prep_agent.plan import (
-    DedupeStep,
-    DropMissingTargetStep,
     EncodeStep,
     ImputeStep,
     Plan,
     ScaleStep,
-    SplitStep,
     Step,
 )
 from prep_agent.planner import Question
 from prep_agent.profiler import DatasetProfile, ProfilerError, load_csv, profile_dataframe
+from prep_agent.report import step_columns
 from prep_agent.runs import RunExistsError, save_run
 from prep_agent.validators import ValidationIssue, has_errors, validate_plan
 
@@ -360,7 +358,7 @@ def _print_plan(console: Console, plan: Plan) -> None:
         table.add_row(
             Text(str(index)),
             Text(_op_label(step)),
-            Text(_step_columns(step, plan.target)),
+            Text(step_columns(step, plan.target)),
             Text(step.reason),
         )
     console.print(table)
@@ -372,16 +370,6 @@ def _op_label(step: Step) -> str:
     if isinstance(step, EncodeStep | ScaleStep):
         return f"{step.op} ({step.method})"
     return step.op
-
-
-def _step_columns(step: Step, target: str) -> str:
-    if isinstance(step, DedupeStep):
-        return ", ".join(step.subset) if step.subset else "all columns"
-    if isinstance(step, DropMissingTargetStep):
-        return target
-    if isinstance(step, SplitStep):
-        return ""
-    return ", ".join(step.columns)
 
 
 def _fail(message: str) -> NoReturn:
