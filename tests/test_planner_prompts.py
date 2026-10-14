@@ -274,3 +274,14 @@ def test_system_prompt_tells_any_to_use_onehot_because_ordinal_suits_only_trees(
     [line] = [ln for ln in prompt.splitlines() if ln.startswith("- any:")]
     assert "onehot" in line
     assert "ordinal" in line and "only" in line and "tree" in line
+
+
+def test_system_prompt_tells_any_to_scale_because_the_model_may_be_linear():
+    prompt = build_system_prompt()
+
+    [line] = [ln.lower() for ln in prompt.splitlines() if ln.startswith("- any:")]
+    assert "skip optional" not in line
+    assert "scale numeric columns" in line
+    assert "robust" in line and "outliers" in line
+    assert "linear" in line
+    assert "does not hurt tree models" in line
