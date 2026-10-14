@@ -47,7 +47,7 @@ This writes `runs/<run_id>/` with `profile.json`, `plan.json`, `train.csv`, `tes
 python runs/<run_id>/pipeline.py tests/fixtures/customers.csv --out-dir out
 ```
 
-It writes `train.csv` and `test.csv` to `--out-dir` (the current directory if left out), identical to the files in the run folder when run on the same input with the same pandas and scikit-learn versions. The functions `apply_stateless_steps`, `split_train_test`, `build_pipeline` and `prepare` can also be imported and called one by one. The header of the script records the prep-agent version, the run id, the sha256 of the input, the target, the task type, the model family and the library versions it was generated with, and the reason of every step stands above its code as a comment. Each op writes its own code (`codegen` in its registry entry), and column names and parameters are written as literals, never as code. The script is only written for runs with status `ok`.
+It writes `train.csv` and `test.csv` to `--out-dir` (the current directory if left out). It stops with an error if either file already exists; `--force` overwrites them. If the input file is not the one the run was made from (its sha256 differs from the one in the header), it prints a warning to stderr and carries on. The files are identical to the files in the run folder when run on the same input with the same pandas and scikit-learn versions. The functions `apply_stateless_steps`, `split_train_test`, `build_pipeline` and `prepare` can also be imported and called one by one. The header of the script records the prep-agent version, the run id, the sha256 of the input, the target, the task type, the model family and the library versions it was generated with, and the reason of every step stands above its code as a comment. Each op writes its own code (`codegen` in its registry entry), and column names and parameters are written as literals, never as code. The script is only written for runs with status `ok`.
 
 Let the LLM write the plan. `prepare` needs an LLM provider (see below). It profiles the data, asks the model for a plan, asks you when a decision is open, validates the plan, sends it back to the model if it has errors, then runs it and saves the same run folder as `run`:
 
@@ -102,6 +102,7 @@ $env:PREP_AGENT_RUN_LLM_TESTS="1"; uv run pytest -m llm -v -s
 
 ## Known limitations
 
+- A very long column name (about 80 characters or more) can make a line of the generated `pipeline.py` longer than the lint limit, so `ruff check` may report E501 for it. The script still runs.
 - PII detection relies on a list of column-name parts and on email and phone value patterns. Email addresses or phone numbers inside free text are not detected.
 
 ## Development
