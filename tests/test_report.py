@@ -480,12 +480,12 @@ def test_a_failed_run_without_a_result_has_the_reason_and_no_baseline(executed):
 
 def test_a_failed_run_with_result_errors_names_the_codes(executed):
     plan, result = executed
-    error = ValidationIssue(code="train_test_overlap", severity="error", message="shared rows")
+    error = ValidationIssue(code="target_altered", severity="error", message="target changed")
     failed = dataclasses.replace(result, result_issues=[error])
 
     report = render(executed, info=make_info(status="failed"), result=failed)
 
-    assert "train_test_overlap" in section(report, "Failure")
+    assert "target_altered" in section(report, "Failure")
     assert "## Baseline" not in report
     assert "| Train | 16 | 6 |" in report
 

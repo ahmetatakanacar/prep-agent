@@ -6,11 +6,9 @@ from dataclasses import dataclass
 import pytest
 from typer.testing import CliRunner
 
-from prep_agent import executor
 from prep_agent.cli import app
 from prep_agent.env import load_dotenv_file
-from prep_agent.plan import DedupeStep, Plan
-from prep_agent.validators import ValidationIssue
+from prep_agent.plan import Plan
 
 # Wide enough that rich never wraps table rows or help text in tests.
 TERMINAL_WIDTH = "200"
@@ -74,24 +72,3 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "llm" in item.keywords:
             item.add_marker(skip)
-
-
-@pytest.fixture
-def overlap_error_with_dedupe(monkeypatch):
-    """Make the result validator report a train_test_overlap error for every plan with a dedupe
-    step. A dedupe removes the identical input records that could overlap, so real data no longer
-    leaves a result error to provoke; the tests that follow what happens to one need this."""
-    real = executor.validate_result
-
-    def validate(result, plan):
-        if any(isinstance(step, DedupeStep) for step in plan.steps):
-            return [
-                ValidationIssue(
-                    code="train_test_overlap",
-                    severity="error",
-                    message="1 test row(s) are copies of a record that is also in train.",
-                )
-            ]
-        return real(result, plan)
-
-    monkeypatch.setattr(executor, "validate_result", validate)

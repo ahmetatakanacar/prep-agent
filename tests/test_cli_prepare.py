@@ -347,32 +347,6 @@ def test_max_revisions_zero_stops_at_the_first_error(invoke_cli, monkeypatch, tm
     assert len(llm.calls) == 1
 
 
-def test_a_result_error_that_stays_saves_the_frames_as_failed(
-    invoke_cli, monkeypatch, tmp_path, overlap_error_with_dedupe
-):
-    rows = ["id,x,t"] + [f"{i},{(i // 2) % 2},{i % 2}" for i in range(40)]
-    csv = tmp_path / "dups.csv"
-    csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
-    steps = [
-        {"op": "dedupe", "keep": "first", "reason": "r"},
-        {"op": "drop_columns", "columns": ["id"], "reason": "r"},
-        {"op": "split", "stratify": True, "reason": "r"},
-    ]
-    plan = {"target": "t", "task_type": "classification", "model_family": "any", "steps": steps}
-    use_llm(monkeypatch, [plan_reply(plan)])
-
-    result = invoke_cli(
-        prepare_args(tmp_path, "--non-interactive", "--max-revisions", "0", csv=str(csv))
-    )
-
-    assert result.exit_code == 1
-    assert "train_test_overlap" in result.output
-    run_dir = only_run(tmp_path)
-    assert read_json(run_dir / "run.json")["status"] == "failed"
-    assert (run_dir / "train.csv").exists()
-    assert (run_dir / "llm_trace.json").exists()
-
-
 def test_an_llm_failure_after_a_plan_still_saves_the_trace(invoke_cli, monkeypatch, tmp_path):
     use_llm(monkeypatch, [plan_reply(plan_with_impute_before_split()), LLMAPIError("rate limited")])
 

@@ -71,8 +71,8 @@ IssueCode = Literal[
     "empty_split",
     "column_mismatch",
     "target_altered",
-    "train_test_overlap",
     # result warnings
+    "train_test_overlap",
     "nan_in_output",
     "non_numeric_output",
     "possible_target_leakage",
@@ -110,9 +110,7 @@ SEVERITY: dict[IssueCode, Severity] = {
     "empty_split": "error",
     "column_mismatch": "error",
     "target_altered": "error",
-    # An error when the plan has a dedupe step, a warning otherwise; the result validator
-    # passes the severity explicitly. The entry below is the error severity.
-    "train_test_overlap": "error",
+    "train_test_overlap": "warning",
     "nan_in_output": "warning",
     "non_numeric_output": "warning",
     "possible_target_leakage": "warning",

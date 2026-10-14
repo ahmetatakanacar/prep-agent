@@ -11,6 +11,7 @@ from prep_agent.result_validator import (
     LEAKAGE_CORRELATION_THRESHOLD,
     validate_result,
 )
+from prep_agent.validators import SEVERITY, has_errors
 
 # Features a and b have an absolute correlation with t of 0.0 and about 0.63 in train.
 TRAIN = pd.DataFrame(
@@ -138,13 +139,38 @@ def test_overlap_is_a_warning_without_dedupe(make_plan):
     assert issues[0].severity == "warning"
 
 
-def test_overlap_is_an_error_with_dedupe(make_plan):
+def test_overlap_is_a_warning_even_with_dedupe(make_plan):
     plan = make_plan({"op": "dedupe", "keep": "first"}, split())
 
     issues = issues_for(make_result(test=overlapping_test()), plan)
 
     assert codes(issues) == ["train_test_overlap"]
-    assert issues[0].severity == "error"
+    assert issues[0].severity == "warning"
+    assert not has_errors(issues)
+
+
+def test_the_overlap_message_names_identical_input_records_and_a_dedupe_before_the_split(
+    make_plan,
+):
+    [issue] = issues_for(make_result(test=overlapping_test()), make_plan(split()))
+
+    assert "1 test row(s)" in issue.message
+    assert "identical in every column of the input" in issue.message
+    assert "dedupe step before the split" in issue.message
+
+
+def test_the_overlap_message_is_the_same_when_the_plan_has_a_dedupe(make_plan):
+    plain = issues_for(make_result(test=overlapping_test()), make_plan(split()))
+    deduped = issues_for(
+        make_result(test=overlapping_test()),
+        make_plan({"op": "dedupe", "keep": "first"}, split()),
+    )
+
+    assert plain[0].message == deduped[0].message
+
+
+def test_train_test_overlap_has_warning_severity_in_the_table():
+    assert SEVERITY["train_test_overlap"] == "warning"
 
 
 def test_rows_equal_at_the_split_but_from_different_input_records_are_not_an_overlap(make_plan):
@@ -188,7 +214,7 @@ def test_rows_equal_at_the_split_are_an_overlap_even_if_the_output_differs(make_
 
     issues = issues_for(make_result(test=test, split_test=split_test), plan)
     assert codes(issues) == ["train_test_overlap"]
-    assert issues[0].severity == "error"
+    assert issues[0].severity == "warning"
 
 
 def test_same_features_with_another_target_is_not_an_overlap(make_plan):

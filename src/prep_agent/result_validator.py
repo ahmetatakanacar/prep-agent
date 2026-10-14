@@ -6,12 +6,12 @@ Rules, in the order their issues are reported (columns in frame order):
 - `column_mismatch` (error): train and test differ in columns or in their order.
 - `target_altered` (error): the target in the output differs from the target right after the
   split, so something in the pipeline touched it.
-- `train_test_overlap`: the same record of the raw input is in both train and test. Records are
-  rows that are equal in every column of the input; the executor follows each row's record
-  through the stateless steps and the split. Rows that only look alike later (a dropped column
-  that told them apart, one-hot grouping, imputation) are different records, so they are not
-  leakage. An error when the plan has a dedupe step, which should have removed the copies, and
-  a warning otherwise.
+- `train_test_overlap` (warning): the same record of the raw input is in both train and test.
+  Records are rows that are equal in every column of the input; the executor follows each
+  row's record through the stateless steps and the split. Rows that only look alike later (a
+  dropped column that told them apart, one-hot grouping, imputation) are different records, so
+  they are not leakage. Always a warning: identical rows can be real repeated observations,
+  and a dedupe step before the split removes the copies when they are not.
 - `nan_in_output` (warning): a feature column still has missing values.
 - `non_numeric_output` (warning): a feature column is not numeric.
 - `possible_target_leakage` (warning): for a numeric target, a feature whose absolute
@@ -29,8 +29,8 @@ from typing import TYPE_CHECKING
 import pandas as pd
 from pandas.api import types as pdt
 
-from prep_agent.plan import DedupeStep, Plan, SplitStep
-from prep_agent.validators import SEVERITY, IssueCode, Severity, ValidationIssue
+from prep_agent.plan import Plan, SplitStep
+from prep_agent.validators import SEVERITY, IssueCode, ValidationIssue
 
 if TYPE_CHECKING:
     from prep_agent.executor import ExecutionResult
@@ -57,7 +57,7 @@ def validate_result(result: "ExecutionResult", plan: Plan) -> list[ValidationIss
 
     issues: list[ValidationIssue] = []
     issues += _check_target(result, target)
-    issues += _check_overlap(result, plan)
+    issues += _check_overlap(result)
     features = [c for c in train.columns if c != target]
     issues += _check_missing(train, test, features)
     issues += _check_numeric(train, test, features)
@@ -66,12 +66,8 @@ def validate_result(result: "ExecutionResult", plan: Plan) -> list[ValidationIss
     return issues
 
 
-def _issue(
-    code: IssueCode, message: str, column: str | None = None, severity: Severity | None = None
-) -> ValidationIssue:
-    return ValidationIssue(
-        code=code, severity=severity or SEVERITY[code], column=column, message=message
-    )
+def _issue(code: IssueCode, message: str, column: str | None = None) -> ValidationIssue:
+    return ValidationIssue(code=code, severity=SEVERITY[code], column=column, message=message)
 
 
 def _check_target(result: "ExecutionResult", target: str) -> list[ValidationIssue]:
@@ -96,23 +92,17 @@ def _same_values(actual: pd.Series, expected: pd.Series) -> bool:
     return actual.reset_index(drop=True).equals(expected.reset_index(drop=True))
 
 
-def _check_overlap(result: "ExecutionResult", plan: Plan) -> list[ValidationIssue]:
+def _check_overlap(result: "ExecutionResult") -> list[ValidationIssue]:
     train_records = set(result.split_train_records.tolist())
     n_shared = sum(record in train_records for record in result.split_test_records.tolist())
     if n_shared == 0:
         return []
-    has_dedupe = any(isinstance(step, DedupeStep) for step in plan.steps)
     return [
         _issue(
             "train_test_overlap",
-            f"{n_shared} test row(s) are copies of records that are also in train (equal in "
-            "every column of the input); "
-            + (
-                "the plan has a dedupe step, which should have removed them."
-                if has_dedupe
-                else "add a dedupe step before the split if duplicates are not intended."
-            ),
-            severity="error" if has_dedupe else "warning",
+            f"{n_shared} test row(s) are copies of records that are also in train (identical "
+            "in every column of the input); add a dedupe step before the split if the "
+            "duplicates are not intended.",
         )
     ]
 
