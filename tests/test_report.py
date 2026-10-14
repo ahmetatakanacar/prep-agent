@@ -127,6 +127,7 @@ def test_all_sections_are_there_for_a_full_run(executed):
         "## Validation",
         "## Baseline",
         "## Notes",
+        "## Reproduce",
     ]
 
 
@@ -525,3 +526,28 @@ def test_rendering_is_deterministic(executed):
     assert first == second
     assert first.endswith("\n") and not first.endswith("\n\n")
     assert "\r" not in first
+
+
+def test_reproduce_explains_how_to_run_pipeline_py(executed):
+    report = render(executed, baseline=make_baseline())
+
+    text = section(report, "Reproduce")
+    assert "pipeline.py" in text
+    assert "python pipeline.py <input.csv> --out-dir <folder>" in text
+    assert "train.csv" in text and "test.csv" in text
+    assert "pandas and scikit-learn" in text
+    assert "customers.csv" in text
+    assert SHA[:12] in text
+
+
+def test_a_failed_run_has_no_reproduce_section(executed):
+    report = render(executed, info=make_info(status="failed", error="boom"))
+
+    assert "## Reproduce" not in report
+    assert "pipeline.py" not in report
+
+
+def test_a_run_without_a_plan_has_no_reproduce_section(executed):
+    report = render(executed, info=make_info(status="failed", error="boom"), plan=None, result=None)
+
+    assert "## Reproduce" not in report

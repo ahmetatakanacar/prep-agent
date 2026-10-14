@@ -130,3 +130,15 @@ Skipped models:
 - The baselines are computed by cross-validation on the train set. Every fold fits a fresh copy of the stateful steps on its own training part, so nothing leaks from the validation rows.
 {% endif %}
 {% endif %}
+{% if not failed %}
+
+## Reproduce
+
+`pipeline.py` in this run folder repeats the whole preparation on the raw input file. It needs only pandas and scikit-learn; prep-agent does not have to be installed.
+
+```
+python pipeline.py <input.csv> --out-dir <folder>
+```
+
+It writes `train.csv` and `test.csv` to the folder (the current directory when `--out-dir` is left out). Run on the same input file ({{ input_name | cell }}, sha256 {{ sha }}) with the pandas and scikit-learn versions named in the header of the script, they are identical to the train and test files in this run folder.
+{% endif %}
