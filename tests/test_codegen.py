@@ -18,7 +18,7 @@ import sklearn
 from prep_agent.codegen import generate_pipeline_script
 from prep_agent.executor import execute
 from prep_agent.plan import Plan
-from prep_agent.profiler import load_csv, profile_dataframe
+from prep_agent.profiler import NA_VALUES, load_csv, profile_dataframe
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CUSTOMERS_CSV = FIXTURES / "customers.csv"
@@ -695,3 +695,47 @@ def test_generated_script_passes_ruff(tmp_path, name, config):
 
     assert check.returncode == 0, check.stdout + check.stderr
     assert fmt.returncode == 0, fmt.stdout + fmt.stderr
+
+
+# --- the text "None" ---
+
+NONE_PLAN = {
+    "target": "t",
+    "task_type": "classification",
+    "model_family": "any",
+    "steps": [
+        split(stratify=True, test_size=0.25),
+        {"op": "impute", "columns": ["veneer"], "strategy": "most_frequent"},
+        {"op": "encode", "columns": ["veneer"], "method": "onehot"},
+    ],
+}
+
+
+def write_none_csv(tmp_path: Path) -> Path:
+    rows = ["id,veneer,t"] + [
+        f"{i},{['None', 'Stone', '', 'NA', 'BrkFace'][i % 5]},{i % 2}" for i in range(60)
+    ]
+    csv_path = tmp_path / "none.csv"
+    csv_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return csv_path
+
+
+def test_the_script_reads_none_and_missing_values_as_the_loader_does(tmp_path):
+    csv_path = write_none_csv(tmp_path)
+    module = load_module(make_script(tmp_path, csv_path, build_plan(NONE_PLAN)))
+
+    produced = module.read_input(csv_path)
+
+    pd.testing.assert_frame_equal(produced, load_csv(csv_path))
+    assert (produced["veneer"] == "None").sum() == 12
+    assert produced["veneer"].isna().sum() == 24
+    assert module.NA_VALUES == list(NA_VALUES)
+
+
+def test_a_none_category_gives_the_same_result_in_the_script_and_the_executor(workdirs, tmp_path):
+    csv_path = write_none_csv(tmp_path)
+    plan = build_plan(NONE_PLAN)
+
+    check_subprocess_run(workdirs, csv_path, plan)
+
+    assert "veneer_None" in reference(csv_path, plan).train.columns

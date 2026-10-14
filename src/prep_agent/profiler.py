@@ -59,6 +59,16 @@ InferredType = Literal[
 TaskHint = Literal["classification", "regression"]
 
 
+# The strings read as missing: pandas' default list without "None". "None" is a real category
+# in many datasets (no pool, no alley, no veneer) and reading it as missing would turn "this
+# feature is absent" into "unknown". The generated pipeline.py reads its input with this list
+# too, so a CSV file gives the same frame in both.
+NA_VALUES: tuple[str, ...] = (
+    "", "#N/A", "#N/A N/A", "#NA", "-1.#IND", "-1.#QNAN", "-NaN", "-nan", "1.#IND", "1.#QNAN",
+    "<NA>", "N/A", "NA", "NULL", "NaN", "n/a", "nan", "null",
+)  # fmt: skip
+
+
 class ProfilerError(ValueError):
     """Raised when a dataset cannot be loaded or profiled."""
 
@@ -158,14 +168,17 @@ class DatasetProfile(BaseModel):
 
 
 def load_csv(path: str | Path) -> pd.DataFrame:
-    """Read a CSV file, raising `ProfilerError` with a readable message on failure."""
+    """Read a CSV file, raising `ProfilerError` with a readable message on failure.
+
+    Missing values are the strings in `NA_VALUES`; the text "None" is not one of them.
+    """
     path = Path(path)
     if not path.exists():
         raise ProfilerError(f"CSV file not found: {path}")
     if not path.is_file():
         raise ProfilerError(f"not a file: {path}")
     try:
-        df = pd.read_csv(path, low_memory=False)
+        df = pd.read_csv(path, low_memory=False, keep_default_na=False, na_values=list(NA_VALUES))
     except pd.errors.EmptyDataError:
         raise ProfilerError(f"CSV file is empty: {path}") from None
     except (pd.errors.ParserError, UnicodeDecodeError, OSError) as exc:

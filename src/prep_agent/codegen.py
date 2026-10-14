@@ -28,6 +28,7 @@ from prep_agent.ops.code import (
     render_statements,
 )
 from prep_agent.plan import Plan, Step
+from prep_agent.profiler import NA_VALUES
 
 _BODY = 4
 
@@ -48,7 +49,8 @@ _DOCSTRING = [
 _READ_INPUT = [
     "def read_input(path: Path) -> pd.DataFrame:",
     '    """Read the raw CSV file the way prep-agent did."""',
-    "    return pd.read_csv(path, low_memory=False)",
+    '    options = {"low_memory": False, "keep_default_na": False, "na_values": NA_VALUES}',
+    "    return pd.read_csv(path, **options)",
 ]
 
 _FILE_SHA256 = [
@@ -168,6 +170,7 @@ def generate_pipeline_script(
             [
                 Assign("TARGET", literal(plan.target)),
                 Assign("INPUT_SHA256", literal(input_sha256)),
+                Assign("NA_VALUES", literal(list(NA_VALUES))),
             ]
         ),
         _READ_INPUT,

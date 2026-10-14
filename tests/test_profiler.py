@@ -7,6 +7,7 @@ import pytest
 
 from prep_agent.profiler import (
     DEFAULT_CONFIG,
+    NA_VALUES,
     ColumnProfile,
     DatasetProfile,
     ProfilerConfig,
@@ -761,3 +762,51 @@ def test_load_csv_unreadable_encoding(tmp_path):
 
     with pytest.raises(ProfilerError, match="could not read"):
         load_csv(path)
+
+
+# --- missing value spellings -----------------------------------------------------------------
+
+
+def write_csv(tmp_path, *lines):
+    path = tmp_path / "data.csv"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def test_none_text_stays_a_category_and_is_not_missing(tmp_path):
+    rows = ["BrkFace", "None", "Stone", "None", "None", "BrkFace"]
+    path = write_csv(tmp_path, "veneer,price", *[f"{v},{i}" for i, v in enumerate(rows)])
+
+    df = load_csv(path)
+
+    assert df["veneer"].tolist() == rows
+    column = profile_dataframe(df).columns[0]
+    assert column.n_missing == 0
+    assert column.inferred_type == "categorical"
+    assert {v.value: v.count for v in column.top_values}["None"] == 3
+
+
+@pytest.mark.parametrize(
+    "spelling", ["", "NA", "NaN", "nan", "null", "NULL", "N/A", "n/a", "#N/A", "<NA>", "#NA"]
+)
+def test_the_other_missing_value_spellings_are_still_missing(tmp_path, spelling):
+    path = write_csv(tmp_path, "kind,price", "a,1", f"{spelling},2", "b,3", "None,4")
+
+    df = load_csv(path)
+
+    assert df["kind"].isna().tolist() == [False, True, False, False]
+    assert df["kind"].tolist()[3] == "None"
+
+
+def test_missing_cells_keep_a_numeric_column_numeric(tmp_path):
+    path = write_csv(tmp_path, "a,b", "1,x", ",y", "NA,z", "4,w")
+
+    df = load_csv(path)
+
+    assert pd.api.types.is_float_dtype(df["a"])
+    assert df["a"].isna().sum() == 2
+
+
+def test_none_is_not_in_the_missing_value_list():
+    assert "None" not in NA_VALUES
+    assert {"", "NA", "NaN", "null", "N/A", "n/a", "nan", "NULL"} <= set(NA_VALUES)

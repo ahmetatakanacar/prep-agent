@@ -31,6 +31,8 @@ uv run prep-agent profile tests/fixtures/customers.csv --target churned --out ru
 
 Columns that look like they hold personal data (email addresses, phone numbers, or names such as `email` or `user_name` whose values are mostly distinct) are flagged `possible_pii` and their sample values, top values and numeric statistics are left out of the profile. Pass `--no-samples` to leave sample values out for every column.
 
+CSV files are read with pandas' usual list of missing-value strings (empty cell, `NA`, `NaN`, `null`, `N/A`, ...), except for the text `None`, which is kept as a category: in many datasets it means that a feature is absent (no pool, no veneer). The list is `NA_VALUES` in `profiler.py`, and the generated `pipeline.py` reads its input with the same one.
+
 Run a hand-written plan on a CSV file. The plan's `target` is the target column. The plan is validated first; if it has errors, nothing is run or written.
 
 ```powershell
