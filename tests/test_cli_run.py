@@ -89,9 +89,7 @@ def test_invalid_plan_writes_no_artifacts(invoke_cli, tmp_path):
     assert not (tmp_path / "runs").exists()
 
 
-def test_result_error_writes_failed_artifacts(invoke_cli, tmp_path):
-    # dedupe runs while `id` still tells the rows apart; dropping it afterwards recreates
-    # duplicates that the split spreads over train and test.
+def test_result_error_writes_failed_artifacts(invoke_cli, tmp_path, overlap_error_with_dedupe):
     csv = tmp_path / "dups.csv"
     rows = ["id,x,t"] + [f"{i},{(i // 2) % 2},{i % 2}" for i in range(40)]
     csv.write_text("\n".join(rows) + "\n", encoding="utf-8")

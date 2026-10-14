@@ -66,11 +66,10 @@ def df() -> pd.DataFrame:
     return load_csv(FIXTURES / "customers.csv")
 
 
-# dedupe runs while `id` still tells the rows apart; dropping it afterwards recreates duplicates
-# that the split spreads over train and test, which is an error only when the plan has a dedupe
-# step. Leaving the dedupe out turns it into a warning, so that is the fix.
+# A plan with a dedupe step ends with a train_test_overlap error (see overlap_error_with_dedupe);
+# leaving the dedupe out is the fix.
 @pytest.fixture
-def dups(tmp_path) -> pd.DataFrame:
+def dups(tmp_path, overlap_error_with_dedupe) -> pd.DataFrame:
     rows = ["id,x,t"] + [f"{i},{(i // 2) % 2},{i % 2}" for i in range(40)]
     csv = tmp_path / "dups.csv"
     csv.write_text("\n".join(rows) + "\n", encoding="utf-8")

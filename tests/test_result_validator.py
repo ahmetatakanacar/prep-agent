@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 from sklearn.pipeline import Pipeline
@@ -26,16 +27,33 @@ def split(stratify=True):
     return {"op": "split", "stratify": stratify}
 
 
-def make_result(train=TRAIN, test=TEST, split_train=None, split_test=None) -> ExecutionResult:
+def records_of(frame: pd.DataFrame) -> np.ndarray:
+    return pd.util.hash_pandas_object(frame, index=False).to_numpy()
+
+
+def make_result(
+    train=TRAIN,
+    test=TEST,
+    split_train=None,
+    split_test=None,
+    train_records=None,
+    test_records=None,
+) -> ExecutionResult:
     """`split_train` and `split_test` are the frames right after the split; by default they equal
-    the output, as when there are no stateful steps."""
+    the output, as when there are no stateful steps. The records are the identities of the input
+    rows behind them; by default rows that are equal at the split count as the same record, as
+    when no column was dropped."""
     identity = Pipeline([("identity", FunctionTransformer())])
+    split_train = (train if split_train is None else split_train).copy()
+    split_test = (test if split_test is None else split_test).copy()
     return ExecutionResult(
         train=train.copy(),
         test=test.copy(),
         pipeline=identity,
-        split_train=(train if split_train is None else split_train).copy(),
-        split_test=(test if split_test is None else split_test).copy(),
+        split_train=split_train,
+        split_test=split_test,
+        split_train_records=records_of(split_train) if train_records is None else train_records,
+        split_test_records=records_of(split_test) if test_records is None else test_records,
     )
 
 
@@ -127,6 +145,28 @@ def test_overlap_is_an_error_with_dedupe(make_plan):
 
     assert codes(issues) == ["train_test_overlap"]
     assert issues[0].severity == "error"
+
+
+def test_rows_equal_at_the_split_but_from_different_input_records_are_not_an_overlap(make_plan):
+    # As after drop_columns: the rows look alike now, but the input told them apart.
+    different_records = np.arange(100, 100 + len(overlapping_test()))
+    result = make_result(test=overlapping_test(), test_records=different_records)
+
+    assert issues_for(result, make_plan(split())) == []
+
+
+def test_the_same_input_record_on_both_sides_is_an_overlap_whatever_the_frames_look_like(
+    make_plan,
+):
+    train_records = np.arange(len(TRAIN))
+    test_records = np.array([100, 101, 102, train_records[5]])
+
+    issues = issues_for(
+        make_result(train_records=train_records, test_records=test_records), make_plan(split())
+    )
+
+    assert codes(issues) == ["train_test_overlap"]
+    assert "1 test row(s)" in issues[0].message
 
 
 def test_rows_that_only_become_equal_after_the_pipeline_are_not_an_overlap(make_plan):

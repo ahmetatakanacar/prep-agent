@@ -101,7 +101,9 @@ def test_dry_run_computes_no_baseline(invoke_cli, tmp_path):
     assert not (tmp_path / "runs").exists()
 
 
-def test_a_run_with_result_errors_writes_a_report_without_a_baseline(invoke_cli, tmp_path):
+def test_a_run_with_result_errors_writes_a_report_without_a_baseline(
+    invoke_cli, tmp_path, overlap_error_with_dedupe
+):
     csv = tmp_path / "dups.csv"
     rows = ["id,x,t"] + [f"{i},{(i // 2) % 2},{i % 2}" for i in range(40)]
     csv.write_text("\n".join(rows) + "\n", encoding="utf-8")

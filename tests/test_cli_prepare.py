@@ -347,7 +347,9 @@ def test_max_revisions_zero_stops_at_the_first_error(invoke_cli, monkeypatch, tm
     assert len(llm.calls) == 1
 
 
-def test_a_result_error_that_stays_saves_the_frames_as_failed(invoke_cli, monkeypatch, tmp_path):
+def test_a_result_error_that_stays_saves_the_frames_as_failed(
+    invoke_cli, monkeypatch, tmp_path, overlap_error_with_dedupe
+):
     rows = ["id,x,t"] + [f"{i},{(i // 2) % 2},{i % 2}" for i in range(40)]
     csv = tmp_path / "dups.csv"
     csv.write_text("\n".join(rows) + "\n", encoding="utf-8")

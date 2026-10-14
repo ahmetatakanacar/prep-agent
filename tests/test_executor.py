@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.model_selection import train_test_split
 
 from prep_agent import executor
 from prep_agent.executor import PlanValidationError, execute
@@ -175,9 +176,10 @@ def test_rows_that_only_match_after_encoding_are_not_an_overlap(make_plan):
     assert not has_errors(result.result_issues)
 
 
-def test_rows_that_become_equal_before_the_split_are_an_overlap_error(make_plan):
-    # dedupe runs while `id` still tells the rows apart; dropping it afterwards recreates
-    # duplicates, which the split then spreads over train and test.
+def test_rows_that_only_become_equal_by_dropping_a_column_are_not_an_overlap(make_plan):
+    # Was an error ("rows that become equal before the split are an overlap error") while an
+    # overlap meant rows equal at the split. It now means the same input record on both sides:
+    # these rows differ in `id` in the input, so dropping `id` after the dedupe leaks nothing.
     i = np.arange(40)
     df = pd.DataFrame({"id": i, "x": (i // 2) % 2, "t": i % 2})
     plan = make_plan(
@@ -186,8 +188,95 @@ def test_rows_that_become_equal_before_the_split_are_an_overlap_error(make_plan)
 
     result = run_frame(df, plan)
 
+    assert len(result.split_train.merge(result.split_test)) > 0, "look-alike rows on both sides"
     assert not has_errors(result.plan_issues)
-    assert result_codes(result) == {"train_test_overlap"}
+    assert "train_test_overlap" not in {i.code for i in result.result_issues}
+
+
+def test_identical_input_records_on_both_sides_are_an_overlap_warning(make_plan):
+    base = pd.DataFrame({"x": np.arange(20), "t": np.arange(20) % 2})
+    df = pd.concat([base, base], ignore_index=True)
+
+    result = run_frame(df, make_plan(split(test_size=0.5)))
+
+    [issue] = [i for i in result.result_issues if i.code == "train_test_overlap"]
+    assert issue.severity == "warning"
+    assert not has_errors(result.result_issues)
+
+
+def test_a_dedupe_removes_the_identical_input_records_before_the_split(make_plan):
+    base = pd.DataFrame({"x": np.arange(20), "t": np.arange(20) % 2})
+    df = pd.concat([base, base], ignore_index=True)
+
+    result = run_frame(df, make_plan({"op": "dedupe", "keep": "first"}, split(test_size=0.5)))
+
+    assert len(result.train) + len(result.test) == 20
+    assert "train_test_overlap" not in {i.code for i in result.result_issues}
+
+
+def oracle_shared_rows(df, *, dedupe, subset, keep, drop_missing, test_size, stratify):
+    """The number of test rows whose input record is also in train, worked out on the input
+    frame with its index kept, so no step has to be followed."""
+    kept = df.dropna(subset=["t"]) if drop_missing else df
+    if dedupe:
+        kept = kept.drop_duplicates(subset=subset, keep=keep)
+    train_at, test_at = train_test_split(
+        kept.index.to_numpy(),
+        test_size=test_size,
+        random_state=42,
+        stratify=kept["t"] if stratify else None,
+    )
+    records = pd.util.hash_pandas_object(df, index=False)
+    train_records = set(records.loc[train_at])
+    return sum(record in train_records for record in records.loc[test_at])
+
+
+@pytest.mark.parametrize("dedupe", [False, True])
+@pytest.mark.parametrize("keep", ["first", "last"])
+@pytest.mark.parametrize("subset", [None, ["a", "b"]])
+@pytest.mark.parametrize("drop_missing", [False, True])
+def test_the_overlap_follows_input_records_through_row_removing_steps(
+    make_plan, dedupe, keep, subset, drop_missing
+):
+    rng = np.random.default_rng(7)
+    df = pd.DataFrame(
+        {
+            "id": np.arange(120),
+            "a": rng.integers(0, 6, 120),
+            "b": rng.integers(0, 3, 120),
+            "t": rng.integers(0, 2, 120).astype(float),
+        }
+    )
+    # Copies of earlier rows, id included, scattered over the frame, and some missing targets.
+    df.iloc[rng.choice(120, 40, replace=False)] = df.iloc[rng.choice(120, 40)].to_numpy()
+    df.loc[rng.choice(120, 15, replace=False), "t"] = np.nan
+    steps = []
+    if drop_missing:
+        steps.append({"op": "drop_missing_target"})
+    steps.append({"op": "drop_columns", "columns": ["id"]})
+    if dedupe:
+        steps.append({"op": "dedupe", "keep": keep, "subset": subset})
+    stratify = drop_missing
+    steps.append(split(stratify=stratify, test_size=0.4))
+    plan = make_plan(*steps)
+
+    result = run_frame(df, plan)
+
+    expected = oracle_shared_rows(
+        df,
+        dedupe=dedupe,
+        subset=subset,
+        keep=keep,
+        drop_missing=drop_missing,
+        test_size=0.4,
+        stratify=stratify,
+    )
+    overlaps = [i for i in result.result_issues if i.code == "train_test_overlap"]
+    if expected:
+        [issue] = overlaps
+        assert f"{expected} test row(s)" in issue.message
+    else:
+        assert overlaps == []
 
 
 def test_plan_error_raises_before_anything_runs(monkeypatch):

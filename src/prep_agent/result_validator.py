@@ -6,10 +6,11 @@ Rules, in the order their issues are reported (columns in frame order):
 - `column_mismatch` (error): train and test differ in columns or in their order.
 - `target_altered` (error): the target in the output differs from the target right after the
   split, so something in the pipeline touched it.
-- `train_test_overlap`: a row (features and target) is in both train and test. It is judged on
-  the frames right after the split (stateless steps applied, stateful ones not), because the
-  pipeline can make distinct rows look alike (one-hot grouping, imputation) without that
-  being leakage. An error when the plan has a dedupe step, which should have prevented it, and
+- `train_test_overlap`: the same record of the raw input is in both train and test. Records are
+  rows that are equal in every column of the input; the executor follows each row's record
+  through the stateless steps and the split. Rows that only look alike later (a dropped column
+  that told them apart, one-hot grouping, imputation) are different records, so they are not
+  leakage. An error when the plan has a dedupe step, which should have removed the copies, and
   a warning otherwise.
 - `nan_in_output` (warning): a feature column still has missing values.
 - `non_numeric_output` (warning): a feature column is not numeric.
@@ -19,7 +20,7 @@ Rules, in the order their issues are reported (columns in frame order):
   differs between train and test by more than `CLASS_SHIFT_THRESHOLD`.
 
 The first two errors make the other rules meaningless, so they are reported alone. Rows are
-compared by a 64-bit row hash, so a match is not a proof of equality (the odds of a false
+compared by 64-bit row hashes, so a match is not a proof of equality (the odds of a false
 match are negligible for in-memory tables).
 """
 
@@ -56,7 +57,7 @@ def validate_result(result: "ExecutionResult", plan: Plan) -> list[ValidationIss
 
     issues: list[ValidationIssue] = []
     issues += _check_target(result, target)
-    issues += _check_overlap(result.split_train, result.split_test, plan)
+    issues += _check_overlap(result, plan)
     features = [c for c in train.columns if c != target]
     issues += _check_missing(train, test, features)
     issues += _check_numeric(train, test, features)
@@ -95,23 +96,19 @@ def _same_values(actual: pd.Series, expected: pd.Series) -> bool:
     return actual.reset_index(drop=True).equals(expected.reset_index(drop=True))
 
 
-def _check_overlap(
-    split_train: pd.DataFrame, split_test: pd.DataFrame, plan: Plan
-) -> list[ValidationIssue]:
-    train_hashes = set(pd.util.hash_pandas_object(split_train, index=False))
-    n_shared = sum(h in train_hashes for h in pd.util.hash_pandas_object(split_test, index=False))
+def _check_overlap(result: "ExecutionResult", plan: Plan) -> list[ValidationIssue]:
+    train_records = set(result.split_train_records.tolist())
+    n_shared = sum(record in train_records for record in result.split_test_records.tolist())
     if n_shared == 0:
         return []
     has_dedupe = any(isinstance(step, DedupeStep) for step in plan.steps)
     return [
         _issue(
             "train_test_overlap",
-            f"{n_shared} test row(s) also appear in train (features and target equal at the "
-            "split); "
+            f"{n_shared} test row(s) are copies of records that are also in train (equal in "
+            "every column of the input); "
             + (
-                "the plan has a dedupe step, but rows became equal after it, for example "
-                "through a later drop_columns; move the dedupe after the steps that drop "
-                "columns."
+                "the plan has a dedupe step, which should have removed them."
                 if has_dedupe
                 else "add a dedupe step before the split if duplicates are not intended."
             ),
