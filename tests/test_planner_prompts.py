@@ -130,6 +130,20 @@ def test_system_prompt_says_when_to_cast_numbers_to_categories():
         assert expected in prompt, expected
 
 
+def test_system_prompt_lets_a_tree_keep_ordered_codes_but_not_unordered_ones():
+    prompt = build_system_prompt()
+
+    for expected in (
+        "If the model family is tree, numeric codes with a natural order",
+        "(an hour, a month, a weekday)",
+        "may stay numbers and need no `cast_to_category`",
+        "Codes with no order (a type or category code such as a building class number)",
+        "cast them for every model family",
+        "For linear and any, cast the ordered ones too",
+    ):
+        assert expected in prompt, expected
+
+
 def test_system_prompt_presents_the_low_cardinality_warning_as_a_hint_to_judge():
     prompt = build_system_prompt()
 
