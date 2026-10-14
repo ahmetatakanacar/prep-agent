@@ -6,9 +6,11 @@ from dataclasses import dataclass
 import pytest
 from typer.testing import CliRunner
 
+from prep_agent import executor
 from prep_agent.cli import app
 from prep_agent.env import load_dotenv_file
 from prep_agent.plan import Plan
+from prep_agent.validators import SEVERITY, IssueCode, ValidationIssue
 
 # Wide enough that rich never wraps table rows or help text in tests.
 TERMINAL_WIDTH = "200"
@@ -72,3 +74,38 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "llm" in item.keywords:
             item.add_marker(skip)
+
+
+@pytest.fixture
+def inject_result_error(monkeypatch) -> Callable[..., None]:
+    """Make the result validator report a chosen error, so that the agent and the CLI can be
+    tested on what they do with a result error.
+
+    The result errors (`empty_split`, `column_mismatch`, `target_altered`) are defences against
+    bugs in the executor. No real plan on real data can reach them, so there is no input that
+    would exercise the revision of a result error, the shared revision budget, the failed run
+    that keeps its frames, or the CLI skipping the baseline. This replaces `validate_result` in
+    the executor, the one place all of those paths get their result issues from, and leaves
+    every other part of the run real.
+
+    Call it as `inject_result_error(ops=("dedupe",))` to fail only plans that contain one of
+    those ops (a plan without them is validated for real, which lets a revision succeed), or
+    without `ops` to fail every plan. `code` is the error to report.
+    """
+    real = executor.validate_result
+
+    def inject(*, ops: tuple[str, ...] | None = None, code: IssueCode = "target_altered") -> None:
+        assert SEVERITY[code] == "error", f"{code} is not an error"
+
+        def validate(result, plan):
+            if ops is None or any(step.op in ops for step in plan.steps):
+                return [
+                    ValidationIssue(
+                        code=code, severity="error", column=plan.target, message="injected by test"
+                    )
+                ]
+            return real(result, plan)
+
+        monkeypatch.setattr(executor, "validate_result", validate)
+
+    return inject

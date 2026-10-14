@@ -89,6 +89,36 @@ def test_invalid_plan_writes_no_artifacts(invoke_cli, tmp_path):
     assert not (tmp_path / "runs").exists()
 
 
+def test_result_error_writes_failed_artifacts(invoke_cli, tmp_path, inject_result_error):
+    inject_result_error()
+    rows = ["id,x,t"] + [f"{i},{(i // 2) % 2},{i % 2}" for i in range(40)]
+    csv = tmp_path / "small.csv"
+    csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    plan = tmp_path / "plan.json"
+    steps = [
+        {"op": "dedupe", "keep": "first", "reason": "r"},
+        {"op": "drop_columns", "columns": ["id"], "reason": "r"},
+        {"op": "split", "stratify": True, "reason": "r"},
+    ]
+    plan.write_text(
+        json.dumps(
+            {"target": "t", "task_type": "classification", "model_family": "any", "steps": steps}
+        ),
+        encoding="utf-8",
+    )
+
+    result = invoke_cli(["run", str(csv), "--plan", str(plan), "--out-dir", str(tmp_path / "runs")])
+
+    assert result.exit_code == 1, result.output
+    assert "target_altered" in result.output
+    [run_dir] = list((tmp_path / "runs").iterdir())
+    info = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info["status"] == "failed"
+    assert (run_dir / "train.csv").exists()
+    assert (run_dir / "test.csv").exists()
+    assert (run_dir / "report.md").exists()
+
+
 def test_plan_that_does_not_match_the_schema_fails_cleanly(invoke_cli, tmp_path):
     plan = tmp_path / "bad.json"
     plan.write_text('{"target": "churned", "steps": [{"op": "shell", "cmd": "rm"}]}')

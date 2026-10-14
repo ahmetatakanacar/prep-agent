@@ -66,6 +66,36 @@ def df() -> pd.DataFrame:
     return load_csv(FIXTURES / "customers.csv")
 
 
+# A small table for the tests of result errors (see inject_result_error). A plan with a dedupe
+# step is the one made to fail, so leaving the dedupe out is the fix.
+@pytest.fixture
+def small(tmp_path) -> pd.DataFrame:
+    rows = ["id,x,t"] + [f"{i},{(i // 2) % 2},{i % 2}" for i in range(40)]
+    csv = tmp_path / "small.csv"
+    csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return load_csv(csv)
+
+
+def small_plan(*ops: str) -> dict:
+    steps = {
+        "dedupe": {"op": "dedupe", "keep": "first", "reason": "r"},
+        "drop_id": {"op": "drop_columns", "columns": ["id"], "reason": "r"},
+        "split": {"op": "split", "stratify": True, "reason": "r"},
+        "impute": {"op": "impute", "columns": ["x"], "strategy": "mean", "reason": "r"},
+    }
+    return {
+        "target": "t",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [steps[op] for op in ops],
+    }
+
+
+RESULT_ERROR_PLAN = small_plan("dedupe", "drop_id", "split")
+FIXED_PLAN = small_plan("drop_id", "split")
+PLAN_ERROR_PLAN = small_plan("impute", "split")
+
+
 def run(df, responses, *, usage=None, ask=None, **kwargs):
     llm = FakeLLM(responses, usage=usage)
     ask = ask or Asker()
@@ -393,6 +423,17 @@ def test_a_different_target_than_the_users_is_revised(df):
     assert "target_mismatch" in result.calls[1].issue_codes
 
 
+def test_a_result_error_is_revised_too(small, inject_result_error):
+    inject_result_error(ops=("dedupe",))
+
+    result, llm, _ = run(small, [plan_reply(RESULT_ERROR_PLAN), plan_reply(FIXED_PLAN)], target="t")
+
+    assert "target_altered" in llm.calls[1].user
+    assert [c.purpose for c in result.calls] == ["plan", "revise"]
+    assert result.calls[1].issue_codes == ["target_altered"]
+    assert result.plan == Plan.model_validate(FIXED_PLAN)
+
+
 def test_a_revision_budget_that_runs_out_raises_with_plan_and_issues(df):
     bad = plan_with_impute_before_split()
 
@@ -413,6 +454,31 @@ def test_zero_revisions_means_the_first_error_is_final(df):
         run(df, [plan_reply(plan_with_impute_before_split())], max_revisions=0)
 
     assert len(caught.value.trace.calls) == 1
+
+
+def test_plan_and_result_revisions_share_one_budget(small, inject_result_error):
+    inject_result_error(ops=("dedupe",))
+    # One revision is allowed: the first plan has a plan error, its fix has a result error.
+    responses = [plan_reply(PLAN_ERROR_PLAN), plan_reply(RESULT_ERROR_PLAN)]
+
+    with pytest.raises(RevisionBudgetError) as caught:
+        run(small, responses, target="t", max_revisions=1)
+
+    error = caught.value
+    assert [c.purpose for c in error.trace.calls] == ["plan", "revise"]
+    assert error.execution is not None
+    assert "target_altered" in [i.code for i in error.issues]
+
+
+def test_a_budget_failure_on_the_result_keeps_the_execution(small, inject_result_error):
+    inject_result_error(ops=("dedupe",))
+
+    with pytest.raises(RevisionBudgetError) as caught:
+        run(small, [plan_reply(RESULT_ERROR_PLAN)], target="t", max_revisions=0)
+
+    assert caught.value.execution is not None
+    assert len(caught.value.execution.train) > 0
+    assert caught.value.profile.n_rows == 40
 
 
 # --- failures of the LLM layer ---

@@ -101,6 +101,38 @@ def test_dry_run_computes_no_baseline(invoke_cli, tmp_path):
     assert not (tmp_path / "runs").exists()
 
 
+def test_a_run_with_result_errors_writes_a_report_without_a_baseline(
+    invoke_cli, tmp_path, inject_result_error
+):
+    inject_result_error()
+    csv = tmp_path / "small.csv"
+    rows = ["id,x,t"] + [f"{i},{(i // 2) % 2},{i % 2}" for i in range(40)]
+    csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    steps = [
+        {"op": "dedupe", "keep": "first", "reason": "r"},
+        {"op": "drop_columns", "columns": ["id"], "reason": "r"},
+        {"op": "split", "stratify": True, "reason": "r"},
+    ]
+    plan = tmp_path / "plan.json"
+    plan.write_text(
+        json.dumps(
+            {"target": "t", "task_type": "classification", "model_family": "any", "steps": steps}
+        ),
+        encoding="utf-8",
+    )
+
+    result = invoke_cli(run_args(tmp_path, csv=str(csv), plan=str(plan)))
+
+    assert result.exit_code == 1
+    run_dir = only_run(tmp_path)
+    assert not (run_dir / "baseline.json").exists()
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert "**Status:** failed" in report
+    assert "target_altered" in report
+    assert "## Baseline" not in report
+    assert "dummy_most_frequent" not in result.output
+
+
 def test_a_baseline_that_cannot_run_is_reported_not_fatal(invoke_cli, tmp_path):
     csv, plan, _ = write_csv_and_plan(tmp_path, classes=[1] + [0] * 39)
 
