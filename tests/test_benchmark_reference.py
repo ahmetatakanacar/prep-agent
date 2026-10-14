@@ -45,6 +45,15 @@ class TestReferencePlanFiles:
     def test_the_model_family_is_any(self, name):
         assert load_plan(name).model_family == "any"
 
+    def test_the_reference_plan_drops_every_leaky_column(self, name):
+        dropped = {
+            column
+            for step in load_plan(name).steps
+            if step.op == "drop_columns"
+            for column in step.columns
+        }
+        assert set(BY_NAME[name].leaky_columns) <= dropped
+
     def test_every_step_gives_a_real_reason(self, name):
         for step in load_plan(name).steps:
             assert len(step.reason.split()) >= 6, f"{step.op}: {step.reason!r}"
@@ -70,6 +79,10 @@ class TestAgainstTheDownloadedData:
     def data(self, name):
         df = load_csv(csv_path(BY_NAME[name], DEFAULT_DATASETS_DIR))
         return df, profile_dataframe(df, target=BY_NAME[name].target)
+
+    def test_the_leaky_columns_are_columns_of_the_data(self, name, data):
+        df, _ = data
+        assert set(BY_NAME[name].leaky_columns) <= set(df.columns)
 
     def test_the_reference_plan_passes_the_validator_without_errors(self, name, data):
         _, profile = data

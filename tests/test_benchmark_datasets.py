@@ -68,6 +68,21 @@ def test_load_registry_rejects_a_bad_entry(tmp_path, entries, message):
         load_registry(_write(tmp_path, entries))
 
 
+def test_leaky_columns_default_to_none_and_are_read_when_given(tmp_path):
+    [plain] = load_registry(_write(tmp_path, [_entry()]))
+    assert plain.leaky_columns == []
+    [leaky] = load_registry(_write(tmp_path, [_entry(leaky_columns=["a", "b"])]))
+    assert leaky.leaky_columns == ["a", "b"]
+
+
+@pytest.mark.parametrize(
+    "leaky", [["y"], ["a", "a"], [" "]], ids=["the target", "a duplicate", "blank"]
+)
+def test_load_registry_rejects_bad_leaky_columns(tmp_path, leaky):
+    with pytest.raises(RegistryError, match="leaky_columns"):
+        load_registry(_write(tmp_path, [_entry(leaky_columns=leaky)]))
+
+
 def test_load_registry_rejects_an_empty_list(tmp_path):
     with pytest.raises(RegistryError, match="no datasets"):
         load_registry(_write(tmp_path, []))
@@ -122,6 +137,15 @@ class TestShippedRegistry:
         rows = [spec.n_rows for spec in load_registry(DEFAULT_REGISTRY)]
         assert min(rows) < 1000
         assert max(rows) >= 10_000
+
+    def test_the_datasets_with_known_leakage_say_which_columns_leak(self):
+        leaky = {
+            s.name: s.leaky_columns for s in load_registry(DEFAULT_REGISTRY) if s.leaky_columns
+        }
+        assert leaky == {
+            "titanic": ["boat", "body"],
+            "employee-salaries": ["2016_gross_pay_received"],
+        }
 
     def test_every_entry_says_why_it_was_chosen(self):
         for spec in load_registry(DEFAULT_REGISTRY):

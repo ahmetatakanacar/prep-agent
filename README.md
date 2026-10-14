@@ -109,7 +109,7 @@ $env:PREP_AGENT_RUN_LLM_TESTS="1"; uv run pytest -m llm -v -s
 
 The `benchmarks/` folder measures the agent on real datasets against two other plans: a hand-written reference plan and a rule-based naive plan. Every plan is validated and executed by the same code and scored with the baseline of this project (5-fold cross-validation on its own train split, the test set is not used), so a score depends on the plan only.
 
-- `benchmarks/datasets.yaml` lists 9 OpenML datasets (6 classification, 3 regression, from 768 to 48842 rows) with the target, a goal sentence written like a user, the license OpenML reports and the difficulty each one tests.
+- `benchmarks/datasets.yaml` lists 9 OpenML datasets (6 classification, 3 regression, from 768 to 48842 rows) with the target, a goal sentence written like a user, the license OpenML reports and the difficulty each one tests. Two of them also list `leaky_columns` (titanic: `boat`, `body`; employee-salaries: `2016_gross_pay_received`), columns that give the target away: a plan that keeps one scores higher for a reason that has nothing to do with preparation, so its score is marked with a dagger in `summary.md` and left out of the comparison with the naive plan.
 - `benchmarks/reference/` holds one reference plan per dataset. They are drafts and still need a human review; see `benchmarks/reference/README.md`.
 - The naive plan drops identifier and constant columns, imputes with the median (numeric) or the most frequent value, and one-hot encodes every other column.
 

@@ -288,6 +288,34 @@ class TestAgentMetrics:
         assert "Model family: any (use exactly this" in first
 
 
+class TestLeakyColumns:
+    def mark(self, ws, *columns):
+        ws.specs[0] = ws.specs[0].model_copy(update={"leaky_columns": list(columns)})
+
+    def test_a_plan_that_keeps_a_leaky_column_is_flagged(self, ws):
+        self.mark(ws, "income")
+        results = ws.run(good_llm())
+        for method in ("reference", "naive", "agent"):
+            assert job_of(results, "cls", method).kept_leaky_columns == ["income"]
+
+    def test_a_plan_that_drops_it_is_not(self, ws):
+        self.mark(ws, "uid")
+        results = ws.run(good_llm())
+        for method in ("reference", "naive", "agent"):
+            assert job_of(results, "cls", method).kept_leaky_columns == []
+
+    def test_datasets_without_leaky_columns_are_never_flagged(self, ws):
+        assert all(j.kept_leaky_columns == [] for j in ws.run(good_llm()).jobs)
+
+    def test_a_failed_plan_is_flagged_too(self, ws):
+        self.mark(ws, "income")
+        bad = answer(classification_plan(drop="nope"))
+        results = ws.run(FakeLLM([bad, bad, bad, answer(regression_plan())]))
+        job = job_of(results, "cls", "agent")
+        assert job.status == "failed"
+        assert job.kept_leaky_columns == ["income"]
+
+
 class TestFailuresStayLocal:
     def test_an_agent_that_runs_out_of_revisions_is_recorded_as_failed(self, ws):
         bad = answer(classification_plan(drop="nope"))

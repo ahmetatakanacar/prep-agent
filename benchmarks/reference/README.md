@@ -18,6 +18,7 @@ All plans use `model_family: "any"`, a stratified 80/20 split for classification
 - **Only one-hot.** No plan uses ordinal encoding; the ordinal encoder orders categories alphabetically, which is an invented order for grades like Ex/Gd/TA.
 - **No `dedupe`.** Datasets with exact duplicate rows (telco 22, bank-marketing 274, adult 52, bike-sharing 2) have no identifier, so a repeated row may be a different customer or hour with the same values. See adult for what happens when duplicates are removed anyway.
 - **High-missing columns are dropped without asking.** A hand-written plan has no user to ask; the agent would have to ask (see CLAUDE.md, rule 5).
+- **Known leakage.** `datasets.yaml` lists `leaky_columns` for titanic (`boat`, `body`) and employee-salaries (`2016_gross_pay_received`). Every reference plan drops them (a test checks it), and the results mark any plan that keeps one. The naive plan keeps them and scores far higher on titanic because of it. The employee-salaries entry is a judgement (see below); remove it from the registry if you disagree.
 - **What no plan can express.** There is no operation to cast a column (numbers stored as text, categories stored as integers), parse dates, extract text parts, take logarithms, clip outliers or turn sentinel values into missing. Where that matters it is noted below.
 
 ## titanic

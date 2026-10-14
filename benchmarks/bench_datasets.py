@@ -3,16 +3,25 @@
 `datasets.yaml` is the single source. Each entry names one OpenML dataset by id (names and
 versions are only unique together, the id is exact), the target column, the task type, a goal
 sentence written the way a user would write it, the license as OpenML reports it and one
-sentence on what makes the dataset a useful test. `n_rows` and `n_columns` (the target
-included) are what the dataset had when it was verified; the downloader refuses a file that
-does not match, so a changed dataset cannot slip in unnoticed.
+sentence on what makes the dataset a useful test. `leaky_columns` names the columns that give
+the target away, if any. `n_rows` and `n_columns` (the target included) are what the dataset
+had when it was verified; the downloader refuses a file that does not match, so a changed
+dataset cannot slip in unnoticed.
 """
 
 from pathlib import Path
 from typing import Annotated, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+    model_validator,
+)
 
 BENCHMARKS_DIR = Path(__file__).resolve().parent
 DEFAULT_REGISTRY = BENCHMARKS_DIR / "datasets.yaml"
@@ -22,6 +31,12 @@ DEFAULT_REFERENCE_DIR = BENCHMARKS_DIR / "reference"
 # The name becomes a file name, so it is restricted to what is safe on every platform.
 Name = Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9_-]*$")]
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+def _distinct(names: list[str]) -> list[str]:
+    if len(set(names)) != len(names):
+        raise ValueError("column names must be distinct")
+    return names
 
 
 class RegistryError(ValueError):
@@ -42,6 +57,16 @@ class DatasetSpec(BaseModel):
     challenge: Text
     n_rows: int = Field(gt=0)
     n_columns: int = Field(gt=0)
+    # Columns that give the target away (recorded after the outcome, or derived from it). A
+    # plan that keeps one scores higher for a reason that has nothing to do with preparation,
+    # so the results flag such plans.
+    leaky_columns: Annotated[list[Text], AfterValidator(_distinct)] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _target_does_not_leak(self) -> "DatasetSpec":
+        if self.target in self.leaky_columns:
+            raise ValueError("leaky_columns must not contain the target")
+        return self
 
 
 def load_registry(path: Path = DEFAULT_REGISTRY) -> list[DatasetSpec]:

@@ -156,6 +156,59 @@ class TestScores:
         assert header == ["dataset", "reference", "naive", "agent: b", "agent: a"]
 
 
+class TestLeakyPlans:
+    def test_a_score_of_a_plan_that_kept_a_leaky_column_is_marked(self):
+        jobs = [
+            job("d1", "reference", baseline=classification_baseline(0.6, 0.7)),
+            job(
+                "d1",
+                "naive",
+                baseline=classification_baseline(0.9, 0.95),
+                kept_leaky_columns=["boat"],
+            ),
+        ]
+        md = render_summary(results(jobs, models=()))
+        cells = row(table(md, "### f1_macro ↑"), "d1")
+        assert cells[1:3] == ["0.600 / 0.700", "0.900 / 0.950 †"]
+        assert "† the plan kept a column that gives the target away" in md
+
+    def test_the_footnote_is_left_out_when_no_plan_leaks(self):
+        jobs = [job("d1", "naive", baseline=classification_baseline(0.6, 0.7))]
+        assert "†" not in render_summary(results(jobs, models=()))
+
+    def test_one_leaking_repeat_marks_the_cell(self):
+        jobs = [
+            job("d1", "agent", repeat=1, baseline=classification_baseline(0.6, 0.7)),
+            job(
+                "d1",
+                "agent",
+                repeat=2,
+                baseline=classification_baseline(0.6, 0.7),
+                kept_leaky_columns=["boat"],
+            ),
+        ]
+        cell = row(table(render_summary(results(jobs, repeats=2)), "### f1_macro ↑"), "d1")[-1]
+        assert cell.endswith(" †")
+
+    def test_a_comparison_with_a_leaking_plan_is_marked_and_not_counted(self):
+        jobs = [
+            job(
+                "leaky",
+                "naive",
+                baseline=classification_baseline(0.5, 0.95),
+                kept_leaky_columns=["boat"],
+            ),
+            job("leaky", "agent", baseline=classification_baseline(0.5, 0.65)),
+            job("clean", "naive", baseline=classification_baseline(0.5, 0.60)),
+            job("clean", "agent", baseline=classification_baseline(0.5, 0.65)),
+        ]
+        md = render_summary(results(jobs, datasets=("leaky", "clean")))
+        rows = table(md, "## Agent against the naive plan")
+        assert row(rows, "leaky")[2] == "-0.300 †"
+        assert row(rows, "clean")[2] == "+0.050"
+        assert row(rows, "better than naive")[2] == "1 of 1 (1 excluded †)"
+
+
 class TestAgainstNaive:
     HEADING = "## Agent against the naive plan"
 

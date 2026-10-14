@@ -40,7 +40,7 @@ from prep_agent.agent import AgentError, AgentTrace, LLMCallRecord, run_agent
 from prep_agent.baseline import BaselineResult, evaluate_baselines
 from prep_agent.executor import ExecutionError, ExecutionResult, PlanValidationError, execute
 from prep_agent.llm.base import LLMClient
-from prep_agent.plan import Plan
+from prep_agent.plan import DropColumnsStep, Plan
 from prep_agent.planner import Question
 from prep_agent.profiler import ProfilerError, load_csv, profile_dataframe
 from prep_agent.validators import ValidationIssue, partition_issues
@@ -233,12 +233,26 @@ def _run_job(
         if isinstance(frame, Exception):
             raise frame
         if job.method == "agent":
-            return _agent_job(base, spec, frame, clients[job.model], price)
-        return _fixed_plan_job(base, spec, frame, reference_dir)
+            result = _agent_job(base, spec, frame, clients[job.model], price)
+        else:
+            result = _fixed_plan_job(base, spec, frame, reference_dir)
     except _JobError as exc:
         return JobResult(**base, status="error", error=str(exc))
     except Exception as exc:
         return JobResult(**base, status="error", error=f"{type(exc).__name__}: {exc}")
+    if result.plan is not None:
+        result.kept_leaky_columns = _kept_leaky(spec, result.plan)
+    return result
+
+
+def _kept_leaky(spec: DatasetSpec, plan: Plan) -> list[str]:
+    dropped = {
+        column
+        for step in plan.steps
+        if isinstance(step, DropColumnsStep)
+        for column in step.columns
+    }
+    return [column for column in spec.leaky_columns if column not in dropped]
 
 
 def _agent_job(

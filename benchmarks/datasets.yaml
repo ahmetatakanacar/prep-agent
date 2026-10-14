@@ -1,6 +1,7 @@
 # Datasets of the benchmark, all from OpenML. `license` is the value OpenML reports for the
 # dataset ("Public" and "NA" are OpenML's own labels, not license texts). `n_rows` and
-# `n_columns` (the target included) were checked by downloading each dataset.
+# `n_columns` (the target included) were checked by downloading each dataset. `leaky_columns`
+# lists the columns that give the target away; plans that keep them are flagged in the results.
 datasets:
   - name: titanic
     openml_id: 40945
@@ -13,6 +14,7 @@ datasets:
     challenge: Passenger names (personal data), a lifeboat column that gives survival away, sparse high-cardinality text columns and 20% missing ages on a small table.
     n_rows: 1309
     n_columns: 14
+    leaky_columns: [boat, body]
 
   - name: credit-g
     openml_id: 31
@@ -97,6 +99,7 @@ datasets:
     challenge: Employee names (personal data), high-cardinality categorical columns, a date stored as text, a nearly duplicate department column and a pay column correlated 0.89 with the target.
     n_rows: 9228
     n_columns: 13
+    leaky_columns: [2016_gross_pay_received]
 
   - name: bike-sharing-demand
     openml_id: 42712

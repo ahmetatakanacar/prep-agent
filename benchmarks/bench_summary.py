@@ -17,6 +17,7 @@ MAIN_METRIC = {"classification": "f1_macro", "regression": "r2"}
 LINEAR_MODELS = ("logistic_regression", "ridge")
 FOREST = "random_forest"
 DASH = "–"
+LEAK_MARK = "†"
 _MAX_REASON = 200
 
 
@@ -64,6 +65,7 @@ def _scores(results: BenchmarkResults) -> str:
         "cross-validation folds (and over the successful repeats of an agent run).",
     ]
     intro = len(parts)
+    marked = False
     for metric in METRICS:
         datasets = [
             name
@@ -76,9 +78,17 @@ def _scores(results: BenchmarkResults) -> str:
             [name, *(_score_cell(_of(results, name, label), metric) for label in labels)]
             for name in datasets
         ]
+        marked = marked or any(cell.endswith(LEAK_MARK) for row in rows for cell in row)
         parts += ["", f"### {metric_label(metric)}", "", _table(["dataset", *labels], rows)]
     if len(parts) == intro:
         parts += ["", "No plan has scores yet."]
+    if marked:
+        parts += [
+            "",
+            f"{LEAK_MARK} the plan kept a column that gives the target away (`leaky_columns` in "
+            "datasets.yaml). Its score is inflated by leakage and cannot be compared with the "
+            "others.",
+        ]
     return "\n".join(parts)
 
 
@@ -95,6 +105,8 @@ def _score_cell(jobs: list[JobResult], metric: str) -> str:
     cell = f"{linear:.3f} / {forest:.3f}"
     if len(scored) < len(jobs):
         cell += f" ({len(scored)}/{len(jobs)} ok)"
+    if _leaks(scored):
+        cell += f" {LEAK_MARK}"
     return cell
 
 
@@ -127,22 +139,30 @@ def _against_naive(results: BenchmarkResults) -> str:
     rows = []
     better = dict.fromkeys(agents, 0)
     comparable = dict.fromkeys(agents, 0)
+    excluded = dict.fromkeys(agents, 0)
     for name in results.config.datasets:
         if name not in task_types:
             continue
         metric = MAIN_METRIC[task_types[name]]
-        naive = _forest_mean(_of(results, name, "naive"), metric)
+        naive_jobs = _of(results, name, "naive")
+        naive = _forest_mean(naive_jobs, metric)
         cells = []
         for label in agents:
-            agent = _forest_mean(_of(results, name, label), metric)
+            agent_jobs = _of(results, name, label)
+            agent = _forest_mean(agent_jobs, metric)
             if agent is None or naive is None:
                 cells.append(DASH)
-                continue
-            comparable[label] += 1
-            better[label] += agent > naive
-            cells.append(f"{agent - naive:+.3f}")
+            elif _leaks(agent_jobs) or _leaks(naive_jobs):
+                excluded[label] += 1
+                cells.append(f"{agent - naive:+.3f} {LEAK_MARK}")
+            else:
+                comparable[label] += 1
+                better[label] += agent > naive
+                cells.append(f"{agent - naive:+.3f}")
         rows.append([name, metric, *cells])
-    rows.append(["better than naive", "", *(f"{better[a]} of {comparable[a]}" for a in agents)])
+    rows.append(
+        ["better than naive", "", *(_tally(better, comparable, excluded, a) for a in agents)]
+    )
     return "\n".join(
         [
             "## Agent against the naive plan",
@@ -153,6 +173,17 @@ def _against_naive(results: BenchmarkResults) -> str:
             _table(["dataset", "metric", *agents], rows),
         ]
     )
+
+
+def _tally(better: dict, comparable: dict, excluded: dict, label: str) -> str:
+    text = f"{better[label]} of {comparable[label]}"
+    if excluded[label]:
+        text += f" ({excluded[label]} excluded {LEAK_MARK})"
+    return text
+
+
+def _leaks(jobs: list[JobResult]) -> bool:
+    return any(job.kept_leaky_columns for job in jobs if job.status == "ok")
 
 
 def _forest_mean(jobs: list[JobResult], metric: str) -> float | None:
