@@ -9,6 +9,7 @@ from prep_agent.profiler import (
     DEFAULT_CONFIG,
     ColumnProfile,
     DatasetProfile,
+    ProfilerConfig,
     ProfilerError,
     load_csv,
     profile_dataframe,
@@ -413,7 +414,7 @@ def test_free_text_mentioning_emails_is_not_flagged_by_value_pattern():
     ],
 )
 def test_pii_column_names_are_flagged(name):
-    col = profile_column(["a", "b", "c", "d"] * 5, name=name)
+    col = profile_column([f"value {i % 12}" for i in range(N)], name=name)
 
     assert "possible_pii" in col.warnings
     assert col.sample_values == []
@@ -429,6 +430,56 @@ def test_non_pii_column_names_are_not_flagged(name):
     assert "possible_pii" not in col.warnings
     assert col.sample_values == ["a", "b", "c", "d"]
     assert len(col.top_values) == 4
+
+
+def test_a_pii_name_with_few_distinct_values_is_not_flagged():
+    yes_no = profile_column(["Yes", "No", "Yes", "Yes"] * 5, name="PhoneService")
+    departments = profile_column(["Police", "Fire", "Health", "Police"] * 5, name="department_name")
+    porch = profile_column([0, 0, 0, 144, 0, 0, 0, 180, 0, 0] * 2, name="3SsnPorch")
+
+    for col in (yes_no, departments, porch):
+        assert "possible_pii" not in col.warnings, col.name
+    assert yes_no.sample_values == ["Yes", "No"]
+    assert [v.value for v in departments.top_values] == ["Police", "Fire", "Health"]
+    assert porch.max == 180.0
+
+
+def test_a_pii_name_with_mostly_distinct_values_is_flagged():
+    names = profile_column([f"Person {i % 12}" for i in range(N)], name="full_name")
+    phones = profile_column(_sparse_phone_numbers(), name="PhoneNumber")
+
+    assert "possible_pii" in names.warnings
+    assert names.sample_values == [] and names.top_values == []
+    assert phones.inferred_type == "numeric"
+    assert "possible_pii" in phones.warnings
+    assert phones.min is None
+
+
+def test_the_unique_ratio_of_a_pii_name_must_be_above_the_threshold():
+    half = [f"Person {i % 10}" for i in range(N)]
+    just_over = [f"Person {i % 11}" for i in range(N)]
+
+    assert "possible_pii" not in profile_column(half, name="name").warnings
+    assert "possible_pii" in profile_column(just_over, name="name").warnings
+
+
+def test_the_unique_ratio_for_pii_names_is_configurable():
+    df = pd.DataFrame({"name": [f"Person {i % 5}" for i in range(N)]})  # unique ratio 0.25
+
+    def flagged(ratio):
+        profile = profile_dataframe(df, config=ProfilerConfig(pii_name_min_unique_ratio=ratio))
+        return "possible_pii" in profile.columns[0].warnings
+
+    assert DEFAULT_CONFIG.pii_name_min_unique_ratio == 0.5
+    assert not flagged(DEFAULT_CONFIG.pii_name_min_unique_ratio)
+    assert flagged(0.2)
+    assert not flagged(0.3)
+
+
+def test_value_patterns_flag_a_column_whatever_its_name_and_unique_ratio():
+    col = profile_column([f"person{i % 3}@example.com" for i in range(N)], name="contact")
+
+    assert "possible_pii" in col.warnings
 
 
 NUMERIC_STAT_FIELDS = ("min", "max", "mean", "std", "median", "q1", "q3", "skew", "n_outliers_iqr")
@@ -458,7 +509,7 @@ def test_pii_named_numeric_column_keeps_counts():
 
 
 def test_pii_named_numeric_column_raises_no_statistics_based_warnings():
-    values = [1.0] * 10 + [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 100000.0]
+    values = [float(i) for i in range(1, N)] + [100000.0]
     col = profile_column(values, name="phone")
 
     assert col.warnings == ["possible_pii"]

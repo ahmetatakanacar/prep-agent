@@ -29,7 +29,7 @@ Profile a CSV file and print a summary table. `--target` names the target column
 uv run prep-agent profile tests/fixtures/customers.csv --target churned --out runs/profile.json
 ```
 
-Columns that look like they hold personal data (email addresses, phone numbers, or names such as `email` or `user_name`) are flagged `possible_pii` and their sample values, top values and numeric statistics are left out of the profile. Pass `--no-samples` to leave sample values out for every column.
+Columns that look like they hold personal data (email addresses, phone numbers, or names such as `email` or `user_name` whose values are mostly distinct) are flagged `possible_pii` and their sample values, top values and numeric statistics are left out of the profile. Pass `--no-samples` to leave sample values out for every column.
 
 Run a hand-written plan on a CSV file. The plan's `target` is the target column. The plan is validated first; if it has errors, nothing is run or written.
 

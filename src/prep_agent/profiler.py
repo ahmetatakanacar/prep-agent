@@ -30,7 +30,10 @@ threshold lives in `ProfilerConfig`.
 
 Privacy: a column is flagged `possible_pii` if most of its string values look like email
 addresses or phone numbers, or if a part of its name (split on `_`, spaces and camelCase) is in
-`ProfilerConfig.pii_name_parts`. Such columns get no `sample_values`, no `top_values` and no
+`ProfilerConfig.pii_name_parts` and more than `pii_name_min_unique_ratio` of its values are
+distinct. The second condition keeps out columns that merely have such a name, such as a yes/no
+`PhoneService` or a `department_name` with a handful of categories, which hold no identities.
+Such columns get no `sample_values`, no `top_values` and no
 numeric statistics (min and max would expose real values); counts and ratios are kept. This
 applies whether or not samples are disabled.
 
@@ -85,8 +88,10 @@ class ProfilerConfig:
     many_outliers_ratio: float = 0.05
 
     # Privacy: a column is flagged `possible_pii` if at least this share of its string values
-    # looks like an email address or phone number, or if a part of its name is in the list.
+    # looks like an email address or phone number, or if a part of its name is in the list and
+    # more than `pii_name_min_unique_ratio` of its values are distinct.
     pii_value_min_ratio: float = 0.8
+    pii_name_min_unique_ratio: float = 0.5
     pii_name_parts: tuple[str, ...] = (
         "email", "mail", "phone", "telefon", "tel", "gsm", "name", "firstname", "lastname",
         "surname", "ad", "soyad", "isim", "address", "adres", "tckn", "iban", "ssn",
@@ -232,7 +237,7 @@ def _profile_column(
         warnings.append("high_cardinality")
     if inferred == "id_like":
         warnings.append("possible_id")
-    possible_pii = _looks_like_pii(name, non_null, inferred, config)
+    possible_pii = _looks_like_pii(name, non_null, n_unique, inferred, config)
     if possible_pii:
         warnings.append("possible_pii")
     hide_values = possible_pii or not include_samples
@@ -334,9 +339,10 @@ def _looks_like_datetime(strings: pd.Series, config: ProfilerConfig) -> bool:
 
 
 def _looks_like_pii(
-    name: str, non_null: pd.Series, inferred: InferredType, config: ProfilerConfig
+    name: str, non_null: pd.Series, n_unique: int, inferred: InferredType, config: ProfilerConfig
 ) -> bool:
-    if not set(_name_parts(name)).isdisjoint(config.pii_name_parts):
+    name_matches = not set(_name_parts(name)).isdisjoint(config.pii_name_parts)
+    if name_matches and n_unique > config.pii_name_min_unique_ratio * len(non_null):
         return True
     if inferred == "datetime" or non_null.empty or pdt.is_numeric_dtype(non_null.dtype):
         return False
