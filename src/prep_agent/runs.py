@@ -1,13 +1,15 @@
 """Run artifacts: everything one execution leaves on disk under `<runs_dir>/<run_id>/`.
 
 Files: profile.json, plan.json, train.csv, test.csv, pipeline.joblib, issues.json (plan and
-result issues) and run.json (see `RunInfo`). A run made by the agent also gets llm_trace.json
-(every planner call, no prompts and no data) and qa.json (the questions and the answers).
+result issues), report.md and run.json (see `RunInfo`). A run made by the agent also gets
+llm_trace.json (every planner call, no prompts and no data) and qa.json (the questions and the
+answers). baseline.json (the cross-validated baseline scores) is written when a baseline was
+computed. report.md is written for every run, failed ones included.
 
 A run whose plan never got to execute (the agent ran out of revisions on plan errors) is saved
 with `result=None`: no train.csv, test.csv or pipeline.joblib, status "failed", and the plan
 issues passed in. A run that never got a plan (the LLM failed or kept asking) is saved with
-`plan=None`: only profile.json, run.json, llm_trace.json and qa.json, status "failed".
+`plan=None`: only profile.json, report.md, run.json, llm_trace.json and qa.json, status "failed".
 
 `pipeline.joblib` holds only the fitted stateful steps (impute, encode, scale). It does not
 include the stateless steps or the split, so it can only be applied to a frame that has gone
@@ -31,10 +33,12 @@ from pydantic import BaseModel
 
 from prep_agent import __version__
 from prep_agent.agent import AgentTrace
+from prep_agent.baseline import BaselineResult
 from prep_agent.executor import ExecutionResult
 from prep_agent.llm.base import TokenUsage
 from prep_agent.plan import Plan
 from prep_agent.profiler import DatasetProfile
+from prep_agent.report import render_report
 from prep_agent.validators import ValidationIssue, has_errors
 
 PIPELINE_JOBLIB_NOTE = (
@@ -90,13 +94,15 @@ def save_run(
     trace: AgentTrace | None = None,
     plan_issues: list[ValidationIssue] | None = None,
     error: str | None = None,
+    baseline: BaselineResult | None = None,
 ) -> Path:
     """Write the artifacts of one execution and return the run directory.
 
     `status` is "failed" if the result has validation errors or there is no result; the
     artifacts are still written so the run can be inspected. `plan_issues` only applies without
-    a result, which has its own. `error` says why a failed run stopped. `run_id` defaults to
-    the UTC timestamp.
+    a result, which has its own. `error` says why a failed run stopped. `baseline` is the
+    baseline evaluation of a successful run; None means none was computed. `run_id` defaults to
+    the UTC timestamp. `input_path` is stored with "/" separators on every platform.
     """
     created_at = datetime.now(UTC)
     run_id = run_id if run_id is not None else created_at.strftime("%Y%m%d-%H%M%S")
@@ -110,7 +116,7 @@ def save_run(
         run_id=run_id,
         created_at=created_at,
         prep_agent_version=__version__,
-        input_path=str(input_path),
+        input_path=Path(input_path).as_posix(),
         input_sha256=_sha256(Path(input_path)),
         target=plan.target if plan else None,
         rows=Counts(before=profile.n_rows),
@@ -135,7 +141,7 @@ def save_run(
         raise RunExistsError(f"run directory already exists: {run_dir}") from None
 
     try:
-        _write_artifacts(run_dir, info, profile, plan, result, plan_issues or [], trace)
+        _write_artifacts(run_dir, info, profile, plan, result, plan_issues or [], trace, baseline)
     except BaseException:
         shutil.rmtree(run_dir, ignore_errors=True)
         raise
@@ -150,6 +156,7 @@ def _write_artifacts(
     result: ExecutionResult | None,
     plan_issues: list[ValidationIssue],
     trace: AgentTrace | None,
+    baseline: BaselineResult | None,
 ) -> None:
     _write_text(run_dir / "profile.json", profile.model_dump_json(indent=2))
     if plan is not None:
@@ -176,6 +183,12 @@ def _write_artifacts(
         _write_text(run_dir / "llm_trace.json", json.dumps(llm_trace, indent=2))
         qa = [record.model_dump(mode="json") for record in trace.qa_history]
         _write_text(run_dir / "qa.json", json.dumps(qa, indent=2))
+    if baseline is not None:
+        _write_text(run_dir / "baseline.json", baseline.model_dump_json(indent=2))
+    report = render_report(
+        info, plan=plan, result=result, plan_issues=plan_issues, trace=trace, baseline=baseline
+    )
+    _write_text(run_dir / "report.md", report)
     _write_text(run_dir / "run.json", info.model_dump_json(indent=2))
 
 

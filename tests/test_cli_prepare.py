@@ -76,6 +76,7 @@ def test_prepare_runs_the_plan_and_writes_the_run(invoke_cli, monkeypatch, tmp_p
         "run.json",
         "llm_trace.json",
         "qa.json",
+        "report.md",
     }
     info = read_json(run_dir / "run.json")
     assert info["status"] == "ok"
@@ -386,6 +387,7 @@ def test_an_llm_failure_before_any_plan_saves_a_failed_run_without_a_plan(
         "run.json",
         "llm_trace.json",
         "qa.json",
+        "report.md",
     }
     info = read_json(run_dir / "run.json")
     assert info["status"] == "failed"

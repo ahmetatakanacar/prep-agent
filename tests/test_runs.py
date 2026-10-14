@@ -11,6 +11,7 @@ import pytest
 
 from prep_agent import __version__
 from prep_agent.agent import AgentTrace, LLMCallRecord
+from prep_agent.baseline import BaselineResult, BaselineScore, ModelBaseline
 from prep_agent.executor import execute
 from prep_agent.llm.base import TokenUsage
 from prep_agent.ops import OpContext, get_op
@@ -32,6 +33,7 @@ EXPECTED_FILES = {
     "pipeline.joblib",
     "issues.json",
     "run.json",
+    "report.md",
 }
 
 
@@ -96,7 +98,7 @@ def test_run_json_describes_the_run(tmp_path, executed):
     assert info.run_id == "r1"
     assert info.prep_agent_version == __version__
     assert info.input_sha256 == hashlib.sha256(CUSTOMERS_CSV.read_bytes()).hexdigest()
-    assert info.input_path == str(CUSTOMERS_CSV)
+    assert info.input_path == CUSTOMERS_CSV.as_posix()
     assert (info.rows.before, info.rows.train, info.rows.test) == (20, 16, 4)
     assert (info.columns.before, info.columns.train, info.columns.test) == (7, 6, 6)
     assert info.target == "churned"
@@ -304,6 +306,7 @@ def test_a_failed_run_without_a_result_still_writes_plan_issues_and_trace(tmp_pa
         "run.json",
         "llm_trace.json",
         "qa.json",
+        "report.md",
     }
     info = RunInfo.model_validate_json((run_dir / "run.json").read_text(encoding="utf-8"))
     assert info.status == "failed"
@@ -334,6 +337,7 @@ def test_a_run_without_a_plan_writes_profile_trace_qa_and_run_json(tmp_path, exe
         "run.json",
         "llm_trace.json",
         "qa.json",
+        "report.md",
     }
     info = RunInfo.model_validate_json((run_dir / "run.json").read_text(encoding="utf-8"))
     assert info.status == "failed"
@@ -392,3 +396,116 @@ def test_a_successful_run_has_no_error(tmp_path, executed):
     run_dir = save(tmp_path, executed, run_id="r1")
 
     assert json.loads((run_dir / "run.json").read_text(encoding="utf-8"))["error"] is None
+
+
+# --- report and baseline ---
+
+
+def make_baseline() -> BaselineResult:
+    scores = {"accuracy": BaselineScore(mean=0.75, std=0.1)}
+    return BaselineResult(
+        task_type="classification",
+        n_rows=16,
+        random_state=42,
+        n_folds=4,
+        metrics=["accuracy"],
+        models=[ModelBaseline(name="dummy_most_frequent", scores=scores)],
+    )
+
+
+def test_report_md_is_written_for_a_successful_run(tmp_path, executed):
+    run_dir = save(tmp_path, executed, run_id="r1")
+
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert report.startswith("# Preparation report")
+    assert "customers.csv" in report
+    assert "**Status:** ok" in report
+    assert b"\r\n" not in (run_dir / "report.md").read_bytes()
+
+
+def test_a_baseline_is_written_as_json_and_shown_in_the_report(tmp_path, executed):
+    baseline = make_baseline()
+
+    run_dir = save(tmp_path, executed, run_id="r1", baseline=baseline)
+
+    assert {p.name for p in run_dir.iterdir()} == EXPECTED_FILES | {"baseline.json"}
+    written = BaselineResult.model_validate_json(
+        (run_dir / "baseline.json").read_text(encoding="utf-8")
+    )
+    assert written == baseline
+    assert "dummy_most_frequent" in (run_dir / "report.md").read_text(encoding="utf-8")
+
+
+def test_without_a_baseline_there_is_no_baseline_json_and_the_report_says_so(tmp_path, executed):
+    run_dir = save(tmp_path, executed, run_id="r1")
+
+    assert not (run_dir / "baseline.json").exists()
+    assert "--no-baseline" in (run_dir / "report.md").read_text(encoding="utf-8")
+
+
+def test_a_failed_run_reports_the_reason_and_has_no_baseline_section(tmp_path, executed):
+    _, plan, profile, _ = executed
+
+    run_dir = save_run(
+        tmp_path / "runs",
+        input_path=CUSTOMERS_CSV,
+        profile=profile,
+        plan=plan,
+        result=None,
+        plan_issues=[],
+        error="the plan still has 1 error(s)",
+        baseline=make_baseline(),
+        run_id="r1",
+    )
+
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert "the plan still has 1 error(s)" in report
+    assert "## Baseline" not in report
+
+
+def test_a_failed_run_without_a_plan_still_gets_a_report(tmp_path, executed):
+    _, _, profile, _ = executed
+
+    run_dir = save_run(
+        tmp_path / "runs",
+        input_path=CUSTOMERS_CSV,
+        profile=profile,
+        plan=None,
+        result=None,
+        trace=make_trace(),
+        error="the LLM call failed: rate limited",
+        run_id="r1",
+    )
+
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert "the LLM call failed: rate limited" in report
+    assert "prepare for churn" in report
+
+
+def test_the_report_uses_the_trace_for_model_and_tokens(tmp_path, executed):
+    run_dir = save(tmp_path, executed, run_id="r1", trace=make_trace())
+
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert "fake-model" in report
+    assert "120 input / 30 output" in report
+    assert "Which model family?" in report
+
+
+def test_input_path_is_stored_with_forward_slashes(tmp_path, executed, monkeypatch):
+    _, plan, profile, result = executed
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "customers.csv").write_bytes(CUSTOMERS_CSV.read_bytes())
+    monkeypatch.chdir(tmp_path)
+
+    run_dir = save_run(
+        tmp_path / "runs",
+        input_path=Path("data") / "customers.csv",
+        profile=profile,
+        plan=plan,
+        result=result,
+        run_id="r1",
+    )
+
+    info = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info["input_path"] == "data/customers.csv"
+    assert "customers.csv" in (run_dir / "report.md").read_text(encoding="utf-8")
