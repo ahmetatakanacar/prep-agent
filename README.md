@@ -105,6 +105,45 @@ $env:PREP_AGENT_RUN_LLM_TESTS="1"; uv run pytest -m llm -v -s
 - A very long column name (about 80 characters or more) can make a line of the generated `pipeline.py` longer than the lint limit, so `ruff check` may report E501 for it. The script still runs.
 - PII detection relies on a list of column-name parts and on email and phone value patterns. Email addresses or phone numbers inside free text are not detected.
 
+## Benchmark
+
+The `benchmarks/` folder measures the agent on real datasets against two other plans: a hand-written reference plan and a rule-based naive plan. Every plan is validated and executed by the same code and scored with the baseline of this project (5-fold cross-validation on its own train split, the test set is not used), so a score depends on the plan only.
+
+- `benchmarks/datasets.yaml` lists 9 OpenML datasets (6 classification, 3 regression, from 768 to 48842 rows) with the target, a goal sentence written like a user, the license OpenML reports and the difficulty each one tests.
+- `benchmarks/reference/` holds one reference plan per dataset. They are drafts and still need a human review; see `benchmarks/reference/README.md`.
+- The naive plan drops identifier and constant columns, imputes with the median (numeric) or the most frequent value, and one-hot encodes every other column.
+
+```powershell
+uv run python benchmarks/download.py
+uv run python benchmarks/run_benchmark.py --dry-run
+uv run python benchmarks/run_benchmark.py --models gpt-6-luna --dry-run
+uv run python benchmarks/run_benchmark.py --models gpt-6-luna --repeats 3 --out-dir benchmarks/results/first
+```
+
+`download.py` writes `benchmarks/datasets/<name>.csv` and a `manifest.json` with the sha256 of every file (the folder is git-ignored). Files that exist are not downloaded again but are checked against the registry; a dataset whose OpenML id, name, version or shape differs from the registry is refused.
+
+`run_benchmark.py` runs the agent non-interactively (questions are answered with the recommended option) with the dataset's target and the model family `any`, once per dataset, model and repeat, plus the reference and naive plans once per dataset. Without `--models` it runs only the reference and naive plans, which calls no model. `--datasets a,b` runs a subset, `--out-dir` sets where `results.json` and `summary.md` go (default `benchmarks/results/<timestamp>`).
+
+Nothing is spent without a price and an approval:
+
+- Prices are read from `benchmarks/prices.yaml`, which you fill in. The shipped file has no prices, because the project does not guess them. Each entry is named like the model passed to `--models` and has `input_per_million` and `output_per_million`:
+
+  ```yaml
+  currency: USD
+  models:
+    my-model:
+      input_per_million: 1.0
+      output_per_million: 4.0
+  ```
+
+- A model without a price is refused, in a dry run too.
+- Before anything runs, the command lists the jobs and the estimated maximum use and cost of the agent runs, and asks for approval (`--yes` skips the question; declining runs nothing). The estimate is an upper bound from the size of the real prompts and the most calls the agent can make; a model that bills hidden reasoning as output can still exceed it.
+- `--dry-run` stops after that listing and calls no model.
+
+A failing job never stops the run. Each job is recorded as `ok`, `failed` (the plan or its result was rejected, with the validator codes) or `error` (anything unexpected, with the message), and `results.json` is rewritten after every job. For agent runs it records whether the run succeeded, the revisions, the questions asked, the error codes of the first plan, the warning codes of the final plan, token use, cost and time. `summary.md` has the scores per dataset and method, the difference to the naive plan, the agent statistics and the most frequent issue codes.
+
+The tests that need the downloaded files (the reference and naive plans against the real profiles) are skipped when the files are missing.
+
 ## Development
 
 ```powershell
