@@ -44,7 +44,17 @@ def use_llm(monkeypatch, responses, **kwargs) -> FakeLLM:
 
 
 def prepare_args(tmp_path, *extra, csv=CSV):
-    return ["prepare", csv, "--goal", GOAL, "--out-dir", str(tmp_path / "runs"), *extra]
+    # The baseline has its own tests (test_cli_baseline.py); skipping it keeps these fast.
+    return [
+        "prepare",
+        csv,
+        "--goal",
+        GOAL,
+        "--out-dir",
+        str(tmp_path / "runs"),
+        "--no-baseline",
+        *extra,
+    ]
 
 
 def only_run(tmp_path) -> Path:

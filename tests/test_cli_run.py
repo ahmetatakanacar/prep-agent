@@ -8,7 +8,17 @@ INVALID_PLAN = str(FIXTURES / "customers_plan_invalid.json")
 
 
 def run_args(tmp_path, *extra, plan=PLAN):
-    return ["run", CSV, "--plan", plan, "--out-dir", str(tmp_path / "runs"), *extra]
+    # The baseline has its own tests (test_cli_baseline.py); skipping it keeps these fast.
+    return [
+        "run",
+        CSV,
+        "--plan",
+        plan,
+        "--out-dir",
+        str(tmp_path / "runs"),
+        "--no-baseline",
+        *extra,
+    ]
 
 
 def test_successful_run_writes_artifacts(invoke_cli, tmp_path):

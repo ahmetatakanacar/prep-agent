@@ -12,8 +12,9 @@ from rich.text import Text
 
 from prep_agent import __version__
 from prep_agent.agent import AgentError, AgentTrace, AskFn, run_agent
+from prep_agent.baseline import BaselineResult, evaluate_baselines
 from prep_agent.env import load_dotenv_file
-from prep_agent.executor import ExecutionError, PlanValidationError, execute
+from prep_agent.executor import ExecutionError, ExecutionResult, PlanValidationError, execute
 from prep_agent.llm.base import LLMError
 from prep_agent.llm.factory import create_llm_client
 from prep_agent.llm.ping import PING_SYSTEM, PING_USER, PingReply
@@ -98,6 +99,9 @@ def run_command(
         bool,
         typer.Option("--dry-run", help="Only validate the plan; run nothing and write nothing."),
     ] = False,
+    no_baseline: Annotated[
+        bool, typer.Option("--no-baseline", help="Skip the baseline scores (cross-validation).")
+    ] = False,
 ) -> None:
     """Run a hand-written plan on a CSV file and save the run artifacts."""
     console = Console()
@@ -125,8 +129,16 @@ def run_command(
         _fail(str(exc))
 
     _print_issues(console, result.plan_issues + result.result_issues)
+    baseline = None if no_baseline else _compute_baseline(console, plan, result)
     try:
-        run_dir = save_run(out_dir, input_path=csv_path, profile=profile, plan=plan, result=result)
+        run_dir = save_run(
+            out_dir,
+            input_path=csv_path,
+            profile=profile,
+            plan=plan,
+            result=result,
+            baseline=baseline,
+        )
     except RunExistsError as exc:
         _fail(str(exc))
 
@@ -137,6 +149,8 @@ def run_command(
         console.print(Text(f"Run folder: {run_dir}"), soft_wrap=True)
         raise typer.Exit(1)
     console.print(Text(f"Train: {train_shape} | Test: {test_shape}"))
+    if baseline is not None:
+        _print_baseline(console, baseline)
     console.print(Text(f"Run folder: {run_dir}"), soft_wrap=True)
 
 
@@ -169,6 +183,9 @@ def prepare_command(
     max_revisions: Annotated[
         int, typer.Option(min=0, help="How often a plan with errors may be sent back.")
     ] = 2,
+    no_baseline: Annotated[
+        bool, typer.Option("--no-baseline", help="Skip the baseline scores (cross-validation).")
+    ] = False,
 ) -> None:
     """Have the LLM plan the preparation of a CSV file, then validate, run and save it."""
     console = Console()
@@ -194,6 +211,7 @@ def prepare_command(
 
     _print_plan(console, result.plan)
     _print_issues(console, result.issues)
+    baseline = None if no_baseline else _compute_baseline(console, result.plan, result.execution)
     try:
         run_dir = save_run(
             out_dir,
@@ -202,6 +220,7 @@ def prepare_command(
             plan=result.plan,
             result=result.execution,
             trace=result.trace,
+            baseline=baseline,
         )
     except RunExistsError as exc:
         _fail(str(exc))
@@ -213,6 +232,8 @@ def prepare_command(
             f"Test: {len(test)} rows x {test.shape[1]} columns"
         )
     )
+    if baseline is not None:
+        _print_baseline(console, baseline)
     console.print(Text(f"Run folder: {run_dir}"), soft_wrap=True)
 
 
@@ -333,6 +354,48 @@ def _report_agent_failure(
     console.print(Text("The run failed; artifacts saved with status failed."))
     console.print(Text(f"Run folder: {run_dir}"), soft_wrap=True)
     raise typer.Exit(1)
+
+
+def _compute_baseline(
+    console: Console, plan: Plan, execution: ExecutionResult
+) -> BaselineResult | None:
+    """Score the baselines for a successful execution; None if the result has errors."""
+    if has_errors(execution.result_issues):
+        return None
+    console.print(Text("Computing baseline scores..."))
+    return evaluate_baselines(
+        execution.split_train, execution.pipeline, plan.target, plan.task_type
+    )
+
+
+def _print_baseline(console: Console, baseline: BaselineResult) -> None:
+    if baseline.skipped_reason is not None:
+        console.print(Text(f"Baseline skipped: {baseline.skipped_reason}"))
+        return
+    console.print(
+        Text(
+            f"Baseline: {baseline.n_folds}-fold cross-validation on train, "
+            "mean ± std (the dummy model is the reference)"
+        )
+    )
+    scored = [model for model in baseline.models if model.scores]
+    if scored:
+        table = Table()
+        table.add_column("model", no_wrap=True)
+        for metric in baseline.metrics:
+            table.add_column(metric, justify="right")
+        for model in scored:
+            table.add_row(
+                Text(model.name),
+                *(
+                    Text(f"{model.scores[m].mean:.3f} ± {model.scores[m].std:.3f}")
+                    for m in baseline.metrics
+                ),
+            )
+        console.print(table)
+    for model in baseline.models:
+        if model.skipped_reason is not None:
+            console.print(Text(f"Skipped {model.name}: {model.skipped_reason}"))
 
 
 def _usage_line(trace: AgentTrace) -> str:
