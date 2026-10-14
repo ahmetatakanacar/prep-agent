@@ -302,6 +302,36 @@ def test_skipped_models_are_listed_with_their_reason(executed):
     assert "RuntimeError: boom" in text
 
 
+def make_regression_baseline(n_rows: int = 150) -> BaselineResult:
+    return BaselineResult(
+        task_type="regression",
+        n_rows=n_rows,
+        random_state=42,
+        n_folds=5,
+        metrics=["r2", "rmse", "mae"],
+        models=[
+            ModelBaseline(
+                name="dummy_mean",
+                scores={m: BaselineScore(mean=1.5, std=0.25) for m in ("r2", "rmse", "mae")},
+            )
+        ],
+    )
+
+
+def test_the_dummy_sentence_names_the_most_frequent_class_for_classification(executed):
+    text = section(render(executed, baseline=make_baseline()), "Baseline")
+
+    assert "always predicts the most frequent class" in text
+    assert "training mean" not in text
+
+
+def test_the_dummy_sentence_names_the_training_mean_for_regression(executed):
+    text = section(render(executed, baseline=make_regression_baseline()), "Baseline")
+
+    assert "always predicts the training mean" in text
+    assert "most frequent class" not in text
+
+
 def test_the_dummy_baseline_is_explained_as_the_reference(executed):
     text = section(render(executed, baseline=make_baseline()), "Baseline")
 
