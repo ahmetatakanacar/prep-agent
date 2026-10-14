@@ -396,7 +396,7 @@ def test_a_second_run_into_the_same_folder_is_refused(workdirs):
     again = run_script_in(workdirs)
 
     assert again.returncode != 0
-    assert "train.csv" in again.stderr and "test.csv" in again.stderr
+    assert "train.csv and test.csv already exist;" in again.stderr
     assert "--force" in again.stderr
     assert "Traceback" not in again.stderr
     assert {n: (run_dir / n).read_bytes() for n in before} == before
@@ -422,7 +422,7 @@ def test_one_existing_file_is_named_and_nothing_is_written(workdirs, existing):
     done = run_script_in(workdirs)
 
     assert done.returncode != 0
-    assert existing in done.stderr
+    assert f"{existing} already exists;" in done.stderr
     assert other not in done.stderr
     assert (run_dir / existing).read_text(encoding="utf-8") == "mine"
     assert not (run_dir / other).exists()
