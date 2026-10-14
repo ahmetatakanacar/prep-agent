@@ -138,10 +138,11 @@ def generate_pipeline_script(
         Import("pandas", alias="pd"),
         Import("sklearn.pipeline", "Pipeline"),
     }
-    stateless_body, split_body = [], []
+    stateless_body, split_body, helpers = [], [], []
     for index, step, op in [*stateless, *splits]:
         code = op.codegen(step)
         imports.update(code.imports)
+        helpers.extend(h for h in code.helpers if h not in helpers)
         body = _step_comment(index, step) + render_statements(code.statements, _BODY)
         (split_body if op.kind == "split" else stateless_body).extend(body)
 
@@ -175,6 +176,7 @@ def generate_pipeline_script(
         ),
         _READ_INPUT,
         _FILE_SHA256,
+        *[helper.splitlines() for helper in helpers],
         [
             "def apply_stateless_steps(df: pd.DataFrame) -> pd.DataFrame:",
             '    """Apply the steps that learn nothing from the data, before the split."""',

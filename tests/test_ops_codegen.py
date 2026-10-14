@@ -43,6 +43,8 @@ def namespace(imports: tuple[Import, ...]) -> dict:
 
 def run_statements(code, **variables):
     ns = namespace(code.imports) | variables
+    for helper in code.helpers:
+        exec(helper, ns)
     exec("\n".join(render_statements(code.statements)), ns)
     return ns
 
@@ -81,6 +83,55 @@ def test_stateless_code_matches_the_op(step):
     ns = run_statements(spec.codegen(step), df=df.copy())
 
     pd.testing.assert_frame_equal(ns["df"], expected)
+
+
+HARD_COLUMN = 'x"); import os  #'
+
+
+def cast_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "whole": [1, 2, 3, 1, 2, 3],
+            "with_gaps": [1.0, np.nan, 20.0, 1.0, np.nan, 3.0],
+            "fractions": [0.5, 1.0, 2.25, np.nan, 1.0, 0.5],
+            "text": ["p", None, "q", "p", "r", None],
+            "flag": [True, False, True, True, False, False],
+            HARD_COLUMN: [5, 6, 7, 5, 6, 7],
+            "t": [0, 1, 0, 1, 0, 1],
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "columns",
+    [
+        ["whole"],
+        ["with_gaps"],
+        ["fractions"],
+        ["text", "flag"],
+        [HARD_COLUMN],
+        ["whole", "with_gaps", "fractions", "text", "flag", HARD_COLUMN],
+    ],
+)
+def test_cast_to_category_code_matches_the_op(columns):
+    step = make_step(op="cast_to_category", columns=columns)
+    spec = get_op("cast_to_category")
+    df = cast_frame()
+
+    expected = spec.apply(df.copy(), step, OpContext(target=TARGET))
+    ns = run_statements(spec.codegen(step), df=df.copy())
+
+    pd.testing.assert_frame_equal(ns["df"], expected)
+
+
+def test_cast_to_category_code_does_not_modify_the_input():
+    step = make_step(op="cast_to_category", columns=["whole"])
+    df = cast_frame()
+
+    ns = run_statements(get_op("cast_to_category").codegen(step), df=df)
+
+    pd.testing.assert_frame_equal(df, cast_frame())
+    assert ns["df"] is not df
 
 
 def test_dedupe_code_resets_the_index():

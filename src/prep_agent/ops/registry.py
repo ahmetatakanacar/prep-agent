@@ -5,7 +5,7 @@ from typing import get_args
 from prep_agent.ops.base import OpError, OpSpec
 from prep_agent.ops.split import SPLIT
 from prep_agent.ops.stateful import ENCODE, IMPUTE, SCALE
-from prep_agent.ops.stateless import DEDUPE, DROP_COLUMNS, DROP_MISSING_TARGET
+from prep_agent.ops.stateless import CAST_TO_CATEGORY, DEDUPE, DROP_COLUMNS, DROP_MISSING_TARGET
 
 
 class OpRegistry:
@@ -38,7 +38,16 @@ class OpRegistry:
 
 
 REGISTRY = OpRegistry()
-for _spec in (DEDUPE, DROP_COLUMNS, DROP_MISSING_TARGET, SPLIT, IMPUTE, ENCODE, SCALE):
+for _spec in (
+    DEDUPE,
+    DROP_COLUMNS,
+    DROP_MISSING_TARGET,
+    CAST_TO_CATEGORY,
+    SPLIT,
+    IMPUTE,
+    ENCODE,
+    SCALE,
+):
     REGISTRY.register(_spec)
 
 

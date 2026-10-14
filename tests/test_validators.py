@@ -55,6 +55,10 @@ def drop_missing_target():
     return {"op": "drop_missing_target"}
 
 
+def cast(*columns):
+    return {"op": "cast_to_category", "columns": list(columns)}
+
+
 def split(stratify=True):
     return {"op": "split", "stratify": stratify}
 
@@ -323,6 +327,13 @@ def test_leakage_drop_columns_and_drop_missing_target_after_split_are_errors():
     assert [i.step_index for i in find(issues, "stateless_after_split")] == [1, 2]
 
 
+def test_leakage_cast_to_category_after_split_is_an_error():
+    issues = validate(split(), cast("flag"))
+
+    [issue] = find(issues, "stateless_after_split")
+    assert issue.step_index == 1
+
+
 def test_leakage_scaling_the_target_is_an_error():
     issues = validate(split(), scale(["churn"]))
 
@@ -369,10 +380,11 @@ def test_step_kind_comes_from_the_registry(monkeypatch):
         scale(["nope"]),
         drop("nope"),
         dedupe(["nope"]),
+        cast("nope"),
     ],
 )
 def test_reference_to_a_column_that_never_existed_is_an_error(step):
-    stateless = step["op"] in ("dedupe", "drop_columns")
+    stateless = step["op"] in ("dedupe", "drop_columns", "cast_to_category")
     issues = validate(step, split()) if stateless else validate(split(), step)
 
     [issue] = find(issues, "unknown_column")
@@ -387,6 +399,14 @@ def test_reference_to_a_dropped_column_is_an_error():
     assert issue.column == "country"
     assert issue.step_index == 2
     assert "drop" in issue.message
+
+
+def test_casting_a_dropped_column_is_an_error():
+    issues = validate(drop("flag"), cast("flag"), split())
+
+    [issue] = find(issues, "unknown_column")
+    assert issue.column == "flag"
+    assert issue.step_index == 1
 
 
 def test_reference_to_a_onehot_encoded_column_is_an_error():
@@ -415,10 +435,13 @@ def test_reference_to_an_existing_column_is_not_unknown():
         encode(["churn"]),
         scale(["churn"]),
         drop("churn"),
+        cast("churn"),
     ],
 )
 def test_target_in_a_modifying_step_is_an_error(step):
-    steps = [step, split()] if step["op"] == "drop_columns" else [split(), step]
+    steps = (
+        [step, split()] if step["op"] in ("drop_columns", "cast_to_category") else [split(), step]
+    )
     issues = validate(*steps)
 
     [issue] = find(issues, "target_in_step")

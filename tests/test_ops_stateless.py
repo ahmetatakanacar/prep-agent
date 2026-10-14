@@ -1,9 +1,10 @@
+import numpy as np
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
 from prep_agent.ops import OpContext, OpError, get_op
-from prep_agent.plan import DedupeStep, DropColumnsStep, DropMissingTargetStep
+from prep_agent.plan import CastToCategoryStep, DedupeStep, DropColumnsStep, DropMissingTargetStep
 
 REASON = "test"
 CTX = OpContext(target="y")
@@ -165,3 +166,83 @@ def test_drop_missing_target_requires_the_target_column(df):
 
     with pytest.raises(OpError, match="target"):
         run("drop_missing_target", df.drop(columns="y"), step)
+
+
+# --- cast_to_category ------------------------------------------------------------------------
+
+
+def cast(columns: list[str]) -> CastToCategoryStep:
+    return CastToCategoryStep(op="cast_to_category", columns=columns, reason=REASON)
+
+
+def test_cast_writes_integers_as_text():
+    df = pd.DataFrame({"hour": [0, 7, 23], "y": [1, 0, 1]})
+
+    result = run("cast_to_category", df, cast(["hour"]))
+
+    assert result["hour"].tolist() == ["0", "7", "23"]
+    assert pd.api.types.is_string_dtype(result["hour"])
+
+
+def test_cast_writes_whole_floats_without_the_decimal_point():
+    # An integer column that has missing values is a float column, but its values are still
+    # whole numbers and must give the same categories as the integer column would.
+    df = pd.DataFrame({"code": [1.0, np.nan, 20.0, 1.0], "y": [0, 1, 0, 1]})
+
+    result = run("cast_to_category", df, cast(["code"]))
+
+    assert result["code"].dropna().tolist() == ["1", "20", "1"]
+
+
+def test_cast_keeps_missing_values_missing():
+    df = pd.DataFrame({"code": [1.0, np.nan, 3.0], "label": ["a", None, "c"], "y": [0, 1, 0]})
+
+    result = run("cast_to_category", df, cast(["code", "label"]))
+
+    assert result["code"].isna().tolist() == [False, True, False]
+    assert result["label"].isna().tolist() == [False, True, False]
+
+
+def test_cast_keeps_the_fraction_of_a_float_that_has_one():
+    df = pd.DataFrame({"size": [0.5, 1.0, 2.25], "y": [0, 1, 0]})
+
+    result = run("cast_to_category", df, cast(["size"]))
+
+    assert result["size"].tolist() == ["0.5", "1", "2.25"]
+
+
+def test_cast_leaves_text_alone_and_writes_booleans_as_text():
+    df = pd.DataFrame({"city": ["ankara", "izmir"], "flag": [True, False], "y": [0, 1]})
+
+    result = run("cast_to_category", df, cast(["city", "flag"]))
+
+    assert result["city"].tolist() == ["ankara", "izmir"]
+    assert result["flag"].tolist() == ["True", "False"]
+
+
+def test_cast_leaves_other_columns_and_the_index_alone(df):
+    result = run("cast_to_category", df, cast(["a"]))
+
+    assert list(result.columns) == list(df.columns)
+    assert result.index.equals(df.index)
+    assert_frame_equal(result.drop(columns="a"), df.drop(columns="a"))
+    assert result["a"].tolist() == ["1", "1", "2", "2", "3", "3"]
+
+
+def test_cast_does_not_modify_input_and_returns_new_frame(df):
+    original = df.copy()
+
+    result = run("cast_to_category", df, cast(["a"]))
+
+    assert_frame_equal(df, original)
+    assert result is not df
+
+
+def test_cast_unknown_column_raises_op_error(df):
+    with pytest.raises(OpError, match="nope"):
+        run("cast_to_category", df, cast(["a", "nope"]))
+
+
+def test_cast_refuses_the_target(df):
+    with pytest.raises(OpError, match="target"):
+        run("cast_to_category", df, cast(["a", "y"]))

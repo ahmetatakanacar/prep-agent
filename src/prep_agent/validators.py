@@ -28,6 +28,7 @@ from pydantic import BaseModel, ConfigDict
 
 from prep_agent.ops import get_op
 from prep_agent.plan import (
+    CastToCategoryStep,
     DedupeStep,
     DropColumnsStep,
     DropMissingTargetStep,
@@ -304,6 +305,8 @@ class _Validation:
             for name in self._resolve(index, step.columns):
                 del self.columns[name]
                 self.gone[name] = f"dropped by drop_columns at step {index}"
+        elif isinstance(step, CastToCategoryStep):
+            self._resolve(index, step.columns)
         elif isinstance(step, DropMissingTargetStep):
             if self.plan.target in self.columns:
                 self.columns[self.plan.target].has_missing = False

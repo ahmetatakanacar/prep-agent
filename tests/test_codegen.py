@@ -635,6 +635,45 @@ def test_header_and_reasons(tmp_path):
     assert positions == sorted(positions)
 
 
+def cast_plan(*cast_steps) -> Plan:
+    return build_plan(
+        {
+            "target": "label",
+            "task_type": "classification",
+            "model_family": "tree",
+            "steps": [*cast_steps, split(stratify=True)],
+        }
+    )
+
+
+def test_a_cast_step_makes_the_script_define_its_helpers_once():
+    plan = cast_plan(
+        {"op": "cast_to_category", "columns": ["num3"]},
+        {"op": "cast_to_category", "columns": ["n_items"]},
+    )
+
+    source = generate_pipeline_script(
+        plan, run_id=RUN_ID, prep_agent_version="1", input_sha256="0" * 64
+    )
+
+    assert source.count("def cast_to_category(") == 1
+    assert source.count("def category_text(") == 1
+    assert source.count("cast_to_category(df, ") == 2
+    assert source.index("def cast_to_category(") < source.index("def apply_stateless_steps(")
+
+
+def test_a_plan_without_a_cast_step_has_no_helpers():
+    source = generate_pipeline_script(
+        build_plan(PLANS["no_stateful_steps"]),
+        run_id=RUN_ID,
+        prep_agent_version="1",
+        input_sha256="0" * 64,
+    )
+
+    assert "cast_to_category" not in source
+    assert "category_text" not in source
+
+
 def test_a_plan_without_a_split_cannot_be_generated():
     plan = build_plan(
         {**PLANS["no_stateful_steps"], "steps": PLANS["no_stateful_steps"]["steps"][:2]}

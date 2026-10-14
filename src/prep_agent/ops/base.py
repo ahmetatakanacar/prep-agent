@@ -30,11 +30,13 @@ class StatementCode:
 
     The statements work on `df` (a split op assigns `train` and `test` instead) and may refer to
     `TARGET`, the module constant that holds the target column. `imports` lists everything else
-    the statements need.
+    the statements need. `helpers` are functions the statements call, as complete source text with
+    no data in it; pipeline.py defines each distinct helper once, ahead of the steps.
     """
 
     statements: tuple[Assign, ...]
     imports: tuple[Import, ...] = ()
+    helpers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

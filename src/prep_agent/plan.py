@@ -73,6 +73,13 @@ class DropMissingTargetStep(_Step):
     op: Literal["drop_missing_target"]
 
 
+class CastToCategoryStep(_Step):
+    """Treat numbers that stand for categories (hour, month, codes) as categories."""
+
+    op: Literal["cast_to_category"]
+    columns: ColumnList
+
+
 class SplitStep(_Step):
     """Split rows into train and test sets. Everything after this step is fit on train only."""
 
@@ -136,6 +143,7 @@ Step = Annotated[
     DedupeStep
     | DropColumnsStep
     | DropMissingTargetStep
+    | CastToCategoryStep
     | SplitStep
     | ImputeStep
     | EncodeStep

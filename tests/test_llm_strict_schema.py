@@ -122,6 +122,7 @@ def test_discriminated_union_becomes_plain_any_of():
             "DedupeStep",
             "DropColumnsStep",
             "DropMissingTargetStep",
+            "CastToCategoryStep",
             "SplitStep",
             "ImputeStep",
             "EncodeStep",

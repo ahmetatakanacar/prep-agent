@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from prep_agent.plan import (
+    CastToCategoryStep,
     DedupeStep,
     DropColumnsStep,
     DropMissingTargetStep,
@@ -30,6 +31,7 @@ ALL_STEPS = [
     {"op": "dedupe", "subset": None, "keep": "first", "reason": REASON},
     {"op": "drop_columns", "columns": ["id"], "reason": REASON},
     {"op": "drop_missing_target", "reason": REASON},
+    {"op": "cast_to_category", "columns": ["hour"], "reason": REASON},
     {"op": "split", "stratify": True, "reason": REASON},
     {"op": "impute", "columns": ["age"], "strategy": "median", "reason": REASON},
     {"op": "encode", "columns": ["plan"], "method": "onehot", "reason": REASON},
@@ -172,6 +174,7 @@ def test_dedupe_subset_must_not_be_an_empty_list():
     "model, kwargs",
     [
         (DropColumnsStep, {"op": "drop_columns"}),
+        (CastToCategoryStep, {"op": "cast_to_category"}),
         (ImputeStep, {"op": "impute", "strategy": "mean"}),
         (EncodeStep, {"op": "encode", "method": "ordinal"}),
         (ScaleStep, {"op": "scale", "method": "robust"}),
@@ -241,6 +244,7 @@ def test_plan_parses_every_step_type_in_order():
         DedupeStep,
         DropColumnsStep,
         DropMissingTargetStep,
+        CastToCategoryStep,
         SplitStep,
         ImputeStep,
         EncodeStep,
