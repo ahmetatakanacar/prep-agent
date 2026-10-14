@@ -14,7 +14,7 @@ All plans use `model_family: "any"`, a stratified 80/20 split for classification
 
 ## Decisions that apply to every plan
 
-- **Scaling under "any".** The planner's system prompt says to skip optional steps such as scaling when the model family is unknown. These drafts scale the numeric columns anyway, because the baseline includes a linear model and scaling costs trees nothing. If you disagree, the benchmark will measure the planner's policy and not the agent's judgement: remove the `scale` steps, or keep them and read linear-model differences with that in mind.
+- **Scaling under "any".** The planner's system prompt tells the agent to scale the numeric columns (robust when there are many outliers) and to one-hot encode when the model family is unknown, because the model may be linear and scaling costs trees nothing. These drafts do the same, and the baseline includes a linear model. (An earlier prompt told the agent to skip scaling under "any", which would have made the agent differ from these drafts for a reason that has nothing to do with judgement.)
 - **Only one-hot.** No plan uses ordinal encoding; the ordinal encoder orders categories alphabetically, which is an invented order for grades like Ex/Gd/TA.
 - **No `dedupe`.** Datasets with exact duplicate rows (telco 22, bank-marketing 274, adult 52, bike-sharing 2) have no identifier, so a repeated row may be a different customer or hour with the same values. See adult for what happens when duplicates are removed anyway.
 - **High-missing columns are dropped without asking.** A hand-written plan has no user to ask; the agent would have to ask (see CLAUDE.md, rule 5).
@@ -47,13 +47,13 @@ Only the split and a robust scaling of the 8 numeric columns.
 Drops `TotalCharges`; stratified split; one-hot encodes the 15 text columns; standard-scales `tenure` and `MonthlyCharges`.
 
 - `TotalCharges` is text with 11 non-numeric entries and cannot be converted, so it is dropped. It correlates 0.9996 with `tenure * MonthlyCharges`, so almost nothing is lost. Confirm.
-- The 22 duplicate rows are kept (see above). `PhoneService` is a yes/no column that the profiler wrongly flags `possible_pii` because of "phone" in its name. `SeniorCitizen` is a 0/1 number and is left as it is.
+- The 22 duplicate rows are kept (see above). `PhoneService` is a yes/no column; the profiler used to flag it `possible_pii` because of "phone" in its name and no longer does, since a name only counts when the values are mostly distinct. `SeniorCitizen` is a 0/1 number and is left as it is.
 
 ## adult
 
 Drops `fnlwgt` (census sampling weight) and `education` (repeats `education-num`); fills the missing `workclass`, `occupation` and `native-country` with the category "Unknown"; one-hot encodes the categorical columns, grouping `native-country` into 10; standard-scales the 5 numeric columns.
 
-- The 52 exact duplicate rows are kept. A first draft removed them with `dedupe` before dropping `fnlwgt`, but then the result validator reported `train_test_overlap` as an error: rows that become identical once `fnlwgt` is gone land in both train and test, and with `dedupe` in the plan that is an error. Deduplicating after the drop would delete different people who share their attributes. Both options are judgement calls; this draft avoids the question.
+- The 52 exact duplicate rows are kept, and the result validator reports them as a `train_test_overlap` warning. A first draft removed them with `dedupe` before dropping `fnlwgt`, but then the validator reported `train_test_overlap` as an error, because it counted rows that became identical once `fnlwgt` was gone. It now only counts records that are identical in the raw input, so a `dedupe` placed before the drop would be accepted and would remove exactly the 52 true copies. Deduplicating after the drop would delete different people who share their attributes. Whether to keep the copies is still a judgement call, and this draft still does not make it.
 - "Unknown" versus the most frequent value for missing categories: the missingness is informative here (workclass and occupation go missing together).
 - `capital-gain` and `capital-loss` are mostly 0 with a very long tail; standard scaling is crude for them.
 
@@ -69,7 +69,7 @@ Stratified split; one-hot encodes 8 text columns; robust-scales `age`, `balance`
 
 Drops `Id`, `GarageYrBlt`, `Utilities`, `Alley`, `PoolQC` and `MiscFeature`; fills the missing values of 12 categorical columns with the category "None" (the feature is absent), `Electrical` with the most frequent value, `MasVnrArea` with the median (0) and `LotFrontage` with the median plus an indicator; one-hot encodes every text column; robust-scales every numeric column.
 
-- Most "missing" values here are not lost data: no alley, no pool, no basement, no fence. Treating them as the category "None" is the key call of this plan. Check the 12 columns listed in the first `impute` step. `MasVnrType` is a special case: its 872 "missing" values are 864 houses whose type is the text "None" (no veneer), which pandas reads as missing when it loads the CSV, plus 8 real gaps.
+- Most "missing" values here are not lost data: no alley, no pool, no basement, no fence. Treating them as the category "None" is the key call of this plan. Check the 12 columns listed in the first `impute` step. `MasVnrType` is a special case: 864 of its houses have the text "None" (no veneer). The loader used to read that text as missing (872 missing values, 60%); it now keeps it as a category, so only the 8 real gaps are missing (0.5%) and the first `impute` step fills just those.
 - `Alley`, `PoolQC` and `MiscFeature` are dropped because they are 94% to 99.5% empty; `Utilities` because one house differs from the rest. Low-count signals are lost.
 - `MSSubClass` is a building-class code stored as a number and `MoSold`/`YrSold` are calendar values; none can be encoded, so they are scaled as numbers.
 - The sale price is skewed (1.9) and has no log transform; large houses are outliers that nothing clips.

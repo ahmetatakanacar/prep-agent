@@ -48,7 +48,7 @@ datasets:
     task_type: classification
     goal: I want to predict which telecom customers will churn so we can target retention offers.
     license: Public
-    challenge: A 26% churn rate, a numeric column (TotalCharges) stored as text that no available op can convert, and a column wrongly flagged as personal data.
+    challenge: A 26% churn rate and a numeric column (TotalCharges) stored as text that no available op can convert.
     n_rows: 7043
     n_columns: 20
 

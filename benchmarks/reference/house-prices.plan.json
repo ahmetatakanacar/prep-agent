@@ -23,7 +23,7 @@
       "random_state": 42
     },
     {
-      "reason": "In this data a missing value means the house has no such feature (no basement, no garage, no fireplace, no fence, no veneer), not that a value was lost, so it becomes the category 'None'.",
+      "reason": "In this data a missing value means the house has no such feature (no basement, no garage, no fireplace, no fence, no veneer), not that a value was lost, so it becomes the category 'None'. MasVnrType already has 'None' as a category (864 houses without veneer); only its 8 real gaps are filled here, and 'None' matches the area of 0 that MasVnrArea gets for them.",
       "op": "impute",
       "columns": [
         "MasVnrType",
