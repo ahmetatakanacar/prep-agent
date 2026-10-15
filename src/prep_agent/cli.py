@@ -1,5 +1,6 @@
 """Command-line interface for prep-agent."""
 
+import sys
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, NoReturn
@@ -38,6 +39,19 @@ app = typer.Typer(
 )
 
 
+def ensure_utf8_output() -> None:
+    """Make stdout and stderr UTF-8 so the arrows and box characters of the output survive.
+
+    On Windows a stream that is redirected to a file or a pipe uses the ANSI code page, which
+    cannot encode them and would end the command with a UnicodeEncodeError.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "")
+        if reconfigure is not None and encoding != "utf8":
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 def _print_version(value: bool) -> None:
     if value:
         typer.echo(__version__)
@@ -55,6 +69,7 @@ def main(
     ),
 ) -> None:
     """LLM-planned, validated data preparation for tabular ML."""
+    ensure_utf8_output()
     load_dotenv_file()
 
 
