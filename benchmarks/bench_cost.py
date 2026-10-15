@@ -44,12 +44,27 @@ class PriceError(ValueError):
 
 
 class ModelPrice(BaseModel):
-    """What a model costs per million tokens, in the currency of the file."""
+    """What a model costs per million tokens, in the currency of the file.
+
+    The cache prices are optional because not every provider bills them. Where one is missing,
+    the tokens it would apply to are charged the input price.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     input_per_million: float = Field(ge=0)
     output_per_million: float = Field(ge=0)
+    cached_input_per_million: float | None = Field(default=None, ge=0)
+    cache_write_per_million: float | None = Field(default=None, ge=0)
+
+    @property
+    def has_cache_prices(self) -> bool:
+        return self.cached_input_per_million is not None or self.cache_write_per_million is not None
+
+    @property
+    def highest_input_per_million(self) -> float:
+        """What a token of input can cost at most: cache writes are dearer than input."""
+        return max(self.input_per_million, self.cache_write_per_million or 0.0)
 
 
 class PriceTable(BaseModel):
@@ -87,9 +102,31 @@ def require_prices(table: PriceTable, models: list[str], path: Path) -> dict[str
     return {model: table.models[model] for model in models}
 
 
-def token_cost(input_tokens: int, output_tokens: int, price: ModelPrice) -> float:
+def token_cost(
+    input_tokens: int,
+    output_tokens: int,
+    price: ModelPrice,
+    cached_input_tokens: int | None = None,
+    cache_write_tokens: int | None = None,
+) -> float:
+    """Cached and cache-write tokens are part of `input_tokens` and are charged their own
+    price; the rest of the input is charged the input price. A cache count that is unknown, or
+    has no price, leaves its tokens in the ordinary input, which is the formula without caches."""
+    cached = (cached_input_tokens or 0) if price.cached_input_per_million is not None else 0
+    written = (cache_write_tokens or 0) if price.cache_write_per_million is not None else 0
+    ordinary = max(input_tokens - cached - written, 0)
     return (
-        input_tokens * price.input_per_million + output_tokens * price.output_per_million
+        ordinary * price.input_per_million
+        + cached * (price.cached_input_per_million or 0.0)
+        + written * (price.cache_write_per_million or 0.0)
+        + output_tokens * price.output_per_million
+    ) / _PER_MILLION
+
+
+def max_cost(input_tokens: int, output_tokens: int, price: ModelPrice) -> float:
+    """The most these tokens can cost: every input token at the dearest input price."""
+    return (
+        input_tokens * price.highest_input_per_million + output_tokens * price.output_per_million
     ) / _PER_MILLION
 
 
@@ -97,7 +134,13 @@ def price_of_usage(usage: TokenUsage | None, price: ModelPrice) -> float | None:
     """The cost of one run's token use; None when the provider reported no usage."""
     if usage is None:
         return None
-    return token_cost(usage.input_tokens, usage.output_tokens, price)
+    return token_cost(
+        usage.input_tokens,
+        usage.output_tokens,
+        price,
+        usage.cached_input_tokens,
+        usage.cache_write_tokens,
+    )
 
 
 @dataclass(frozen=True)
@@ -110,7 +153,8 @@ class RunEstimate:
     output_tokens: int
 
     def cost(self, price: ModelPrice) -> float:
-        return token_cost(self.input_tokens, self.output_tokens, price)
+        # An upper bound has to assume the dearest input price, not the likely mix.
+        return max_cost(self.input_tokens, self.output_tokens, price)
 
 
 def estimate_agent_run(

@@ -5,7 +5,14 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from prep_agent.agent import MAX_SCHEMA_RETRIES, AgentError, RevisionBudgetError, run_agent
+from prep_agent.agent import (
+    MAX_SCHEMA_RETRIES,
+    AgentError,
+    AgentTrace,
+    LLMCallRecord,
+    RevisionBudgetError,
+    run_agent,
+)
 from prep_agent.llm.base import LLMAPIError, TokenUsage
 from prep_agent.llm.fake import FakeLLM
 from prep_agent.plan import Plan
@@ -669,6 +676,49 @@ def test_token_usage_is_summed_over_all_calls(df):
 
     assert [c.usage for c in result.calls] == [TokenUsage(100, 10)] * 3
     assert result.total_usage == TokenUsage(300, 30)
+
+
+def test_cache_counts_are_summed_with_the_other_usage(df):
+    usage = TokenUsage(100, 10, cached_input_tokens=60, cache_write_tokens=0)
+
+    result, _, _ = run(df, [invalid_reply(), plan_reply(VALID_PLAN)], usage=usage)
+
+    assert result.total_usage == TokenUsage(200, 20, cached_input_tokens=120, cache_write_tokens=0)
+
+
+def test_cache_counts_of_a_rejected_call_are_part_of_the_total(df):
+    usage = TokenUsage(100, 10, cached_input_tokens=60)
+
+    with pytest.raises(AgentError) as caught:
+        run(df, [invalid_reply(), invalid_reply()], usage=usage)
+
+    total = caught.value.trace.total_usage
+    assert (total.cached_input_tokens, total.cache_write_tokens) == (120, None)
+
+
+def _record(index, usage):
+    return LLMCallRecord(
+        index=index,
+        purpose="plan",
+        model="m",
+        usage=usage,
+        issue_codes=[],
+        warning_codes=[],
+        response_kind="invalid",
+        response=None,
+    )
+
+
+def test_cache_counts_are_summed_over_the_calls_that_reported_them_only():
+    calls = [
+        _record(0, TokenUsage(100, 10, cached_input_tokens=60)),
+        _record(1, TokenUsage(100, 10)),
+        _record(2, TokenUsage(100, 10, cached_input_tokens=20, cache_write_tokens=5)),
+    ]
+
+    total = AgentTrace("goal", calls, []).total_usage
+
+    assert total == TokenUsage(300, 30, cached_input_tokens=80, cache_write_tokens=5)
 
 
 def test_total_usage_is_none_when_the_provider_reports_none(df):

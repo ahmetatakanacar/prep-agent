@@ -42,6 +42,9 @@ class AgentMetrics(BaseModel):
     # None when the provider reported no usage.
     input_tokens: int | None
     output_tokens: int | None
+    # Parts of input_tokens; None when the provider did not report them.
+    cached_input_tokens: int | None = None
+    cache_write_tokens: int | None = None
     cost: float | None
     qa: list[QAEntry]
 

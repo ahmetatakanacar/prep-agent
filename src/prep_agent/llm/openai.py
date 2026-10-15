@@ -80,14 +80,7 @@ class OpenAIClient:
             ) from None
 
         model = response.model or self._model
-        usage = (
-            None
-            if response.usage is None
-            else TokenUsage(
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
-            )
-        )
+        usage = _usage_of(response.usage)
 
         for item in response.output or []:
             if item.type != "message":
@@ -131,6 +124,20 @@ class OpenAIClient:
         if isinstance(key, str) and key:
             return text.replace(key, _REDACTED)
         return text
+
+
+def _usage_of(usage: Any) -> TokenUsage | None:
+    if usage is None:
+        return None
+    # Both counts sit inside input_tokens. Either may be missing: older SDK versions have no
+    # cache_write_tokens and a provider may leave the details out.
+    details = getattr(usage, "input_tokens_details", None)
+    return TokenUsage(
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        cached_input_tokens=getattr(details, "cached_tokens", None),
+        cache_write_tokens=getattr(details, "cache_write_tokens", None),
+    )
 
 
 def _format_name(schema: type[BaseModel]) -> str:

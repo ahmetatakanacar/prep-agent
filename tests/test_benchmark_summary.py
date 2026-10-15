@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from bench_cost import ModelPrice
 from bench_results import AgentMetrics, BenchmarkResults, JobResult, RunConfig
 from bench_summary import render_summary
 from prep_agent.baseline import BaselineResult, BaselineScore, ModelBaseline
@@ -628,6 +629,50 @@ class TestPlanDifferences:
     def test_is_left_out_without_agent_runs(self):
         jobs = [job("d1", "reference", plan=plan())]
         assert self.HEADING not in render_summary(results(jobs, models=()))
+
+
+def with_prices(res: BenchmarkResults, **prices: ModelPrice) -> BenchmarkResults:
+    config = res.config.model_copy(update={"prices": prices})
+    return res.model_copy(update={"config": config})
+
+
+class TestCachePricingNote:
+    PLAIN = ModelPrice(input_per_million=2.0, output_per_million=8.0)
+    CACHED = ModelPrice(
+        input_per_million=2.0,
+        output_per_million=8.0,
+        cached_input_per_million=0.5,
+        cache_write_per_million=2.5,
+    )
+
+    def notes(self, **prices):
+        res = results([job("d1", "agent", agent=agent_metrics())], models=tuple(prices))
+        return render_summary(with_prices(res, **prices)).split("## Notes", 1)[1]
+
+    def test_a_model_without_cache_prices_is_said_to_use_the_old_formula(self):
+        notes = self.notes(m1=self.PLAIN)
+        assert "m1: no cache prices in prices.yaml" in notes
+        assert "counted at the input price" in notes
+
+    def test_a_model_with_cache_prices_is_said_to_use_them(self):
+        notes = self.notes(m1=self.CACHED)
+        assert "m1: cached input and cache writes are priced separately" in notes
+
+    def test_each_model_gets_its_own_statement(self):
+        notes = self.notes(m1=self.CACHED, m2=self.PLAIN)
+        assert "m1: cached input" in notes
+        assert "m2: no cache prices" in notes
+
+    def test_a_model_with_only_a_cached_input_price_is_described_exactly(self):
+        half = ModelPrice(
+            input_per_million=2.0, output_per_million=8.0, cached_input_per_million=0.5
+        )
+        notes = self.notes(m1=half)
+        assert "m1: cached input is priced separately; cache writes are counted" in notes
+
+    def test_a_run_without_agent_jobs_has_no_cache_statement(self):
+        res = results([job("d1", "naive", baseline=classification_baseline(0.5, 0.6))], models=())
+        assert "cache" not in render_summary(res).split("## Notes", 1)[1]
 
 
 class TestAgentRuns:

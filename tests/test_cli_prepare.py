@@ -93,7 +93,12 @@ def test_prepare_runs_the_plan_and_writes_the_run(invoke_cli, monkeypatch, tmp_p
     assert info["status"] == "ok"
     assert info["goal"] == GOAL
     assert info["model"] == "fake"
-    assert info["token_usage"] == {"input_tokens": 1200, "output_tokens": 340}
+    assert info["token_usage"] == {
+        "input_tokens": 1200,
+        "output_tokens": 340,
+        "cached_input_tokens": None,
+        "cache_write_tokens": None,
+    }
     assert len(llm.calls) == 1
 
 
@@ -366,7 +371,12 @@ def test_two_schema_errors_fail_with_a_saved_failed_run(invoke_cli, monkeypatch,
     assert read_json(run_dir / "run.json")["status"] == "failed"
     trace = read_json(run_dir / "llm_trace.json")
     assert [c["purpose"] for c in trace["calls"]] == ["plan", "schema_retry"]
-    assert trace["total_usage"] == {"input_tokens": 140, "output_tokens": 10}
+    assert trace["total_usage"] == {
+        "input_tokens": 140,
+        "output_tokens": 10,
+        "cached_input_tokens": None,
+        "cache_write_tokens": None,
+    }
     assert read_json(run_dir / "run.json")["token_usage"] == trace["total_usage"]
 
 

@@ -55,6 +55,7 @@ def _reply(
     content=None,
     model="gpt-test-2026",
     usage=(11, 7),
+    details=None,
     status="completed",
     reason=None,
 ):
@@ -71,7 +72,11 @@ def _reply(
         model=model,
         usage=None
         if usage is None
-        else SimpleNamespace(input_tokens=usage[0], output_tokens=usage[1]),
+        else SimpleNamespace(
+            input_tokens=usage[0],
+            output_tokens=usage[1],
+            input_tokens_details=None if details is None else SimpleNamespace(**details),
+        ),
     )
 
 
@@ -294,6 +299,56 @@ def test_schema_error_has_no_usage_when_the_response_reports_none():
     assert raised.value.usage is None
 
 
+def test_cached_and_cache_write_tokens_are_taken_from_the_input_details():
+    details = {"cached_tokens": 100, "cache_write_tokens": 8}
+    client, _ = make_client(_reply(Answer(value=1), usage=(120, 33), details=details))
+
+    result = client.generate("s", "u", Answer)
+
+    assert result.usage == TokenUsage(
+        input_tokens=120, output_tokens=33, cached_input_tokens=100, cache_write_tokens=8
+    )
+
+
+def test_a_provider_that_reports_zero_cache_use_gives_zeros_not_unknowns():
+    details = {"cached_tokens": 0, "cache_write_tokens": 0}
+    client, _ = make_client(_reply(Answer(value=1), details=details))
+
+    usage = client.generate("s", "u", Answer).usage
+
+    assert (usage.cached_input_tokens, usage.cache_write_tokens) == (0, 0)
+
+
+def test_cache_counts_are_unknown_when_the_response_has_no_input_details():
+    client, _ = make_client(_reply(Answer(value=1)))
+
+    usage = client.generate("s", "u", Answer).usage
+
+    assert usage == TokenUsage(input_tokens=11, output_tokens=7)
+    assert (usage.cached_input_tokens, usage.cache_write_tokens) == (None, None)
+
+
+def test_a_missing_or_null_cache_field_is_unknown():
+    with_null, _ = make_client(
+        _reply(Answer(value=1), details={"cached_tokens": 40, "cache_write_tokens": None})
+    )
+    without_field, _ = make_client(_reply(Answer(value=1), details={"cached_tokens": 40}))
+
+    for client in (with_null, without_field):
+        usage = client.generate("s", "u", Answer).usage
+        assert (usage.cached_input_tokens, usage.cache_write_tokens) == (40, None)
+
+
+def test_schema_error_carries_the_cache_counts_too():
+    details = {"cached_tokens": 64, "cache_write_tokens": 0}
+    client, _ = make_client(_reply(text="not json", usage=(120, 33), details=details))
+
+    with pytest.raises(LLMSchemaError) as raised:
+        client.generate("s", "u", Answer)
+
+    assert raised.value.usage == TokenUsage(120, 33, cached_input_tokens=64, cache_write_tokens=0)
+
+
 def test_response_without_parsed_output_raises_schema_error():
     client, _ = make_client(_reply(None))
 
@@ -381,7 +436,8 @@ def test_real_sdk_client_sends_a_strict_json_schema_request_and_parses_the_reply
 
     assert result.parsed == Answer(value=3)
     assert result.model == "gpt-served"
-    assert result.usage == TokenUsage(input_tokens=12, output_tokens=4)
+    # The installed SDK reports cached_tokens (0 here) and may not know cache_write_tokens yet.
+    assert result.usage == TokenUsage(input_tokens=12, output_tokens=4, cached_input_tokens=0)
     [request] = seen
     assert request.url.path.endswith("/responses")
     body = json.loads(request.content)

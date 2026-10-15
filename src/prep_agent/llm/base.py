@@ -13,8 +13,27 @@ from pydantic import BaseModel, ValidationError
 
 @dataclass(frozen=True)
 class TokenUsage:
+    """What a call used. `input_tokens` includes the cached and the cache-write tokens.
+
+    The cache counts are None when the provider does not report them, which is not the same
+    as zero: the benchmark prices a count it does not know like ordinary input.
+    """
+
     input_tokens: int
     output_tokens: int
+    cached_input_tokens: int | None = None
+    cache_write_tokens: int | None = None
+
+
+def format_usage(usage: TokenUsage) -> str:
+    """One line for reports: input (with the cache counts, if known) and output."""
+    cache = []
+    if usage.cached_input_tokens is not None:
+        cache.append(f"{usage.cached_input_tokens} cached")
+    if usage.cache_write_tokens is not None:
+        cache.append(f"{usage.cache_write_tokens} cache writes")
+    detail = f" ({', '.join(cache)})" if cache else ""
+    return f"{usage.input_tokens} input{detail} / {usage.output_tokens} output"
 
 
 class LLMError(Exception):

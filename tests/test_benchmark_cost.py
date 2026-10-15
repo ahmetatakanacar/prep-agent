@@ -10,8 +10,10 @@ from bench_cost import (
     PriceError,
     estimate_agent_run,
     load_prices,
+    max_cost,
     price_of_usage,
     require_prices,
+    token_cost,
 )
 from prep_agent.llm.base import TokenUsage
 from prep_agent.profiler import profile_dataframe
@@ -42,6 +44,25 @@ class TestLoadPrices:
     def test_a_missing_file_is_reported(self, tmp_path):
         with pytest.raises(PriceError, match="not found"):
             load_prices(tmp_path / "nope.yaml")
+
+    def test_cache_prices_are_optional_and_read_when_given(self, tmp_path):
+        entry = _model(cached_input_per_million=0.5, cache_write_per_million=2.5)
+        table = load_prices(_write(tmp_path, {"models": {"cached": entry, "plain": _model()}}))
+        cached, plain = table.models["cached"], table.models["plain"]
+        assert (cached.cached_input_per_million, cached.cache_write_per_million) == (0.5, 2.5)
+        assert (plain.cached_input_per_million, plain.cache_write_per_million) == (None, None)
+
+    @pytest.mark.parametrize(
+        "models",
+        [
+            {"m": _model(cached_input_per_million=-0.1)},
+            {"m": _model(cache_write_per_million=-1)},
+            {"m": _model(cached_input_per_million="cheap")},
+        ],
+    )
+    def test_a_bad_cache_price_is_reported(self, tmp_path, models):
+        with pytest.raises(PriceError, match="invalid price file"):
+            load_prices(_write(tmp_path, {"models": models}))
 
     @pytest.mark.parametrize(
         "models",
@@ -106,6 +127,66 @@ class TestPriceOfUsage:
         assert price_of_usage(None, self.PRICE) is None
 
 
+class TestCachedUsageCost:
+    PLAIN = ModelPrice(input_per_million=2.0, output_per_million=8.0)
+    CACHED = ModelPrice(
+        input_per_million=2.0,
+        output_per_million=8.0,
+        cached_input_per_million=0.5,
+        cache_write_per_million=2.5,
+    )
+    USAGE = TokenUsage(
+        input_tokens=1_000_000,
+        output_tokens=250_000,
+        cached_input_tokens=400_000,
+        cache_write_tokens=100_000,
+    )
+
+    def test_each_kind_of_input_is_charged_at_its_own_price(self):
+        # 500k ordinary at 2.0, 400k cached at 0.5, 100k written at 2.5, 250k output at 8.0.
+        expected = 1.0 + 0.2 + 0.25 + 2.0
+        assert price_of_usage(self.USAGE, self.CACHED) == pytest.approx(expected)
+
+    def test_cached_tokens_are_part_of_the_input_not_added_to_it(self):
+        usage = TokenUsage(1_000_000, 0, cached_input_tokens=1_000_000)
+        assert price_of_usage(usage, self.CACHED) == pytest.approx(0.5)
+
+    def test_usage_without_cache_counts_is_charged_the_old_way(self):
+        usage = TokenUsage(input_tokens=500_000, output_tokens=250_000)
+        assert price_of_usage(usage, self.CACHED) == pytest.approx(1.0 + 2.0)
+
+    def test_a_model_without_cache_prices_uses_the_old_formula_for_cached_usage(self):
+        assert price_of_usage(self.USAGE, self.PLAIN) == pytest.approx(2.0 + 2.0)
+
+    def test_without_a_cache_write_price_the_written_tokens_are_ordinary_input(self):
+        price = ModelPrice(
+            input_per_million=2.0, output_per_million=8.0, cached_input_per_million=0.5
+        )
+        # 600k ordinary (the written 100k included) at 2.0, 400k cached at 0.5.
+        assert price_of_usage(self.USAGE, price) == pytest.approx(1.2 + 0.2 + 2.0)
+
+    def test_without_a_cached_input_price_the_cached_tokens_are_ordinary_input(self):
+        price = ModelPrice(
+            input_per_million=2.0, output_per_million=8.0, cache_write_per_million=2.5
+        )
+        # 900k ordinary (the cached 400k included) at 2.0, 100k written at 2.5.
+        assert price_of_usage(self.USAGE, price) == pytest.approx(1.8 + 0.25 + 2.0)
+
+    def test_counts_that_exceed_the_input_never_make_the_cost_negative(self):
+        usage = TokenUsage(100, 0, cached_input_tokens=300, cache_write_tokens=0)
+        assert price_of_usage(usage, self.CACHED) >= 0
+
+    def test_token_cost_takes_the_cache_counts_as_keywords(self):
+        cost = token_cost(
+            1_000_000, 0, self.CACHED, cached_input_tokens=1_000_000, cache_write_tokens=0
+        )
+        assert cost == pytest.approx(0.5)
+
+    def test_cache_prices_are_reported_as_set_or_not(self):
+        assert self.CACHED.has_cache_prices
+        assert not self.PLAIN.has_cache_prices
+
+
 def _profile(n_columns=5, n_rows=60):
     df = pd.DataFrame({f"c{i}": range(n_rows) for i in range(n_columns - 1)})
     df["y"] = [0, 1] * (n_rows // 2)
@@ -133,6 +214,31 @@ class TestEstimateAgentRun:
 
     def test_the_estimate_is_deterministic(self):
         assert self.estimate() == self.estimate()
+
+    def test_a_cache_write_price_above_the_input_price_raises_the_upper_bound(self):
+        estimate = self.estimate()
+        plain = ModelPrice(input_per_million=2.0, output_per_million=8.0)
+        dear_writes = ModelPrice(
+            input_per_million=2.0,
+            output_per_million=8.0,
+            cached_input_per_million=0.1,
+            cache_write_per_million=2.5,
+        )
+        expected = (estimate.input_tokens * 2.5 + estimate.output_tokens * 8.0) / 1_000_000
+        assert estimate.cost(dear_writes) == pytest.approx(expected)
+        assert estimate.cost(dear_writes) > estimate.cost(plain)
+
+    def test_cheaper_cache_prices_do_not_lower_the_upper_bound(self):
+        estimate = self.estimate()
+        plain = ModelPrice(input_per_million=2.0, output_per_million=8.0)
+        cheap = ModelPrice(
+            input_per_million=2.0,
+            output_per_million=8.0,
+            cached_input_per_million=0.1,
+            cache_write_per_million=1.0,
+        )
+        assert estimate.cost(cheap) == pytest.approx(estimate.cost(plain))
+        assert max_cost(1_000_000, 0, cheap) == pytest.approx(2.0)
 
     def test_the_cost_applies_the_price_to_both_token_counts(self):
         estimate = self.estimate()

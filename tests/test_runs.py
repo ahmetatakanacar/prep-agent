@@ -305,7 +305,12 @@ def test_a_trace_adds_the_trace_and_qa_files(tmp_path, executed):
     assert {p.name for p in run_dir.iterdir()} == EXPECTED_FILES | {"llm_trace.json", "qa.json"}
     trace = json.loads((run_dir / "llm_trace.json").read_text(encoding="utf-8"))
     assert trace["model"] == "fake-model"
-    assert trace["total_usage"] == {"input_tokens": 120, "output_tokens": 30}
+    assert trace["total_usage"] == {
+        "input_tokens": 120,
+        "output_tokens": 30,
+        "cached_input_tokens": None,
+        "cache_write_tokens": None,
+    }
     [call] = trace["calls"]
     assert call["purpose"] == "plan" and call["issue_codes"] == []
     assert call["response_kind"] == "plan"
@@ -321,6 +326,24 @@ def test_run_json_gets_goal_model_and_usage_from_the_trace(tmp_path, executed):
     assert info.goal == "prepare for churn"
     assert info.model == "fake-model"
     assert info.token_usage == TokenUsage(120, 30)
+
+
+def test_cache_counts_reach_the_trace_and_run_json(tmp_path, executed):
+    usage = TokenUsage(120, 30, cached_input_tokens=80, cache_write_tokens=16)
+
+    run_dir = save(tmp_path, executed, run_id="r1", trace=make_trace(usage=usage))
+
+    expected = {
+        "input_tokens": 120,
+        "output_tokens": 30,
+        "cached_input_tokens": 80,
+        "cache_write_tokens": 16,
+    }
+    trace = json.loads((run_dir / "llm_trace.json").read_text(encoding="utf-8"))
+    assert trace["total_usage"] == expected
+    assert trace["calls"][0]["usage"] == expected
+    info = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info["token_usage"] == expected
 
 
 def test_usage_stays_empty_when_the_provider_reported_none(tmp_path, executed):

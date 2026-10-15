@@ -20,7 +20,7 @@ the last attempt fails too, `AgentError` is raised.
 The planner only ever sees the profile (see `prep_agent.planner`), never the data frame.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -83,14 +83,22 @@ class AgentTrace:
 
     @property
     def total_usage(self) -> TokenUsage | None:
-        """Sum over the calls that reported usage; None if no call did."""
+        """Sum over the calls that reported usage; None if no call did. A cache count is summed
+        over the calls that reported it and is None if none did."""
         reported = [call.usage for call in self.calls if call.usage is not None]
         if not reported:
             return None
         return TokenUsage(
             input_tokens=sum(usage.input_tokens for usage in reported),
             output_tokens=sum(usage.output_tokens for usage in reported),
+            cached_input_tokens=_sum_known(usage.cached_input_tokens for usage in reported),
+            cache_write_tokens=_sum_known(usage.cache_write_tokens for usage in reported),
         )
+
+
+def _sum_known(counts: Iterable[int | None]) -> int | None:
+    known = [count for count in counts if count is not None]
+    return sum(known) if known else None
 
 
 @dataclass(frozen=True)

@@ -29,6 +29,7 @@ from bench_cost import (
     MAX_REVISIONS,
     ModelPrice,
     estimate_agent_run,
+    max_cost,
     price_of_usage,
     token_cost,
 )
@@ -131,9 +132,7 @@ def plan_run(
             runs=repeats * len(specs),
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            cost=token_cost(input_tokens, output_tokens, prices[model])
-            if model in prices
-            else None,
+            cost=max_cost(input_tokens, output_tokens, prices[model]) if model in prices else None,
         )
         for model in models
     ]
@@ -424,6 +423,8 @@ def _agent_metrics(
         first_plan_error_codes=_first_plan_errors(trace.calls, final_errors),
         input_tokens=usage.input_tokens if usage else None,
         output_tokens=usage.output_tokens if usage else None,
+        cached_input_tokens=usage.cached_input_tokens if usage else None,
+        cache_write_tokens=usage.cache_write_tokens if usage else None,
         cost=price_of_usage(usage, price) if price is not None else None,
         qa=[QAEntry(question=r.question.question, answer=r.answer) for r in trace.qa_history],
     )

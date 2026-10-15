@@ -13,6 +13,7 @@ from prep_agent.llm.base import (
     LLMSchemaError,
     TokenUsage,
     describe_validation_error,
+    format_usage,
 )
 
 
@@ -59,6 +60,29 @@ def test_result_carries_parsed_model_name_and_usage():
     assert result.parsed == Answer(value=1)
     assert result.model == "m"
     assert result.usage == TokenUsage(input_tokens=10, output_tokens=5)
+
+
+def test_cache_counts_are_optional_and_unknown_by_default():
+    usage = TokenUsage(10, 5)
+
+    assert usage.cached_input_tokens is None
+    assert usage.cache_write_tokens is None
+
+
+def test_usage_without_cache_counts_reads_input_and_output_only():
+    assert format_usage(TokenUsage(1200, 340)) == "1200 input / 340 output"
+
+
+def test_usage_with_cache_counts_names_them_inside_the_input():
+    usage = TokenUsage(1200, 340, cached_input_tokens=900, cache_write_tokens=100)
+
+    assert format_usage(usage) == "1200 input (900 cached, 100 cache writes) / 340 output"
+
+
+def test_usage_with_one_cache_count_names_only_that_one():
+    assert format_usage(TokenUsage(1200, 340, cached_input_tokens=0)) == (
+        "1200 input (0 cached) / 340 output"
+    )
 
 
 def test_usage_is_optional():

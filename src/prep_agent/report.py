@@ -13,6 +13,7 @@ from jinja2 import Environment, PackageLoader, StrictUndefined
 from prep_agent.agent import AgentTrace
 from prep_agent.baseline import SMALL_TRAIN_ROWS, BaselineResult, metric_label
 from prep_agent.executor import ExecutionResult
+from prep_agent.llm.base import format_usage
 from prep_agent.plan import (
     DedupeStep,
     DropColumnsStep,
@@ -122,11 +123,7 @@ def _llm_facts(trace: AgentTrace | None) -> dict[str, str]:
     if not trace.calls:
         return {"model": "none (no LLM call completed)", "tokens": "none"}
     usage = trace.total_usage
-    tokens = (
-        "not reported by the provider"
-        if usage is None
-        else f"{usage.input_tokens} input / {usage.output_tokens} output"
-    )
+    tokens = "not reported by the provider" if usage is None else format_usage(usage)
     return {"model": trace.model or "none", "tokens": tokens}
 
 

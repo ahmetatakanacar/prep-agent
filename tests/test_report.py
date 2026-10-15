@@ -255,6 +255,14 @@ def test_a_pipe_in_a_reason_does_not_break_the_table(executed):
 # --- validation ---
 
 
+def test_report_names_the_cache_counts_when_the_provider_reported_them(executed):
+    usage = TokenUsage(1200, 340, cached_input_tokens=900, cache_write_tokens=100)
+
+    report = render(executed, trace=make_trace(usage=usage))
+
+    assert "1200 input (900 cached, 100 cache writes) / 340 output" in report
+
+
 def test_no_issues_is_stated_explicitly():
     # The customers target has no missing values, so the fixture plan's drop_missing_target
     # step would be reported as pointless.

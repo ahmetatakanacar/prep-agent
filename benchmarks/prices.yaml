@@ -5,6 +5,12 @@
 # `currency` is only a label for the tables. Every entry under `models` is named exactly as the
 # model is passed to --models and has two numbers: `input_per_million` and `output_per_million`,
 # the price of one million input and output tokens. Copy them from your provider's price list.
+#
+# Two more numbers are optional: `cached_input_per_million` (input tokens served from the
+# provider's prompt cache) and `cache_write_per_million` (input tokens written to it). Both are
+# part of the input tokens the provider reports. A model without them is costed with the input
+# price for every input token, and the summary says so. The cost estimate before a run assumes
+# the dearest input price of the model.
 currency: USD
 models:
   gpt-6-luna:

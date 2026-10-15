@@ -51,7 +51,7 @@ class Workspace:
     def out_dir(self) -> Path:
         return self.root / "out"
 
-    def run(self, llm=None, models=(MODEL,), repeats=1, factory=None, **kwargs):
+    def run(self, llm=None, models=(MODEL,), repeats=1, factory=None, price=PRICE, **kwargs):
         factory = factory or (lambda model: llm)
         return run_benchmark(
             self.specs,
@@ -60,7 +60,7 @@ class Workspace:
             datasets_dir=self.datasets_dir,
             reference_dir=self.reference_dir,
             out_dir=self.out_dir,
-            prices={model: PRICE for model in models},
+            prices={model: price for model in models},
             currency="USD",
             client_factory=factory,
             **kwargs,
@@ -239,6 +239,32 @@ class TestAgentMetrics:
         assert agent.cost == pytest.approx(CALL_COST)
         assert agent.reported_model == "fake"
         assert agent.calls == 1
+
+    def test_cache_counts_and_their_prices_enter_the_metrics(self, ws):
+        usage = TokenUsage(1000, 200, cached_input_tokens=600, cache_write_tokens=100)
+        price = ModelPrice(
+            input_per_million=2.0,
+            output_per_million=8.0,
+            cached_input_per_million=0.5,
+            cache_write_per_million=2.5,
+        )
+
+        agent = job_of(ws.run(good_llm(usage=usage), price=price), "cls", "agent").agent
+
+        assert (agent.cached_input_tokens, agent.cache_write_tokens) == (600, 100)
+        assert agent.cost == pytest.approx((300 * 2.0 + 600 * 0.5 + 100 * 2.5 + 200 * 8.0) / 1e6)
+
+    def test_cache_counts_without_cache_prices_cost_the_old_way(self, ws):
+        usage = TokenUsage(1000, 200, cached_input_tokens=600, cache_write_tokens=100)
+
+        agent = job_of(ws.run(good_llm(usage=usage)), "cls", "agent").agent
+
+        assert (agent.cached_input_tokens, agent.cache_write_tokens) == (600, 100)
+        assert agent.cost == pytest.approx(CALL_COST)
+
+    def test_cache_counts_are_unknown_when_the_provider_reported_none(self, ws):
+        agent = job_of(ws.run(good_llm(usage=USAGE)), "cls", "agent").agent
+        assert (agent.cached_input_tokens, agent.cache_write_tokens) == (None, None)
 
     def test_unreported_usage_leaves_tokens_and_cost_unknown(self, ws):
         agent = job_of(ws.run(good_llm()), "cls", "agent").agent

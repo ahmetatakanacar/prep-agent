@@ -38,7 +38,7 @@ def render_summary(results: BenchmarkResults) -> str:
     sections.append(_agent_runs(results, agent_jobs))
     sections.append(_issue_codes(results, agent_jobs))
     sections.append(_failures(results))
-    sections.append(_notes())
+    sections.append(_notes(results, bool(agent_jobs)))
     return "\n\n".join(section for section in sections if section) + "\n"
 
 
@@ -515,7 +515,8 @@ def _reason(job: JobResult) -> str:
     return text or DASH
 
 
-def _notes() -> str:
+def _notes(results: BenchmarkResults, has_agent_runs: bool) -> str:
+    cache_notes = _cache_pricing_notes(results) if has_agent_runs else []
     return "\n".join(
         [
             "## Notes",
@@ -534,8 +535,32 @@ def _notes() -> str:
             "median and most-frequent imputation, one-hot encoding of every non-numeric column.",
             "- Cost is the token use the provider reported times the prices in prices.yaml; "
             "n/a means the provider reported no usage.",
+            *cache_notes,
         ]
     )
+
+
+def _cache_pricing_notes(results: BenchmarkResults) -> list[str]:
+    notes = []
+    for model in results.config.models:
+        price = results.config.prices.get(model)
+        if price is None:
+            continue
+        cached = price.cached_input_per_million is not None
+        written = price.cache_write_per_million is not None
+        if cached and written:
+            how = "cached input and cache writes are priced separately"
+        elif cached:
+            how = "cached input is priced separately; cache writes are counted at the input price"
+        elif written:
+            how = "cache writes are priced separately; cached input is counted at the input price"
+        else:
+            how = (
+                "no cache prices in prices.yaml, so cached and cache-write tokens are counted "
+                "at the input price"
+            )
+        notes.append(f"- Cost of {model}: {how}.")
+    return notes
 
 
 # --- helpers ---
