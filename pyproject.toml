@@ -25,9 +25,17 @@ openai = [
     "openai>=3.29.0",
     "python-dotenv>=1.2.4",
 ]
+# The local web UI in app/. pyyaml reads the benchmark registry for the sample list.
+web = [
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "pyyaml>=6.0.3",
+]
 
 [dependency-groups]
 dev = [
+    "httpx",
     "jsonschema>=4.26.0",
     "openai>=3.29.0",
     "pytest",
@@ -48,15 +56,16 @@ packages = ["src/prep_agent"]
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests", "benchmarks"]
+src = ["src", "tests", "benchmarks", "app"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# The benchmark scripts import each other as siblings, so tests see them the same way.
-pythonpath = ["benchmarks"]
+# The benchmark scripts import each other as siblings, so tests see them the same way. The
+# repository root makes the web UI package `app` importable.
+pythonpath = ["benchmarks", "."]
 filterwarnings = ["error"]
 markers = [
     "llm: calls the real LLM API; skipped unless PREP_AGENT_RUN_LLM_TESTS=1 and an API key is set",
