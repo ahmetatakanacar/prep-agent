@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-pref="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>prep-agent</title>
+  <meta name="color-scheme" content="light dark">
+  <script>
+    // Resolve theme and language before the first paint, so a dark system does not flash light
+    // and uppercase labels start with the right language rules.
+    (function () {
+      var root = document.documentElement, pref = "auto", lang = null;
+      try {
+        pref = localStorage.getItem("prep-theme") || "auto";
+        lang = localStorage.getItem("prep-lang");
+      } catch (e) {}
+      root.dataset.pref = pref;
+      root.dataset.theme = pref === "auto"
+        ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+        : pref;
+      if (lang !== "en" && lang !== "tr") {
+        lang = (navigator.language || "").toLowerCase().indexOf("tr") === 0 ? "tr" : "en";
+      }
+      root.lang = lang;
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <a class="skip" href="#main" data-i18n="page.skip"></a>
+
+  <header class="masthead">
+    <div class="wrap">
+      <div class="titleblock" role="group">
+        <div class="tb-cell tb-brand">
+          <span class="tb-label" data-i18n="tb.tool"></span>
+          <span class="tb-brand-name">prep-agent</span>
+        </div>
+        <div class="tb-cell">
+          <span class="tb-label" data-i18n="tb.data"></span>
+          <span class="tb-value" id="tb-data"></span>
+        </div>
+        <div class="tb-cell">
+          <span class="tb-label" data-i18n="tb.stage"></span>
+          <span class="tb-value" id="tb-stage"></span>
+        </div>
+        <div class="tb-cell">
+          <span class="tb-label" data-i18n="tb.mode"></span>
+          <span class="tb-value" id="tb-mode"></span>
+        </div>
+        <div class="tb-cell tb-toggle">
+          <button type="button" class="btn quiet small" id="theme-toggle"></button>
+        </div>
+        <div class="tb-cell tb-toggle">
+          <button type="button" class="btn quiet small" id="lang-toggle"></button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <div class="wrap">
+      <div id="banner" class="banner-slot"></div>
+      <div id="sheets"></div>
+    </div>
+  </main>
+
+  <footer class="colophon">
+    <div class="wrap">
+      <p data-i18n="footer.note"></p>
+    </div>
+  </footer>
+
+  <div id="live" class="sr-only" role="status" aria-live="polite"></div>
+  <script src="/static/i18n.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
