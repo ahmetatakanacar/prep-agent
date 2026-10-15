@@ -7,7 +7,7 @@ import pytest
 from sklearn.exceptions import ConvergenceWarning
 
 import bench_runner
-from bench_cost import ModelPrice
+from bench_cost import MAX_SCHEMA_RETRIES, ModelPrice
 from bench_datasets import DatasetSpec
 from bench_naive import naive_plan
 from bench_results import BenchmarkResults
@@ -283,6 +283,44 @@ class TestAgentMetrics:
         assert job.agent.first_plan_error_codes == ["unknown_column"]
         assert job.agent.input_tokens == 2000
         assert job.agent.cost == pytest.approx(2 * CALL_COST)
+
+    def test_a_schema_retry_is_counted_apart_from_revisions(self, ws):
+        invalid = {"kind": "plan", "plan": None, "questions": None}
+        llm = FakeLLM([invalid, answer(classification_plan()), answer(regression_plan())])
+        job = job_of(ws.run(llm), "cls", "agent")
+        assert job.status == "ok"
+        assert (job.agent.calls, job.agent.revisions, job.agent.schema_retries) == (2, 0, 1)
+        assert job.agent.first_plan_error_codes == []
+
+    def test_a_rejected_revision_is_one_revision_and_one_retry(self, ws):
+        invalid = {"kind": "plan", "plan": None, "questions": None}
+        llm = FakeLLM(
+            [
+                answer(classification_plan(drop="nope")),
+                invalid,
+                answer(classification_plan()),
+                answer(regression_plan()),
+            ]
+        )
+        job = job_of(ws.run(llm), "cls", "agent")
+        assert job.status == "ok"
+        assert (job.agent.calls, job.agent.revisions, job.agent.schema_retries) == (3, 1, 1)
+        assert job.agent.first_plan_error_codes == ["unknown_column"]
+
+    def test_runs_without_retries_record_zero(self, ws):
+        assert job_of(ws.run(good_llm()), "cls", "agent").agent.schema_retries == 0
+
+    def test_the_agent_gets_the_retry_limit_of_the_estimate(self, ws, monkeypatch):
+        seen = {}
+        real = bench_runner.run_agent
+
+        def spy(*args, **kwargs):
+            seen.update(kwargs)
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(bench_runner, "run_agent", spy)
+        ws.run(good_llm())
+        assert seen["max_schema_retries"] == MAX_SCHEMA_RETRIES
 
     def test_a_plan_accepted_at_once_has_no_first_plan_errors(self, ws):
         agent = job_of(ws.run(good_llm()), "cls", "agent").agent

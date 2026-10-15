@@ -5,13 +5,16 @@ costs. A model without a price cannot be benchmarked, so a run can never spend m
 not priced first.
 
 The estimate is an upper bound by construction, not a prediction. The agent makes at most
-`MAX_QUESTION_ROUNDS + MAX_REVISIONS + 1` calls (every question round and every revision costs
-one call, plus the first plan), and the estimate assumes it makes all of them. The size of a
-prompt is taken from the real prompt text at `CHARS_PER_TOKEN` characters per token, which
-over-counts for English and JSON; later calls add the previous plan and the validator's answer.
-The output of a call is assumed to be as large as a plan for the dataset's width, with a
-generous base for the answer's other fields. A model that bills hidden reasoning tokens as
-output can still exceed it, which is why the real cost is measured and reported separately.
+`MAX_QUESTION_ROUNDS + MAX_REVISIONS + 1` planner calls (every question round and every revision
+costs one call, plus the first plan), and each of them is repeated up to `MAX_SCHEMA_RETRIES`
+times when its answer does not match the schema. The estimate assumes it makes all of them. A
+repeated call sends its prompt again with the validation error, at most `SCHEMA_ERROR_LIMIT`
+characters, added. The size of a prompt is taken from the real prompt text at
+`CHARS_PER_TOKEN` characters per token, which over-counts for English and JSON; later calls add
+the previous plan and the validator's answer. The output of a call is assumed to be as large as
+a plan for the dataset's width, with a generous base for the answer's other fields. A model that
+bills hidden reasoning tokens as output can still exceed it, which is why the real cost is
+measured and reported separately.
 """
 
 import math
@@ -22,6 +25,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from bench_datasets import BENCHMARKS_DIR
+from prep_agent.agent import MAX_SCHEMA_RETRIES, SCHEMA_ERROR_LIMIT
 from prep_agent.llm.base import TokenUsage
 from prep_agent.planner import build_system_prompt, build_user_prompt
 from prep_agent.profiler import DatasetProfile
@@ -157,6 +161,11 @@ class RunEstimate:
         return max_cost(self.input_tokens, self.output_tokens, price)
 
 
+def max_calls_per_run() -> int:
+    """The most LLM calls one agent run can make, repeated calls included."""
+    return (MAX_QUESTION_ROUNDS + MAX_REVISIONS + 1) * (1 + MAX_SCHEMA_RETRIES)
+
+
 def estimate_agent_run(
     profile: DatasetProfile, goal: str, target: str | None, model_family: str | None
 ) -> RunEstimate:
@@ -171,15 +180,31 @@ def estimate_agent_run(
         revision=None,
         question_rounds_left=MAX_QUESTION_ROUNDS,
     )
+    retry_notice = build_user_prompt(
+        goal=goal,
+        profile=profile,
+        target=target,
+        model_family=model_family,
+        qa_history=[],
+        revision=None,
+        question_rounds_left=MAX_QUESTION_ROUNDS,
+        schema_error="x" * SCHEMA_ERROR_LIMIT,
+    )
     first_prompt = math.ceil((len(system) + len(user)) / CHARS_PER_TOKEN)
+    notice = math.ceil((len(retry_notice) - len(user)) / CHARS_PER_TOKEN)
     output_per_call = OUTPUT_BASE_TOKENS + OUTPUT_TOKENS_PER_COLUMN * profile.n_columns
-    calls = MAX_QUESTION_ROUNDS + MAX_REVISIONS + 1
+    planner_calls = MAX_QUESTION_ROUNDS + MAX_REVISIONS + 1
+    attempts = 1 + MAX_SCHEMA_RETRIES
     # A later call repeats the first prompt and adds the previous plan and the validator's
     # answer to it, each about the size of a plan.
     later_call = first_prompt + 2 * output_per_call
+    # Every attempt of a planner call sends that call's prompt; each repeat adds the notice.
+    first_call_input = attempts * first_prompt + MAX_SCHEMA_RETRIES * notice
+    later_call_input = attempts * later_call + MAX_SCHEMA_RETRIES * notice
+    calls = planner_calls * attempts
     return RunEstimate(
         calls=calls,
         first_prompt_tokens=first_prompt,
-        input_tokens=first_prompt + (calls - 1) * later_call,
+        input_tokens=first_call_input + (planner_calls - 1) * later_call_input,
         output_tokens=calls * output_per_call,
     )

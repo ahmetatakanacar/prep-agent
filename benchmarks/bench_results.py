@@ -36,6 +36,8 @@ class AgentMetrics(BaseModel):
     reported_model: str | None
     calls: int
     revisions: int
+    # Calls repeated because the answer did not match the schema; not part of `revisions`.
+    schema_retries: int = 0
     questions: int
     # Validator error codes of the first plan; empty if it was accepted.
     first_plan_error_codes: list[str]

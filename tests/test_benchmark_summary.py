@@ -55,6 +55,7 @@ def agent_metrics(**overrides) -> AgentMetrics:
         "reported_model": "m1",
         "calls": 1,
         "revisions": 0,
+        "schema_retries": 0,
         "questions": 0,
         "first_plan_error_codes": [],
         "input_tokens": 1000,
@@ -711,6 +712,23 @@ class TestAgentRuns:
         assert values["output tokens"] == "267"
         assert values["cost (EUR)"] == "0.0900"
         assert values["plan seconds"] == "15.0"
+
+    def test_schema_retries_get_their_own_column_next_to_revisions(self):
+        jobs = [
+            job("d1", "agent", agent=agent_metrics(revisions=1, schema_retries=2)),
+            job("d1", "agent", repeat=2, agent=agent_metrics(revisions=1, schema_retries=0)),
+        ]
+        rows = table(render_summary(results(jobs, repeats=2)), self.HEADING)
+        header = rows[0]
+        assert header.index("schema retries") == header.index("revisions") + 1
+        values = dict(zip(header, row(rows, "m1"), strict=True))
+        assert values["revisions"] == "1.0"
+        assert values["schema retries"] == "1.0"
+
+    def test_results_saved_before_the_column_existed_still_load_as_no_retries(self):
+        old = agent_metrics().model_dump()
+        del old["schema_retries"]
+        assert AgentMetrics.model_validate(old).schema_retries == 0
 
     def test_cost_is_marked_incomplete_when_some_runs_reported_no_usage(self):
         jobs = [

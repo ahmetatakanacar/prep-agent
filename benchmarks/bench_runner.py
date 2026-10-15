@@ -27,6 +27,7 @@ from sklearn.exceptions import ConvergenceWarning
 from bench_cost import (
     MAX_QUESTION_ROUNDS,
     MAX_REVISIONS,
+    MAX_SCHEMA_RETRIES,
     ModelPrice,
     estimate_agent_run,
     max_cost,
@@ -270,6 +271,7 @@ def _agent_job(
             model_family=MODEL_FAMILY,
             max_question_rounds=MAX_QUESTION_ROUNDS,
             max_revisions=MAX_REVISIONS,
+            max_schema_retries=MAX_SCHEMA_RETRIES,
         )
     except AgentError as exc:
         errors, warnings = partition_issues(exc.issues)
@@ -419,6 +421,7 @@ def _agent_metrics(
         reported_model=trace.model,
         calls=len(trace.calls),
         revisions=sum(call.purpose == "revise" for call in trace.calls),
+        schema_retries=sum(call.purpose == "schema_retry" for call in trace.calls),
         questions=len(trace.qa_history),
         first_plan_error_codes=_first_plan_errors(trace.calls, final_errors),
         input_tokens=usage.input_tokens if usage else None,

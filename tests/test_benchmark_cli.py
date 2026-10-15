@@ -6,6 +6,7 @@ import yaml
 from typer.testing import CliRunner
 
 import run_benchmark
+from bench_cost import MAX_SCHEMA_RETRIES, max_calls_per_run
 from benchmark_support import (
     answer,
     classification_plan,
@@ -84,6 +85,13 @@ class TestDryRun:
         assert "estimated maximum" in result.text.lower()
         assert "EUR" in result.text
         assert "Dry run" in result.text
+
+    def test_states_the_most_calls_one_agent_run_can_make(self, setup):
+        result = setup.invoke("--models", "fake-model", "--dry-run")
+        text = " ".join(result.text.split())
+        calls = max_calls_per_run()
+        assert f"at most {calls} LLM calls per run" in text
+        assert f"each repeated up to {MAX_SCHEMA_RETRIES} time(s)" in text
 
     def test_the_estimate_is_the_one_a_real_run_asks_to_approve(self, setup):
         dry = setup.invoke("--models", "fake-model", "--dry-run")

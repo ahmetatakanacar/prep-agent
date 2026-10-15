@@ -25,7 +25,17 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from bench_cost import DEFAULT_PRICES, PriceError, PriceTable, load_prices, require_prices
+from bench_cost import (
+    DEFAULT_PRICES,
+    MAX_QUESTION_ROUNDS,
+    MAX_REVISIONS,
+    MAX_SCHEMA_RETRIES,
+    PriceError,
+    PriceTable,
+    load_prices,
+    max_calls_per_run,
+    require_prices,
+)
 from bench_datasets import (
     BENCHMARKS_DIR,
     DEFAULT_DATASETS_DIR,
@@ -201,7 +211,10 @@ def _print_run_plan(console: Console, run_plan: RunPlan, currency: str) -> None:
         console.print(
             Text(
                 "The estimate is an upper bound from the size of the prompts and the most calls "
-                "the agent can make, not a prediction."
+                "the agent can make, not a prediction. One agent run makes at most "
+                f"{max_calls_per_run()} LLM calls per run: {MAX_QUESTION_ROUNDS} question "
+                f"rounds + {MAX_REVISIONS} revisions + the first plan, each repeated up to "
+                f"{MAX_SCHEMA_RETRIES} time(s) when its answer does not match the schema."
             )
         )
     if run_plan.not_downloaded:

@@ -1,11 +1,16 @@
+import json
+from pathlib import Path
+
 import pandas as pd
 import pytest
 import yaml
 
+import bench_cost
 from bench_cost import (
     DEFAULT_PRICES,
     MAX_QUESTION_ROUNDS,
     MAX_REVISIONS,
+    MAX_SCHEMA_RETRIES,
     ModelPrice,
     PriceError,
     estimate_agent_run,
@@ -15,8 +20,13 @@ from bench_cost import (
     require_prices,
     token_cost,
 )
+from prep_agent import agent
+from prep_agent.agent import AgentError, run_agent
 from prep_agent.llm.base import TokenUsage
-from prep_agent.profiler import profile_dataframe
+from prep_agent.llm.fake import FakeLLM
+from prep_agent.profiler import load_csv, profile_dataframe
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def _write(tmp_path, data) -> object:
@@ -198,7 +208,73 @@ class TestEstimateAgentRun:
         return estimate_agent_run(profile or _profile(), goal, "y", "any")
 
     def test_the_call_count_is_the_most_the_agent_can_make(self):
-        assert self.estimate().calls == MAX_QUESTION_ROUNDS + MAX_REVISIONS + 1
+        planner_calls = MAX_QUESTION_ROUNDS + MAX_REVISIONS + 1
+        assert self.estimate().calls == planner_calls * (1 + MAX_SCHEMA_RETRIES)
+
+    def test_the_schema_retry_limit_is_the_agents_not_a_copy(self):
+        assert bench_cost.MAX_SCHEMA_RETRIES is agent.MAX_SCHEMA_RETRIES
+
+    def test_a_higher_retry_limit_raises_calls_input_and_output(self, monkeypatch):
+        before = self.estimate()
+        monkeypatch.setattr(bench_cost, "MAX_SCHEMA_RETRIES", MAX_SCHEMA_RETRIES + 1)
+        after = self.estimate()
+        planner_calls = MAX_QUESTION_ROUNDS + MAX_REVISIONS + 1
+        assert after.calls == planner_calls * (2 + MAX_SCHEMA_RETRIES)
+        assert after.input_tokens > before.input_tokens
+        assert after.output_tokens > before.output_tokens
+
+    def test_without_retries_the_estimate_is_the_one_for_the_planner_calls_alone(self, monkeypatch):
+        monkeypatch.setattr(bench_cost, "MAX_SCHEMA_RETRIES", 0)
+        estimate = self.estimate()
+        assert estimate.calls == MAX_QUESTION_ROUNDS + MAX_REVISIONS + 1
+        later_call = estimate.first_prompt_tokens + 2 * (estimate.output_tokens // estimate.calls)
+        assert estimate.input_tokens == (
+            estimate.first_prompt_tokens + (estimate.calls - 1) * later_call
+        )
+
+    def test_a_retry_prompt_is_counted_with_the_error_it_carries(self):
+        estimate = self.estimate()
+        without_notice = estimate.calls * estimate.first_prompt_tokens
+        assert estimate.input_tokens > without_notice
+
+    def test_the_agent_in_its_worst_case_makes_exactly_the_estimated_calls(self):
+        # Every planner call is first answered with something that breaks the schema; the
+        # questions use up the question rounds, the broken plans the revision budget.
+        plan = json.loads((FIXTURES / "customers_plan.json").read_text(encoding="utf-8"))
+        plan["steps"].insert(0, plan["steps"].pop(4))
+        question = {
+            "id": "q",
+            "question": "Q?",
+            "options": ["a", "b"],
+            "recommended": "a",
+            "reason": "r",
+        }
+        broken = {
+            "kind": "questions",
+            "plan": None,
+            "questions": [{**question, "recommended": "c"}],
+        }
+        asking = {"kind": "questions", "plan": None, "questions": [question]}
+        bad_plan = {"kind": "plan", "plan": plan, "questions": None}
+        script = []
+        for reply in [asking] * MAX_QUESTION_ROUNDS + [bad_plan] * (MAX_REVISIONS + 1):
+            script += [broken] * MAX_SCHEMA_RETRIES + [reply]
+        llm = FakeLLM(script)
+
+        with pytest.raises(AgentError) as caught:
+            run_agent(
+                load_csv(FIXTURES / "customers.csv"),
+                "goal",
+                llm,
+                lambda questions: {q.id: q.recommended for q in questions},
+                target="churned",
+                max_question_rounds=MAX_QUESTION_ROUNDS,
+                max_revisions=MAX_REVISIONS,
+                max_schema_retries=MAX_SCHEMA_RETRIES,
+            )
+
+        assert len(llm.calls) == len(caught.value.trace.calls) == self.estimate().calls
+        assert llm.remaining == 0
 
     def test_input_covers_at_least_the_first_prompt_for_every_call(self):
         estimate = self.estimate()

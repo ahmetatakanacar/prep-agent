@@ -46,7 +46,7 @@ MAX_SCHEMA_RETRIES = 1
 
 # The validation error goes back to the model; this keeps a long list of errors from bloating
 # the prompt.
-_SCHEMA_ERROR_LIMIT = 600
+SCHEMA_ERROR_LIMIT = 600
 
 AskFn = Callable[[list[Question]], dict[str, str]]
 """Takes the planner's questions and returns `{question id: chosen option}` for every one."""
@@ -403,9 +403,9 @@ class _Agent:
 
 
 def _shorten(text: str) -> str:
-    if len(text) <= _SCHEMA_ERROR_LIMIT:
+    if len(text) <= SCHEMA_ERROR_LIMIT:
         return text
-    return text[: _SCHEMA_ERROR_LIMIT - 3] + "..."
+    return text[: SCHEMA_ERROR_LIMIT - 3] + "..."
 
 
 def _describe(issues: list[ValidationIssue]) -> str:
