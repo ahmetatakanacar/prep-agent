@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from bench_results import AgentMetrics, BenchmarkResults, JobResult, RunConfig
 from bench_summary import render_summary
 from prep_agent.baseline import BaselineResult, BaselineScore, ModelBaseline
+from prep_agent.plan import Plan
 
 CLASSIFIERS = ("dummy_most_frequent", "logistic_regression", "random_forest")
 REGRESSORS = ("dummy_mean", "ridge", "random_forest")
@@ -522,6 +523,95 @@ class TestRepeats:
     def test_is_left_out_without_agent_runs(self):
         md = render_summary(results([job("d1", "naive")], models=(), repeats=3))
         assert self.HEADING not in md
+
+
+def plan(drop=(), encode=None, cast=()) -> Plan:
+    steps = [{"op": "drop_columns", "columns": [c], "reason": "r"} for c in drop]
+    steps += [{"op": "cast_to_category", "columns": [c], "reason": "r"} for c in cast]
+    steps.append(
+        {"op": "split", "test_size": 0.2, "stratify": True, "random_state": 1, "reason": "r"}
+    )
+    steps += [
+        {"op": "encode", "columns": [c], "method": method, "reason": "r"}
+        for c, method in (encode or {}).items()
+    ]
+    return Plan.model_validate(
+        {"target": "y", "task_type": "classification", "model_family": "any", "steps": steps}
+    )
+
+
+class TestPlanDifferences:
+    HEADING = "## Plan differences"
+    HEADER = [
+        "dataset",
+        "agent run",
+        "dropped by the reference only",
+        "dropped by the agent only",
+        "encoded or cast differently",
+    ]
+
+    def pair(self, reference: Plan, agent: Plan, dataset="d1", **kwargs):
+        return [
+            job(dataset, "reference", plan=reference),
+            job(dataset, "agent", plan=agent, **kwargs),
+        ]
+
+    def test_lists_the_columns_each_side_drops_alone(self):
+        jobs = self.pair(
+            plan(drop=["id", "name", "boat"]),
+            plan(drop=["id", "ticket", "cabin"]),
+        )
+        rows = table(render_summary(results(jobs)), self.HEADING)
+        assert rows[0] == self.HEADER
+        assert row(rows, "d1") == ["d1", "m1", "boat, name", "cabin, ticket", "–"]
+
+    def test_lists_the_columns_encoded_or_cast_differently(self):
+        jobs = self.pair(
+            plan(encode={"city": "onehot", "grade": "ordinal", "sex": "onehot"}, cast=["pclass"]),
+            plan(
+                encode={"city": "ordinal", "grade": "ordinal", "sex": "onehot", "pclass": "onehot"}
+            ),
+        )
+        cells = row(table(render_summary(results(jobs)), self.HEADING), "d1")
+        assert cells[2:] == ["–", "–", "city, pclass"]
+
+    def test_a_column_only_one_side_encodes_counts_as_different(self):
+        jobs = self.pair(plan(encode={"city": "onehot"}), plan())
+        assert row(table(render_summary(results(jobs)), self.HEADING), "d1")[4] == "city"
+
+    def test_a_dropped_column_is_not_also_listed_as_treated_differently(self):
+        jobs = self.pair(plan(encode={"city": "onehot"}), plan(drop=["city"]))
+        cells = row(table(render_summary(results(jobs)), self.HEADING), "d1")
+        assert cells[2:] == ["–", "city", "–"]
+
+    def test_identical_handling_gives_dashes(self):
+        same = plan(drop=["id"], encode={"city": "onehot"}, cast=["pclass"])
+        jobs = self.pair(same, same)
+        assert row(table(render_summary(results(jobs)), self.HEADING), "d1")[2:] == ["–"] * 3
+
+    def test_one_row_per_agent_run_numbered_when_there_are_repeats(self):
+        jobs = [
+            job("d1", "reference", plan=plan(drop=["a"])),
+            job("d1", "agent", model="m1", repeat=1, plan=plan()),
+            job("d1", "agent", model="m1", repeat=2, plan=plan(drop=["a"])),
+        ]
+        rows = table(render_summary(results(jobs, repeats=2)), self.HEADING)[1:]
+        assert [(r[0], r[1], r[2]) for r in rows] == [("d1", "m1 #1", "a"), ("d1", "m1 #2", "–")]
+
+    def test_runs_without_a_plan_or_without_a_reference_are_left_out(self):
+        jobs = [
+            job("d1", "reference", plan=plan()),
+            job("d1", "agent", repeat=1, status="failed", plan=plan(drop=["a"])),
+            job("d2", "agent", plan=plan(drop=["a"])),
+            job("d3", "reference", status="failed"),
+            job("d3", "agent", plan=plan()),
+        ]
+        md = render_summary(results(jobs, datasets=("d1", "d2", "d3")))
+        assert self.HEADING not in md
+
+    def test_is_left_out_without_agent_runs(self):
+        jobs = [job("d1", "reference", plan=plan())]
+        assert self.HEADING not in render_summary(results(jobs, models=()))
 
 
 class TestAgentRuns:

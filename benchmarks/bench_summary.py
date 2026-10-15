@@ -11,6 +11,7 @@ from statistics import fmean, stdev
 
 from bench_results import BenchmarkResults, JobResult
 from prep_agent.baseline import BaselineResult, BaselineScore, metric_label
+from prep_agent.plan import CastToCategoryStep, DropColumnsStep, EncodeStep, Plan
 
 METRICS = ("f1_macro", "roc_auc", "r2")
 MAIN_METRIC = {"classification": "f1_macro", "regression": "r2"}
@@ -29,6 +30,8 @@ def render_summary(results: BenchmarkResults) -> str:
     if agent_jobs:
         sections.append(_against(results, "naive", "the naive plan"))
         sections.append(_against(results, "reference", "the reference plan"))
+    if agent_jobs:
+        sections.append(_plan_differences(results))
     if agent_jobs and results.config.repeats > 1:
         sections.append(_repeats(results))
     sections.append(_agent_runs(results, agent_jobs))
@@ -247,6 +250,88 @@ def _forest_spread(jobs: list[JobResult], metric: str) -> float:
     return fmean(
         _fold_score(job.baseline, (FOREST,), metric).std for job in jobs if _has_metric(job, metric)
     )
+
+
+# --- plan differences ---
+
+
+def _plan_differences(results: BenchmarkResults) -> str:
+    rows = []
+    for dataset in results.config.datasets:
+        reference = next(
+            (job.plan for job in _of(results, dataset, "reference") if _has_plan(job)), None
+        )
+        if reference is None:
+            continue
+        for job in _of(results, dataset):
+            if job.method == "agent" and _has_plan(job):
+                run = job.label.removeprefix("agent: ")
+                if results.config.repeats > 1:
+                    run += f" #{job.repeat}"
+                rows.append([dataset, run, *_differences(reference, job.plan)])
+    if not rows:
+        return ""
+    header = [
+        "dataset",
+        "agent run",
+        "dropped by the reference only",
+        "dropped by the agent only",
+        "encoded or cast differently",
+    ]
+    return "\n".join(
+        [
+            "## Plan differences",
+            "",
+            "Columns the final plan of each successful agent run treats differently from the "
+            f"reference plan. {DASH} means none.",
+            "",
+            _table(header, rows),
+        ]
+    )
+
+
+def _has_plan(job: JobResult) -> bool:
+    return job.status == "ok" and job.plan is not None
+
+
+def _differences(reference: Plan, agent: Plan) -> list[str]:
+    ref_dropped, agent_dropped = _dropped(reference), _dropped(agent)
+    ref_treated, agent_treated = _treatments(reference), _treatments(agent)
+    treated = {
+        column
+        for column in ref_treated.keys() | agent_treated.keys()
+        if column not in ref_dropped | agent_dropped
+        and ref_treated.get(column) != agent_treated.get(column)
+    }
+    return [
+        ", ".join(sorted(columns)) or DASH
+        for columns in (ref_dropped - agent_dropped, agent_dropped - ref_dropped, treated)
+    ]
+
+
+def _dropped(plan: Plan) -> set[str]:
+    return {
+        column
+        for step in plan.steps
+        if isinstance(step, DropColumnsStep)
+        for column in step.columns
+    }
+
+
+def _treatments(plan: Plan) -> dict[str, set[str]]:
+    """How the plan encodes or casts each column it touches. Only the method counts, not the
+    category cap of a one-hot encoding."""
+    treatments: dict[str, set[str]] = {}
+    for step in plan.steps:
+        if isinstance(step, EncodeStep):
+            label = f"encode {step.method}"
+        elif isinstance(step, CastToCategoryStep):
+            label = "cast"
+        else:
+            continue
+        for column in step.columns:
+            treatments.setdefault(column, set()).add(label)
+    return treatments
 
 
 # --- agent repeats ---
