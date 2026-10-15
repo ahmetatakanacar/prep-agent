@@ -138,6 +138,7 @@ Nothing is spent without a price and an approval:
       output_per_million: 4.0
   ```
 
+- Two more numbers are optional: `cached_input_per_million` and `cache_write_per_million`, the prices of input tokens served from or written to the provider's prompt cache (both are part of the reported input tokens). With them, the cost of a run charges those tokens their own price and the rest of the input the normal price; without them every input token is charged the input price, and `summary.md` says which case applied to each model. The pre-run estimate assumes the dearest input price.
 - A model without a price is refused, in a dry run too.
 - Before anything runs, the command lists the jobs and the estimated maximum use and cost of the agent runs, and asks for approval (`--yes` skips the question; declining runs nothing). The estimate is an upper bound from the size of the real prompts and the most calls the agent can make; a model that bills hidden reasoning as output can still exceed it.
 - `--dry-run` stops after that listing and calls no model.
