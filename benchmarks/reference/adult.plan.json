@@ -4,6 +4,11 @@
   "model_family": "any",
   "steps": [
     {
+      "reason": "52 rows are exact copies of another row in all 15 columns. Because fnlwgt (the census weight, 28,523 distinct values) is one of them, such a row is almost certainly a copy and not two people who happen to share every attribute. Removing them before fnlwgt is dropped keeps train and test free of repeated records.",
+      "op": "dedupe",
+      "keep": "first"
+    },
+    {
       "reason": "fnlwgt is the census sampling weight, a property of the survey and not of the person. education repeats education-num one to one, so the numeric version is kept.",
       "op": "drop_columns",
       "columns": [

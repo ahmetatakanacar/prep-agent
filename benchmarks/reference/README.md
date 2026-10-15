@@ -62,9 +62,9 @@ Drops `TotalCharges`; stratified split; one-hot encodes the 15 text columns; sta
 
 **Review status:** reviewed by human
 
-Drops `fnlwgt` (census sampling weight) and `education` (repeats `education-num`); fills the missing `workclass`, `occupation` and `native-country` with the category "Unknown"; one-hot encodes the categorical columns, grouping `native-country` into 10; standard-scales the 5 numeric columns.
+Removes the exact duplicate rows; drops `fnlwgt` (census sampling weight) and `education` (repeats `education-num`); fills the missing `workclass`, `occupation` and `native-country` with the category "Unknown"; one-hot encodes the categorical columns, grouping `native-country` into 10; standard-scales the 5 numeric columns.
 
-- The 52 exact duplicate rows are kept, and the result validator reports them as a `train_test_overlap` warning. An early version removed them with `dedupe` before dropping `fnlwgt`, but then the validator reported `train_test_overlap` as an error, because it counted rows that became identical once `fnlwgt` was gone. It now only counts records that are identical in the raw input, so a `dedupe` placed before the drop would be accepted and would remove exactly the 52 true copies. Deduplicating after the drop would delete different people who share their attributes. Whether to keep the copies is still a judgement call, and the plan did not make it.
+- The 52 exact duplicate rows are removed by a `dedupe` step before `fnlwgt` is dropped (decided in the review). `fnlwgt` has 28,523 distinct values, so a row identical in all 15 columns including it is almost certainly a copy. The `dedupe` has to come before the drop: afterwards it would delete different people who share their attributes, and the validator counts only records that are identical in the raw input.
 - "Unknown" versus the most frequent value for missing categories: the missingness is informative here (workclass and occupation go missing together).
 - `capital-gain` and `capital-loss` are mostly 0 with a very long tail; standard scaling is crude for them.
 

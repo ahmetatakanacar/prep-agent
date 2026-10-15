@@ -130,6 +130,15 @@ def test_every_cast_comes_before_the_split_and_its_columns_are_encoded_after_it(
             assert set(step.columns) <= encoded, name
 
 
+def test_the_adult_plan_removes_exact_copies_before_dropping_the_sampling_weight():
+    plan = load_plan("adult")
+    ops = [step.op for step in plan.steps]
+    assert ops.index("dedupe") < ops.index("drop_columns") < ops.index("split")
+    [dedupe] = steps_of("adult", "dedupe")
+    assert (dedupe.subset, dedupe.keep) == (None, "first")
+    assert "fnlwgt" in dedupe.reason
+
+
 def test_there_is_a_plan_file_for_every_dataset_and_for_nothing_else():
     on_disk = {
         path.name.removesuffix(".plan.json") for path in DEFAULT_REFERENCE_DIR.glob("*.plan.json")
