@@ -93,11 +93,13 @@ Drops `Id`, `GarageYrBlt`, `Utilities`, `Alley`, `PoolQC` and `MiscFeature`; fil
 
 **Review status:** reviewed by human
 
-Drops `full_name`, `department_name`, `underfilled_job_title`, `date_first_hired` and `2016_gross_pay_received`; imputes `gender` (most frequent) and `2016_overtime_pay` (0); one-hot encodes 3 small columns and, grouped to 50 categories, `division` and `employee_position_title`; robust-scales the 2 numeric columns.
+Drops `full_name`, `department_name`, `date_first_hired` and `2016_gross_pay_received`; imputes `gender` (most frequent), `underfilled_job_title` (the category "None") and `2016_overtime_pay` (0, with a missing indicator); one-hot encodes 3 small columns and, grouped, `division` (50 categories), `employee_position_title` (100) and `underfilled_job_title` (10); robust-scales the 2 numeric columns.
 
-- **The biggest call:** `2016_gross_pay_received` correlates 0.89 with the target. The plan treats it as leakage (it is what the person was paid for the salary being predicted) and drops it. A plan that keeps it will score much higher; judge that as leakage and not as quality, (confirmed in the review).
+- **The biggest call:** `2016_gross_pay_received` correlates 0.89 with the target. The plan treats it as leakage (it is what the person was paid for the salary being predicted) and drops it. A plan that keeps it will score much higher; judge that as leakage and not as quality (confirmed in the review).
 - `date_first_hired` is dropped as unparseable; `year_first_hired` carries the same information.
-- A missing `2016_overtime_pay` is read as no overtime (0): 2917 values are missing and only 6 rows hold an explicit 0. That is an assumption.
+- A missing `2016_overtime_pay` is read as no overtime (0): 2917 values are missing and only 6 rows hold an explicit 0. That is an assumption, so the plan adds a missing indicator: the missing values are concentrated in a few departments (all of ZAH, 7% of DLC), which fits departments that do not record overtime.
+- `underfilled_job_title` is 88% missing, but the missing value means the employee holds the title they were hired for, and the median salary differs (73,296 against 53,788). It is filled with "None" and encoded instead of dropped (decided in the review).
+- Position titles cover 88% of the rows with their 100 most frequent values and divisions 47% with 50; the position is the strongest signal for pay, so it gets the larger limit.
 
 ## bike-sharing-demand
 

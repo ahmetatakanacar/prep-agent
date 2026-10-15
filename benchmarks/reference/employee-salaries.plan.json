@@ -4,12 +4,11 @@
   "model_family": "any",
   "steps": [
     {
-      "reason": "full_name is personal data and unique per employee. department_name repeats department one to one. underfilled_job_title is 88% missing. date_first_hired is a date stored as text that no step can parse, and year_first_hired holds the same information. 2016_gross_pay_received is what the employee was paid for the salary being predicted (correlation 0.89), so it would leak the target.",
+      "reason": "full_name is personal data and unique per employee. department_name repeats department one to one. date_first_hired is a date stored as text that no step can parse, and year_first_hired holds the same information. 2016_gross_pay_received is what the employee was paid for the salary being predicted (correlation 0.89), so it would leak the target.",
       "op": "drop_columns",
       "columns": [
         "full_name",
         "department_name",
-        "underfilled_job_title",
         "date_first_hired",
         "2016_gross_pay_received"
       ]
@@ -31,14 +30,24 @@
       "add_indicator": false
     },
     {
-      "reason": "32% are missing while only 6 rows hold an explicit 0, so a missing overtime pay evidently means no overtime and the fill is 0.",
+      "reason": "88% of the values are missing, and the missing value means the employee holds the title they were hired for; a value means they are temporarily in a lower title. The two groups differ in pay (median 73,296 against 53,788), so the fact is kept as the category 'None'.",
+      "op": "impute",
+      "columns": [
+        "underfilled_job_title"
+      ],
+      "strategy": "constant",
+      "fill_value": "None",
+      "add_indicator": false
+    },
+    {
+      "reason": "32% are missing while only 6 rows hold an explicit 0, so a missing overtime pay evidently means no overtime and the fill is 0. The indicator is kept because the missing values are concentrated in a few departments (all of ZAH, 7% of DLC) and the rows with a missing value have a higher median salary, which fits departments that do not record overtime.",
       "op": "impute",
       "columns": [
         "2016_overtime_pay"
       ],
       "strategy": "constant",
       "fill_value": 0,
-      "add_indicator": false
+      "add_indicator": true
     },
     {
       "reason": "Text categories with two to 37 values; one-hot is the family-neutral encoding.",
@@ -51,14 +60,31 @@
       "method": "onehot"
     },
     {
-      "reason": "694 divisions and 385 position titles; the position is the strongest signal for pay, so the 50 most frequent are kept and the rest are grouped.",
+      "reason": "694 divisions; the 50 most frequent cover 47% of the rows and the rest are grouped.",
       "op": "encode",
       "columns": [
-        "division",
-        "employee_position_title"
+        "division"
       ],
       "method": "onehot",
       "max_categories": 50
+    },
+    {
+      "reason": "385 position titles and the position is the strongest signal for pay, so the 100 most frequent are kept (88% of the rows) and the rest are grouped.",
+      "op": "encode",
+      "columns": [
+        "employee_position_title"
+      ],
+      "method": "onehot",
+      "max_categories": 100
+    },
+    {
+      "reason": "Only 84 titles, and the column is mostly 'None'; the 10 most frequent are kept and the rest are grouped to avoid near-empty columns.",
+      "op": "encode",
+      "columns": [
+        "underfilled_job_title"
+      ],
+      "method": "onehot",
+      "max_categories": 10
     },
     {
       "reason": "Overtime pay is skewed with many outliers. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",

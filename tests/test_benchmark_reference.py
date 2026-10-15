@@ -139,6 +139,45 @@ def test_the_adult_plan_removes_exact_copies_before_dropping_the_sampling_weight
     assert "fnlwgt" in dedupe.reason
 
 
+def test_the_employee_salaries_plan_keeps_underfilled_job_title_as_a_none_category():
+    name = "employee-salaries"
+    dropped = {c for step in steps_of(name, "drop_columns") for c in step.columns}
+    assert "underfilled_job_title" not in dropped
+    [fill] = [s for s in steps_of(name, "impute") if "underfilled_job_title" in s.columns]
+    assert (fill.columns, fill.strategy, fill.fill_value) == (
+        ["underfilled_job_title"],
+        "constant",
+        "None",
+    )
+    assert "hired" in fill.reason
+    [encode] = [s for s in steps_of(name, "encode") if "underfilled_job_title" in s.columns]
+    assert (encode.columns, encode.method, encode.max_categories) == (
+        ["underfilled_job_title"],
+        "onehot",
+        10,
+    )
+    ops = [step.op for step in load_plan(name).steps]
+    assert ops.index("split") < ops.index("impute") < ops.index("encode")
+
+
+def test_the_employee_salaries_plan_adds_a_missing_indicator_for_overtime_pay():
+    [fill] = [
+        s for s in steps_of("employee-salaries", "impute") if "2016_overtime_pay" in s.columns
+    ]
+    assert (fill.strategy, fill.fill_value, fill.add_indicator) == ("constant", 0, True)
+    assert "department" in fill.reason
+
+
+def test_the_employee_salaries_plan_groups_positions_to_100_and_divisions_to_50():
+    encodes = {
+        tuple(s.columns): s.max_categories
+        for s in steps_of("employee-salaries", "encode")
+        if s.max_categories is not None
+    }
+    assert encodes[("employee_position_title",)] == 100
+    assert encodes[("division",)] == 50
+
+
 def test_there_is_a_plan_file_for_every_dataset_and_for_nothing_else():
     on_disk = {
         path.name.removesuffix(".plan.json") for path in DEFAULT_REFERENCE_DIR.glob("*.plan.json")
