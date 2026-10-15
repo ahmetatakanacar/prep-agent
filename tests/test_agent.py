@@ -580,6 +580,30 @@ def test_two_schema_errors_in_a_row_stop_the_agent_with_a_clear_error(df):
     assert error.plan is None
 
 
+def test_the_usage_of_both_rejected_calls_is_counted(df):
+    with pytest.raises(AgentError) as caught:
+        run(df, [invalid_reply(), invalid_reply()], usage=TokenUsage(100, 10))
+
+    trace = caught.value.trace
+    assert [c.usage for c in trace.calls] == [TokenUsage(100, 10)] * 2
+    assert [c.model for c in trace.calls] == ["fake", "fake"]
+    assert trace.total_usage == TokenUsage(200, 20)
+    assert trace.model == "fake"
+
+
+def test_the_usage_of_a_rejected_call_is_part_of_the_total_of_a_successful_run(df):
+    result, _, _ = run(df, [invalid_reply(), plan_reply(VALID_PLAN)], usage=TokenUsage(100, 10))
+
+    assert result.total_usage == TokenUsage(200, 20)
+
+
+def test_a_rejected_call_without_reported_usage_leaves_the_total_to_the_others(df):
+    result, _, _ = run(df, [invalid_reply(), plan_reply(VALID_PLAN)])
+
+    assert [c.usage for c in result.calls] == [None, None]
+    assert result.total_usage is None
+
+
 def test_a_schema_error_after_a_plan_keeps_that_plan_on_the_error(df):
     responses = [plan_reply(plan_with_impute_before_split()), invalid_reply(), invalid_reply()]
 

@@ -79,6 +79,16 @@ class OpenAIClient:
                 f"OpenAI request failed ({where}): {self._redact(str(exc))}"
             ) from None
 
+        model = response.model or self._model
+        usage = (
+            None
+            if response.usage is None
+            else TokenUsage(
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens,
+            )
+        )
+
         for item in response.output or []:
             if item.type != "message":
                 continue
@@ -91,11 +101,15 @@ class OpenAIClient:
             reason = details.reason if details is not None else None
             if reason == "content_filter":
                 raise LLMRefusalError("response was blocked by the content filter")
-            raise LLMSchemaError(f"response was cut off before it was complete ({reason})")
+            raise LLMSchemaError(
+                f"response was cut off before it was complete ({reason})", usage=usage, model=model
+            )
 
         text = response.output_text
         if not text:
-            raise LLMSchemaError(f"response contained no output for {schema.__name__}")
+            raise LLMSchemaError(
+                f"response contained no output for {schema.__name__}", usage=usage, model=model
+            )
         try:
             parsed = schema.model_validate_json(
                 json.dumps(drop_added_nulls(json.loads(text), schema))
@@ -105,17 +119,12 @@ class OpenAIClient:
                 describe_validation_error(exc) if isinstance(exc, ValidationError) else str(exc)
             )
             raise LLMSchemaError(
-                f"model output does not match {schema.__name__}: {self._redact(problem)}"
+                f"model output does not match {schema.__name__}: {self._redact(problem)}",
+                usage=usage,
+                model=model,
             ) from None
 
-        usage = response.usage
-        return LLMResult(
-            parsed=parsed,
-            model=response.model or self._model,
-            usage=None
-            if usage is None
-            else TokenUsage(input_tokens=usage.input_tokens, output_tokens=usage.output_tokens),
-        )
+        return LLMResult(parsed=parsed, model=model, usage=usage)
 
     def _redact(self, text: str) -> str:
         key = getattr(self._client, "api_key", None)

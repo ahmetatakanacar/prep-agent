@@ -356,7 +356,7 @@ def test_a_schema_retry_shows_in_the_saved_trace(invoke_cli, monkeypatch, tmp_pa
 
 
 def test_two_schema_errors_fail_with_a_saved_failed_run(invoke_cli, monkeypatch, tmp_path):
-    use_llm(monkeypatch, [broken_question_reply()] * 2)
+    use_llm(monkeypatch, [broken_question_reply()] * 2, usage=TokenUsage(70, 5))
 
     result = invoke_cli(prepare_args(tmp_path, "--non-interactive", "--target", "churned"))
 
@@ -364,8 +364,10 @@ def test_two_schema_errors_fail_with_a_saved_failed_run(invoke_cli, monkeypatch,
     assert "response schema" in " ".join(result.output.split())
     run_dir = only_run(tmp_path)
     assert read_json(run_dir / "run.json")["status"] == "failed"
-    calls = read_json(run_dir / "llm_trace.json")["calls"]
-    assert [c["purpose"] for c in calls] == ["plan", "schema_retry"]
+    trace = read_json(run_dir / "llm_trace.json")
+    assert [c["purpose"] for c in trace["calls"]] == ["plan", "schema_retry"]
+    assert trace["total_usage"] == {"input_tokens": 140, "output_tokens": 10}
+    assert read_json(run_dir / "run.json")["token_usage"] == trace["total_usage"]
 
 
 def test_max_revisions_zero_stops_at_the_first_error(invoke_cli, monkeypatch, tmp_path):

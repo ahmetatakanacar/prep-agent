@@ -11,6 +11,12 @@ from typing import Protocol, runtime_checkable
 from pydantic import BaseModel, ValidationError
 
 
+@dataclass(frozen=True)
+class TokenUsage:
+    input_tokens: int
+    output_tokens: int
+
+
 class LLMError(Exception):
     """Base class for every error the LLM layer raises."""
 
@@ -28,7 +34,18 @@ class LLMRefusalError(LLMError):
 
 
 class LLMSchemaError(LLMError):
-    """The model answered, but the answer does not match the requested schema."""
+    """The model answered, but the answer does not match the requested schema.
+
+    The answer was still paid for, so the error carries what the provider reported about it
+    (None when it reported nothing).
+    """
+
+    def __init__(
+        self, message: str, *, usage: TokenUsage | None = None, model: str | None = None
+    ) -> None:
+        super().__init__(message)
+        self.usage = usage
+        self.model = model
 
 
 def describe_validation_error(error: ValidationError) -> str:
@@ -41,12 +58,6 @@ def describe_validation_error(error: ValidationError) -> str:
         f"{'.'.join(str(part) for part in item['loc']) or '<root>'}: {item['msg']}"
         for item in error.errors()
     )
-
-
-@dataclass(frozen=True)
-class TokenUsage:
-    input_tokens: int
-    output_tokens: int
 
 
 @dataclass(frozen=True)

@@ -58,14 +58,19 @@ class FakeLLM:
         response = self._queue.popleft()
         if isinstance(response, BaseException):
             raise response
-        return LLMResult(parsed=_validate(response, schema), model="fake", usage=self._usage)
+        parsed = _validate(response, schema, self._usage)
+        return LLMResult(parsed=parsed, model="fake", usage=self._usage)
 
 
-def _validate[T: BaseModel](response: BaseModel | dict | str, schema: type[T]) -> T:
+def _validate[T: BaseModel](
+    response: BaseModel | dict | str, schema: type[T], usage: TokenUsage | None
+) -> T:
     if isinstance(response, BaseModel):
         if not isinstance(response, schema):
             raise LLMSchemaError(
-                f"fake response is a {type(response).__name__}, expected {schema.__name__}"
+                f"fake response is a {type(response).__name__}, expected {schema.__name__}",
+                usage=usage,
+                model="fake",
             )
         return response
     try:
@@ -74,5 +79,7 @@ def _validate[T: BaseModel](response: BaseModel | dict | str, schema: type[T]) -
         return schema.model_validate(response)
     except ValidationError as exc:
         raise LLMSchemaError(
-            f"fake response does not match {schema.__name__}: {describe_validation_error(exc)}"
+            f"fake response does not match {schema.__name__}: {describe_validation_error(exc)}",
+            usage=usage,
+            model="fake",
         ) from exc

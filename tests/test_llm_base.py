@@ -36,6 +36,21 @@ def test_error_kinds_are_distinct():
         assert [other for other in errors if other is not error and issubclass(error, other)] == []
 
 
+def test_schema_error_carries_the_usage_and_model_of_the_rejected_answer():
+    error = LLMSchemaError("bad", usage=TokenUsage(10, 5), model="m")
+
+    assert str(error) == "bad"
+    assert error.usage == TokenUsage(10, 5)
+    assert error.model == "m"
+
+
+def test_schema_error_usage_and_model_default_to_none():
+    error = LLMSchemaError("bad")
+
+    assert error.usage is None
+    assert error.model is None
+
+
 def test_result_carries_parsed_model_name_and_usage():
     result = LLMResult(
         parsed=Answer(value=1), model="m", usage=TokenUsage(input_tokens=10, output_tokens=5)

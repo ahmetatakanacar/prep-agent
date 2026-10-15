@@ -279,7 +279,7 @@ class _Agent:
             try:
                 result = self.llm.generate(self.system_prompt, user, PlannerResponse)
             except LLMSchemaError as exc:
-                self._record(purpose, revision, model=None, usage=None, response=None)
+                self._record(purpose, revision, exc.model, exc.usage, response=None)
                 if attempts > self.max_schema_retries:
                     raise AgentError(
                         "the planner's answer did not match the response schema in "

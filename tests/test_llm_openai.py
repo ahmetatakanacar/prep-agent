@@ -254,6 +254,46 @@ def test_output_that_does_not_fit_the_model_raises_schema_error(text):
         client.generate("s", "u", Answer)
 
 
+@pytest.mark.parametrize("text", ['{"value": "not a number"}', "not json"])
+def test_schema_error_carries_the_usage_and_model_of_the_response(text):
+    client, _ = make_client(_reply(text=text, usage=(120, 33), model="gpt-seen"))
+
+    with pytest.raises(LLMSchemaError) as raised:
+        client.generate("s", "u", Answer)
+
+    assert raised.value.usage == TokenUsage(input_tokens=120, output_tokens=33)
+    assert raised.value.model == "gpt-seen"
+
+
+def test_truncated_response_error_carries_the_usage():
+    client, _ = make_client(
+        _reply(None, status="incomplete", reason="max_output_tokens", usage=(50, 9))
+    )
+
+    with pytest.raises(LLMSchemaError) as raised:
+        client.generate("s", "u", Answer)
+
+    assert raised.value.usage == TokenUsage(input_tokens=50, output_tokens=9)
+
+
+def test_empty_response_error_carries_the_usage():
+    client, _ = make_client(_reply(None, usage=(50, 0)))
+
+    with pytest.raises(LLMSchemaError) as raised:
+        client.generate("s", "u", Answer)
+
+    assert raised.value.usage == TokenUsage(input_tokens=50, output_tokens=0)
+
+
+def test_schema_error_has_no_usage_when_the_response_reports_none():
+    client, _ = make_client(_reply(text="not json", usage=None))
+
+    with pytest.raises(LLMSchemaError) as raised:
+        client.generate("s", "u", Answer)
+
+    assert raised.value.usage is None
+
+
 def test_response_without_parsed_output_raises_schema_error():
     client, _ = make_client(_reply(None))
 

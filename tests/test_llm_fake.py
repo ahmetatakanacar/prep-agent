@@ -61,6 +61,23 @@ def test_response_that_does_not_fit_the_schema_raises_schema_error(response):
         FakeLLM([response]).generate("s", "u", Answer)
 
 
+def test_schema_error_reports_the_usage_of_the_fake():
+    llm = FakeLLM([{"value": "not a number"}], usage=TokenUsage(30, 4))
+
+    with pytest.raises(LLMSchemaError) as raised:
+        llm.generate("s", "u", Answer)
+
+    assert raised.value.usage == TokenUsage(30, 4)
+    assert raised.value.model == "fake"
+
+
+def test_schema_error_has_no_usage_when_the_fake_reports_none():
+    with pytest.raises(LLMSchemaError) as raised:
+        FakeLLM([{"value": "not a number"}]).generate("s", "u", Answer)
+
+    assert raised.value.usage is None
+
+
 def test_model_instance_of_the_wrong_type_raises_schema_error():
     with pytest.raises(LLMSchemaError):
         FakeLLM([Other(name="x")]).generate("s", "u", Answer)
