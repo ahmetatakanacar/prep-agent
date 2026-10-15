@@ -160,6 +160,14 @@ def test_system_prompt_forbids_casting_the_target():
     assert "(drop_columns, cast_to_category, impute, encode, scale)" in prompt
 
 
+def test_system_prompt_requires_recommended_to_repeat_an_option_verbatim():
+    prompt = build_system_prompt()
+
+    assert "`recommended` must be the exact text of one of the `options`" in prompt
+    assert "character for character" in prompt
+    assert "do not reword, shorten or extend it" in prompt
+
+
 def test_system_prompt_is_stable():
     assert build_system_prompt() == build_system_prompt()
 
