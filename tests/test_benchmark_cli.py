@@ -238,6 +238,72 @@ class TestOptions:
         assert not (setup.out / "results.json").exists()
 
 
+class TestSummarize:
+    @pytest.fixture
+    def finished(self, setup) -> Setup:
+        assert setup.invoke("--models", "fake-model", "--yes").exit_code == 0
+        return setup
+
+    @pytest.fixture
+    def offline(self, setup, monkeypatch):
+        """Anything that would run or score a plan, call a model or read the datasets fails."""
+
+        def refuse(*args, **kwargs):
+            raise AssertionError("--summarize must not run anything")
+
+        for name in ("run_benchmark", "create_client", "load_registry", "load_prices"):
+            monkeypatch.setattr(run_benchmark, name, refuse)
+        monkeypatch.setattr("bench_runner.evaluate_baselines", refuse)
+
+    def test_rewrites_the_summary_from_the_results_file(self, finished, offline):
+        original = (finished.out / "summary.md").read_text(encoding="utf-8")
+        (finished.out / "summary.md").write_text("stale", encoding="utf-8")
+
+        result = finished.invoke("--summarize", str(finished.out / "results.json"))
+
+        assert result.exit_code == 0, result.text
+        assert (finished.out / "summary.md").read_text(encoding="utf-8") == original
+        assert "summary.md" in result.text
+
+    def test_writes_next_to_the_results_file_by_default(self, finished, offline):
+        elsewhere = finished.root / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "results.json").write_bytes((finished.out / "results.json").read_bytes())
+
+        result = CliRunner().invoke(
+            run_benchmark.app, ["--summarize", str(elsewhere / "results.json")]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert (elsewhere / "summary.md").exists()
+
+    def test_out_dir_chooses_where_the_summary_goes(self, finished, offline):
+        results_file = finished.out / "results.json"
+        before = results_file.read_bytes()
+        target = finished.root / "copy"
+
+        result = CliRunner().invoke(
+            run_benchmark.app, ["--summarize", str(results_file), "--out-dir", str(target)]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert (target / "summary.md").exists()
+        assert results_file.read_bytes() == before
+
+    def test_a_missing_results_file_is_reported(self, setup, offline):
+        result = setup.invoke("--summarize", str(setup.root / "nope.json"))
+        assert result.exit_code == 1
+        assert "nope.json" in result.text
+
+    def test_a_file_that_is_not_a_results_file_is_reported(self, setup, offline):
+        bad = setup.root / "bad.json"
+        bad.write_text('{"jobs": 3}', encoding="utf-8")
+        result = setup.invoke("--summarize", str(bad))
+        assert result.exit_code == 1
+        assert "bad.json" in result.text
+        assert not (setup.out / "summary.md").exists()
+
+
 def test_the_default_client_selects_the_model_through_the_environment(monkeypatch):
     seen = {}
 

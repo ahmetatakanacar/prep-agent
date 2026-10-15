@@ -7,6 +7,11 @@ Without `--models` only the reference and naive plans run, which calls no model 
 nothing. With models, the run shows the jobs and the most it can cost, refuses a model that has
 no price in `prices.yaml`, and asks before it spends anything (`--yes` skips the question).
 `--dry-run` stops after that listing.
+
+    uv run python benchmarks/run_benchmark.py --summarize benchmarks/results/<id>/results.json
+
+`--summarize` writes summary.md again from an existing results.json. It runs no plan, scores
+nothing and calls no model, so a summary can be regenerated after the summary code changes.
 """
 
 import os
@@ -30,8 +35,9 @@ from bench_datasets import (
     load_registry,
     select_datasets,
 )
-from bench_results import JobResult
-from bench_runner import BenchmarkError, RunPlan, plan_run, run_benchmark
+from bench_results import BenchmarkResults, JobResult
+from bench_runner import SUMMARY_FILE, BenchmarkError, RunPlan, plan_run, run_benchmark
+from bench_summary import render_summary
 from prep_agent.env import load_dotenv_file
 from prep_agent.llm.base import LLMClient, LLMError
 from prep_agent.llm.factory import create_llm_client
@@ -61,7 +67,17 @@ def main(
     ] = None,
     repeats: Annotated[int, typer.Option(min=1, help="Agent runs per dataset and model.")] = 1,
     out_dir: Annotated[
-        Path | None, typer.Option(help="Directory for results.json and summary.md.")
+        Path | None,
+        typer.Option(
+            help="Directory for results.json and summary.md (with --summarize: for summary.md)."
+        ),
+    ] = None,
+    summarize: Annotated[
+        Path | None,
+        typer.Option(
+            help="Write summary.md again from this results.json and run nothing else. It goes "
+            "next to the results file unless --out-dir is given."
+        ),
     ] = None,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="List the jobs and the cost estimate, run nothing.")
@@ -78,8 +94,11 @@ def main(
         Path, typer.Option(help="Directory with the reference plans.")
     ] = DEFAULT_REFERENCE_DIR,
 ) -> None:
-    load_dotenv_file()
     console = Console()
+    if summarize is not None:
+        _summarize(console, summarize, out_dir or summarize.parent)
+        return
+    load_dotenv_file()
     model_list = list(dict.fromkeys(_split(models)))
     try:
         specs = select_datasets(load_registry(registry), _split(datasets) or None)
@@ -134,6 +153,17 @@ def main(
     )
     console.print(Text(f"Results: {out_dir / 'results.json'}"), soft_wrap=True)
     console.print(Text(f"Summary: {out_dir / 'summary.md'}"), soft_wrap=True)
+
+
+def _summarize(console: Console, results_file: Path, out_dir: Path) -> None:
+    try:
+        results = BenchmarkResults.model_validate_json(results_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        _fail(f"cannot read results from {results_file}: {exc}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    summary_file = out_dir / SUMMARY_FILE
+    summary_file.write_text(render_summary(results), encoding="utf-8", newline="\n")
+    console.print(Text(f"Summary: {summary_file}"), soft_wrap=True)
 
 
 def _print_run_plan(console: Console, run_plan: RunPlan, currency: str) -> None:
