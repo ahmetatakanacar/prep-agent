@@ -362,6 +362,61 @@ class TestAgainstNaive:
         assert self.HEADING not in render_summary(results(jobs, models=()))
 
 
+class TestAgainstReference:
+    HEADING = "## Agent against the reference plan"
+
+    def test_compares_with_the_reference_plan_in_the_same_way(self):
+        jobs = [
+            job("up", "reference", baseline=classification_baseline(0.5, 0.60)),
+            job("up", "agent", baseline=classification_baseline(0.5, 0.65)),
+            job("down", "reference", baseline=classification_baseline(0.5, 0.70)),
+            job("down", "agent", baseline=classification_baseline(0.5, 0.65)),
+            job("tie", "reference", baseline=classification_baseline(0.5, 0.650)),
+            job("tie", "agent", baseline=classification_baseline(0.5, 0.655)),
+        ]
+        rows = table(render_summary(results(jobs, datasets=("up", "down", "tie"))), self.HEADING)
+        assert rows[0] == ["dataset", "metric", "agent: m1"]
+        assert row(rows, "up") == ["up", "f1_macro", "+0.050"]
+        assert row(rows, "down")[2] == "-0.050"
+        assert row(rows, "tie")[2] == "+0.005 ≈"
+        assert row(rows, TALLY)[2] == "1 / 1 / 1"
+
+    def test_is_independent_of_the_naive_plan(self):
+        jobs = [
+            job("d1", "reference", baseline=classification_baseline(0.5, 0.60)),
+            job("d1", "naive", baseline=classification_baseline(0.5, 0.90)),
+            job("d1", "agent", baseline=classification_baseline(0.5, 0.65)),
+        ]
+        md = render_summary(results(jobs))
+        assert row(table(md, self.HEADING), "d1")[2] == "+0.050"
+        assert row(table(md, "## Agent against the naive plan"), "d1")[2] == "-0.250"
+
+    def test_a_leaking_reference_is_marked_and_not_counted(self):
+        jobs = [
+            job(
+                "d1",
+                "reference",
+                baseline=classification_baseline(0.5, 0.95),
+                kept_leaky_columns=["boat"],
+            ),
+            job("d1", "agent", baseline=classification_baseline(0.5, 0.65)),
+        ]
+        rows = table(render_summary(results(jobs)), self.HEADING)
+        assert row(rows, "d1")[2] == "-0.300 †"
+        assert row(rows, TALLY)[2] == "0 / 0 / 0 (1 excluded †)"
+
+    def test_a_dash_stands_in_when_the_reference_has_no_score(self):
+        jobs = [
+            job("d1", "reference", status="failed"),
+            job("d1", "agent", baseline=classification_baseline(0.5, 0.65)),
+        ]
+        assert row(table(render_summary(results(jobs)), self.HEADING), "d1")[2] == "–"
+
+    def test_is_left_out_without_agent_runs(self):
+        jobs = [job("d1", "reference", baseline=classification_baseline(0.5, 0.6))]
+        assert self.HEADING not in render_summary(results(jobs, models=()))
+
+
 class TestAgentRuns:
     HEADING = "## Agent runs"
 

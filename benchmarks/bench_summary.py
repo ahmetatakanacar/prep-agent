@@ -27,7 +27,8 @@ def render_summary(results: BenchmarkResults) -> str:
     agent_jobs = [job for job in results.jobs if job.method == "agent"]
     sections = [_header(results), _scores(results), _leaky_columns_kept(results)]
     if agent_jobs:
-        sections.append(_against_naive(results))
+        sections.append(_against(results, "naive", "the naive plan"))
+        sections.append(_against(results, "reference", "the reference plan"))
     sections.append(_agent_runs(results, agent_jobs))
     sections.append(_issue_codes(results, agent_jobs))
     sections.append(_failures(results))
@@ -172,11 +173,7 @@ def _kept_cell(jobs: list[JobResult], n_leaky: int) -> str:
     return cell + f" ({len(counted)} runs)" if len(counted) > 1 else cell
 
 
-# --- agent against the naive plan ---
-
-
-def _against_naive(results: BenchmarkResults) -> str:
-    return _against(results, "naive", "the naive plan")
+# --- agent against the naive and the reference plan ---
 
 
 def _against(results: BenchmarkResults, other: str, name: str) -> str:
