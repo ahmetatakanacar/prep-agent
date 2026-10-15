@@ -361,8 +361,8 @@ def _notes() -> str:
             "compares what a plan hands to the same models, not the models themselves. The "
             "logistic regression may stop before it converges on unscaled features; that "
             "lowers the score of a plan without scaling and is not reported separately.",
-            "- The reference plans are hand-written drafts; see reference/README.md for the "
-            "state of their review.",
+            "- The reference plans are hand-written and were reviewed by a human; see "
+            "reference/README.md for the decisions behind them.",
             "- The naive plan is rule-based: drop identifier and constant columns, split, "
             "median and most-frequent imputation, one-hot encoding of every non-numeric column.",
             "- Cost is the token use the provider reported times the prices in prices.yaml; "

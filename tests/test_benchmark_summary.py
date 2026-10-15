@@ -465,6 +465,11 @@ class TestHeaderAndNotes:
         assert "reference/README.md" in md
         assert "test set" in md
 
+    def test_does_not_call_the_reviewed_reference_plans_drafts(self):
+        md = render_summary(results([job("d1", "naive")], models=()))
+        assert "draft" not in md.lower()
+        assert "reference/README.md" in md
+
     def test_is_deterministic(self):
         data = results([job("d1", "naive", baseline=classification_baseline(0.5, 0.6))], models=())
         assert render_summary(data) == render_summary(data)
