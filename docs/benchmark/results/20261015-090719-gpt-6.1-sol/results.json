@@ -1,0 +1,4313 @@
+{
+  "started_at": "2026-10-15T09:07:20.270349Z",
+  "finished_at": "2026-10-15T09:19:21.579644Z",
+  "config": {
+    "models": [
+      "gpt-6.1-sol"
+    ],
+    "repeats": 1,
+    "datasets": [
+      "titanic",
+      "credit-g",
+      "diabetes",
+      "telco-customer-churn",
+      "adult",
+      "bank-marketing",
+      "house-prices",
+      "employee-salaries",
+      "bike-sharing-demand"
+    ],
+    "currency": "USD",
+    "prices": {
+      "gpt-6.1-sol": {
+        "input_per_million": 2.0,
+        "output_per_million": 10.0,
+        "cached_input_per_million": 0.1,
+        "cache_write_per_million": 2.5
+      }
+    },
+    "estimated_max_cost": {
+      "gpt-6.1-sol": 4.9749625
+    }
+  },
+  "jobs": [
+    {
+      "dataset": "titanic",
+      "task_type": "classification",
+      "method": "reference",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": null,
+      "plan": {
+        "target": "survived",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "name is personal data and unique per passenger; ticket and home.dest are high-cardinality text with no usable structure; cabin is 78% missing. boat (lifeboat) is assigned only to people who survived and body only to people who died, so both leak the target and would not exist when predicting survival.",
+            "op": "drop_columns",
+            "columns": [
+              "name",
+              "ticket",
+              "cabin",
+              "boat",
+              "body",
+              "home.dest"
+            ]
+          },
+          {
+            "reason": "Stratified so the 38% survivors are represented in the same share in train and test.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "20% of the ages are missing; the median is robust to the long right tail. The indicator keeps the fact that age was unknown: ages are missing for 29% of the third-class passengers against 6% of the second-class ones, and survival differs (28% against 41%).",
+            "op": "impute",
+            "columns": [
+              "age"
+            ],
+            "strategy": "median",
+            "fill_value": null,
+            "add_indicator": true
+          },
+          {
+            "reason": "One fare is missing; the median is robust to the very skewed fares.",
+            "op": "impute",
+            "columns": [
+              "fare"
+            ],
+            "strategy": "median",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Two embarkation ports are missing; the most frequent port is the safe fill.",
+            "op": "impute",
+            "columns": [
+              "embarked"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Text categories with two or three values; one-hot avoids an invented order.",
+            "op": "encode",
+            "columns": [
+              "sex",
+              "embarked"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "Fare, sibsp and parch are skewed with outliers, so the robust scaler is used for all numeric columns. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+            "op": "scale",
+            "columns": [
+              "pclass",
+              "age",
+              "sibsp",
+              "parch",
+              "fare"
+            ],
+            "method": "robust"
+          }
+        ]
+      },
+      "leaky_columns": [
+        "boat",
+        "body"
+      ],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 1047,
+      "n_test": 262,
+      "n_features": 11,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 1047,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.6179539758487127,
+                "std": 0.0008929559326619111
+              },
+              "f1_macro": {
+                "mean": 0.38193525931082495,
+                "std": 0.00034103581521518475
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7755525176577808,
+                "std": 0.015660815318381188
+              },
+              "f1_macro": {
+                "mean": 0.7580395662316259,
+                "std": 0.019530647030586424
+              },
+              "roc_auc": {
+                "mean": 0.8342327072152654,
+                "std": 0.01175918399070337
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7936887673729779,
+                "std": 0.01194890002671433
+              },
+              "f1_macro": {
+                "mean": 0.7807657828750243,
+                "std": 0.013346644767013643
+              },
+              "roc_auc": {
+                "mean": 0.8361352116875373,
+                "std": 0.015089994776841982
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.10749850000138395,
+      "baseline_seconds": 1.3925591000006534
+    },
+    {
+      "dataset": "titanic",
+      "task_type": "classification",
+      "method": "naive",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": null,
+      "plan": {
+        "target": "survived",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Naive rule: 80/20 split with seed 42, stratified for classification.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "Naive rule: numeric columns with missing values get the median.",
+            "op": "impute",
+            "columns": [
+              "age",
+              "fare",
+              "body"
+            ],
+            "strategy": "median",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Naive rule: other columns with missing values get the most frequent value.",
+            "op": "impute",
+            "columns": [
+              "cabin",
+              "embarked",
+              "boat",
+              "home.dest"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Naive rule: every non-numeric column is one-hot encoded.",
+            "op": "encode",
+            "columns": [
+              "sex",
+              "embarked",
+              "boat"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "Naive rule: one-hot encode, keeping only the 50 most frequent categories of columns with more.",
+            "op": "encode",
+            "columns": [
+              "name",
+              "ticket",
+              "cabin",
+              "home.dest"
+            ],
+            "method": "onehot",
+            "max_categories": 50
+          }
+        ]
+      },
+      "leaky_columns": [
+        "boat",
+        "body"
+      ],
+      "kept_leaky_columns": [
+        "boat",
+        "body"
+      ],
+      "leaky_columns_kept": 2,
+      "n_train": 1047,
+      "n_test": 262,
+      "n_features": 237,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 1047,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.6179539758487127,
+                "std": 0.0008929559326619111
+              },
+              "f1_macro": {
+                "mean": 0.38193525931082495,
+                "std": 0.00034103581521518475
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.9579904306220095,
+                "std": 0.013269772205666086
+              },
+              "f1_macro": {
+                "mean": 0.9547615095797038,
+                "std": 0.014557120692346872
+              },
+              "roc_auc": {
+                "mean": 0.9810602265951104,
+                "std": 0.00944206142429304
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.9484529505582138,
+                "std": 0.017109260781222286
+              },
+              "f1_macro": {
+                "mean": 0.9451511053832761,
+                "std": 0.018299966557772305
+              },
+              "roc_auc": {
+                "mean": 0.9737856290995826,
+                "std": 0.011308672063480723
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.14464810000208672,
+      "baseline_seconds": 2.7679227000007813
+    },
+    {
+      "dataset": "titanic",
+      "task_type": "classification",
+      "method": "agent",
+      "model": "gpt-6.1-sol",
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": {
+        "reported_model": "gpt-6.1-sol",
+        "calls": 2,
+        "revisions": 0,
+        "schema_retries": 0,
+        "questions": 3,
+        "first_plan_error_codes": [],
+        "input_tokens": 11280,
+        "output_tokens": 1278,
+        "cached_input_tokens": 3495,
+        "cache_write_tokens": 7779,
+        "cost": 0.032589,
+        "qa": [
+          {
+            "question": "Should cabin information be retained despite being missing for about 77% of passengers?",
+            "answer": "Keep cabin, represent missing values as a separate category, and group rare categories during one-hot encoding"
+          },
+          {
+            "question": "Should ticket numbers be used as predictors?",
+            "answer": "Drop ticket"
+          },
+          {
+            "question": "Should passengers' home and destination information be retained?",
+            "answer": "Drop home.dest"
+          }
+        ]
+      },
+      "plan": {
+        "target": "survived",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Drop ticket and home.dest as requested, and name because it contains personal information. Boat assignment and recovered-body identification reveal post-disaster outcomes and would leak survival information.",
+            "op": "drop_columns",
+            "columns": [
+              "name",
+              "ticket",
+              "home.dest",
+              "boat",
+              "body"
+            ]
+          },
+          {
+            "reason": "Passenger class represents a category rather than a continuous quantity; categorical encoding avoids imposing a linear numeric relationship.",
+            "op": "cast_to_category",
+            "columns": [
+              "pclass"
+            ]
+          },
+          {
+            "reason": "Reserve 20% of passengers for evaluation while preserving survival-class proportions. Fit all subsequent preprocessing only on training data.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "Age and fare contain missing values and outliers, making median imputation appropriate. Missingness indicators preserve whether these values were originally unavailable.",
+            "op": "impute",
+            "columns": [
+              "age",
+              "fare"
+            ],
+            "strategy": "median",
+            "fill_value": null,
+            "add_indicator": true
+          },
+          {
+            "reason": "Retain cabin as requested and represent its substantial missingness as a distinct category rather than assigning passengers an observed cabin.",
+            "op": "impute",
+            "columns": [
+              "cabin"
+            ],
+            "strategy": "constant",
+            "fill_value": "__MISSING__",
+            "add_indicator": false
+          },
+          {
+            "reason": "Fill the two missing embarkation values using the most common embarkation port learned from training data.",
+            "op": "impute",
+            "columns": [
+              "embarked"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Scale numeric predictors for compatibility with linear models. Robust scaling limits the influence of the marked fare and family-count skew and outliers; sibsp and parch remain numeric because they are counts.",
+            "op": "scale",
+            "columns": [
+              "age",
+              "sibsp",
+              "parch",
+              "fare"
+            ],
+            "method": "robust"
+          },
+          {
+            "reason": "One-hot encode every categorical predictor without imposing an artificial order. Cap each source column at 30 encoded categories to group rare cabin values and control dimensionality, as requested.",
+            "op": "encode",
+            "columns": [
+              "pclass",
+              "sex",
+              "cabin",
+              "embarked"
+            ],
+            "method": "onehot",
+            "max_categories": 30
+          }
+        ]
+      },
+      "leaky_columns": [
+        "boat",
+        "body"
+      ],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 1047,
+      "n_test": 262,
+      "n_features": 44,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 1047,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.6179539758487127,
+                "std": 0.0008929559326619111
+              },
+              "f1_macro": {
+                "mean": 0.38193525931082495,
+                "std": 0.00034103581521518475
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7793665983139667,
+                "std": 0.0077022517736519405
+              },
+              "f1_macro": {
+                "mean": 0.7619458508001641,
+                "std": 0.014016798520323852
+              },
+              "roc_auc": {
+                "mean": 0.8360638044126416,
+                "std": 0.012137552601576033
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7841148325358851,
+                "std": 0.015903168965356037
+              },
+              "f1_macro": {
+                "mean": 0.7691407524531588,
+                "std": 0.017704896957879718
+              },
+              "roc_auc": {
+                "mean": 0.8326295468097793,
+                "std": 0.02204086963026215
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 38.97078970000075,
+      "baseline_seconds": 3.66690970000127
+    },
+    {
+      "dataset": "credit-g",
+      "task_type": "classification",
+      "method": "reference",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": null,
+      "plan": {
+        "target": "class",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Stratified: 30% of the applicants are bad credit risks and the sample is small.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "All categorical columns are text with few values and no missing values; one-hot keeps them usable by every model family without an invented order.",
+            "op": "encode",
+            "columns": [
+              "checking_status",
+              "credit_history",
+              "purpose",
+              "savings_status",
+              "employment",
+              "personal_status",
+              "other_parties",
+              "property_magnitude",
+              "other_payment_plans",
+              "housing",
+              "job",
+              "own_telephone",
+              "foreign_worker"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "credit_amount and duration have many outliers, so the robust scaler is used. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+            "op": "scale",
+            "columns": [
+              "duration",
+              "credit_amount",
+              "installment_commitment",
+              "residence_since",
+              "age",
+              "existing_credits",
+              "num_dependents"
+            ],
+            "method": "robust"
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 800,
+      "n_test": 200,
+      "n_features": 61,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 800,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7,
+                "std": 0.0
+              },
+              "f1_macro": {
+                "mean": 0.4117647058823529,
+                "std": 0.0
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7587499999999999,
+                "std": 0.05950315117705953
+              },
+              "f1_macro": {
+                "mean": 0.6942550437050363,
+                "std": 0.07504022881074017
+              },
+              "roc_auc": {
+                "mean": 0.7884300595238095,
+                "std": 0.0681424953870884
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7525000000000001,
+                "std": 0.038242646351945866
+              },
+              "f1_macro": {
+                "mean": 0.6627366014319895,
+                "std": 0.04902094018711173
+              },
+              "roc_auc": {
+                "mean": 0.7801339285714286,
+                "std": 0.0676956076967174
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.23687859999699867,
+      "baseline_seconds": 3.10084519999873
+    },
+    {
+      "dataset": "credit-g",
+      "task_type": "classification",
+      "method": "naive",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": null,
+      "plan": {
+        "target": "class",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Naive rule: 80/20 split with seed 42, stratified for classification.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "Naive rule: every non-numeric column is one-hot encoded.",
+            "op": "encode",
+            "columns": [
+              "checking_status",
+              "credit_history",
+              "purpose",
+              "savings_status",
+              "employment",
+              "personal_status",
+              "other_parties",
+              "property_magnitude",
+              "other_payment_plans",
+              "housing",
+              "job",
+              "own_telephone",
+              "foreign_worker"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 800,
+      "n_test": 200,
+      "n_features": 61,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 800,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7,
+                "std": 0.0
+              },
+              "f1_macro": {
+                "mean": 0.4117647058823529,
+                "std": 0.0
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7525000000000001,
+                "std": 0.06105837370909907
+              },
+              "f1_macro": {
+                "mean": 0.6863299163167383,
+                "std": 0.07856504460964632
+              },
+              "roc_auc": {
+                "mean": 0.7901041666666666,
+                "std": 0.06821892205765029
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.76875,
+                "std": 0.049686517285879486
+              },
+              "f1_macro": {
+                "mean": 0.6765195249619926,
+                "std": 0.07280174013459999
+              },
+              "roc_auc": {
+                "mean": 0.7902715773809523,
+                "std": 0.06210644743007648
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.21759480000037001,
+      "baseline_seconds": 5.464110199998686
+    },
+    {
+      "dataset": "credit-g",
+      "task_type": "classification",
+      "method": "agent",
+      "model": "gpt-6.1-sol",
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": {
+        "reported_model": "gpt-6.1-sol",
+        "calls": 2,
+        "revisions": 0,
+        "schema_retries": 0,
+        "questions": 2,
+        "first_plan_error_codes": [],
+        "input_tokens": 12221,
+        "output_tokens": 1034,
+        "cached_input_tokens": 6990,
+        "cache_write_tokens": 5225,
+        "cost": 0.0241135,
+        "qa": [
+          {
+            "question": "Does installment_commitment represent a measured amount or rate, or are values 1–4 codes for commitment categories?",
+            "answer": "Keep it numeric and scale it as a measured amount or rate."
+          },
+          {
+            "question": "Does residence_since measure years at the current residence, or are values 1–4 codes for residence-duration categories?",
+            "answer": "Keep it numeric and scale it as years at the current residence."
+          }
+        ]
+      },
+      "plan": {
+        "target": "class",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Reserve 20% of applicants for testing while preserving the target's 70% good and 30% bad credit-risk proportions. Fit all subsequent preprocessing on the training set only.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "Scale numeric predictors for compatibility with linear models, using robust scaling because duration and credit_amount have many outliers. Keep installment_commitment and residence_since numeric as requested, and retain existing_credits and num_dependents as counts.",
+            "op": "scale",
+            "columns": [
+              "duration",
+              "credit_amount",
+              "installment_commitment",
+              "residence_since",
+              "age",
+              "existing_credits",
+              "num_dependents"
+            ],
+            "method": "robust"
+          },
+          {
+            "reason": "One-hot encode all categorical and text-valued binary predictors so both linear and tree models can use them without imposing an artificial category order.",
+            "op": "encode",
+            "columns": [
+              "checking_status",
+              "credit_history",
+              "purpose",
+              "savings_status",
+              "employment",
+              "personal_status",
+              "other_parties",
+              "property_magnitude",
+              "other_payment_plans",
+              "housing",
+              "job",
+              "own_telephone",
+              "foreign_worker"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 800,
+      "n_test": 200,
+      "n_features": 61,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 800,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7,
+                "std": 0.0
+              },
+              "f1_macro": {
+                "mean": 0.4117647058823529,
+                "std": 0.0
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7587499999999999,
+                "std": 0.05950315117705953
+              },
+              "f1_macro": {
+                "mean": 0.6942550437050363,
+                "std": 0.07504022881074017
+              },
+              "roc_auc": {
+                "mean": 0.7884300595238095,
+                "std": 0.0681424953870884
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.76875,
+                "std": 0.049686517285879486
+              },
+              "f1_macro": {
+                "mean": 0.6765195249619926,
+                "std": 0.07280174013459999
+              },
+              "roc_auc": {
+                "mean": 0.7901227678571429,
+                "std": 0.06254395753472414
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 31.28825549999965,
+      "baseline_seconds": 2.8373917000026267
+    },
+    {
+      "dataset": "diabetes",
+      "task_type": "classification",
+      "method": "reference",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": null,
+      "plan": {
+        "target": "class",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Stratified: 35% of the patients are positive and the table has only 768 rows.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "All eight measurements are numeric on very different scales and insu is skewed, so the robust scaler is used. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+            "op": "scale",
+            "columns": [
+              "preg",
+              "plas",
+              "pres",
+              "skin",
+              "insu",
+              "mass",
+              "pedi",
+              "age"
+            ],
+            "method": "robust"
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 614,
+      "n_test": 154,
+      "n_features": 8,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 614,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.6514727442356391,
+                "std": 0.0021324803411968407
+              },
+              "f1_macro": {
+                "mean": 0.39447885675267036,
+                "std": 0.0007803736038628495
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7882447021191524,
+                "std": 0.015831826533925
+              },
+              "f1_macro": {
+                "mean": 0.7522000753087777,
+                "std": 0.016253961690698922
+              },
+              "roc_auc": {
+                "mean": 0.8343037098560353,
+                "std": 0.03473379336978286
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7638677862188458,
+                "std": 0.02443192566135477
+              },
+              "f1_macro": {
+                "mean": 0.7271569298758725,
+                "std": 0.02569275776308515
+              },
+              "roc_auc": {
+                "mean": 0.8120383444075305,
+                "std": 0.027893047746693458
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.053530099998170044,
+      "baseline_seconds": 2.0136605000006966
+    },
+    {
+      "dataset": "diabetes",
+      "task_type": "classification",
+      "method": "naive",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": null,
+      "plan": {
+        "target": "class",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Naive rule: 80/20 split with seed 42, stratified for classification.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 614,
+      "n_test": 154,
+      "n_features": 8,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 614,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.6514727442356391,
+                "std": 0.0021324803411968407
+              },
+              "f1_macro": {
+                "mean": 0.39447885675267036,
+                "std": 0.0007803736038628495
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7882447021191524,
+                "std": 0.015831826533925
+              },
+              "f1_macro": {
+                "mean": 0.7528847632473801,
+                "std": 0.017281383823548806
+              },
+              "roc_auc": {
+                "mean": 0.8318286267995572,
+                "std": 0.0366990515409269
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7638677862188459,
+                "std": 0.027002137608671376
+              },
+              "f1_macro": {
+                "mean": 0.7280122644902303,
+                "std": 0.027497274285261414
+              },
+              "roc_auc": {
+                "mean": 0.8113448228128461,
+                "std": 0.027417617443849067
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.03854499999943073,
+      "baseline_seconds": 2.0485638999998628
+    },
+    {
+      "dataset": "diabetes",
+      "task_type": "classification",
+      "method": "agent",
+      "model": "gpt-6.1-sol",
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": {
+        "reported_model": "gpt-6.1-sol",
+        "calls": 1,
+        "revisions": 0,
+        "schema_retries": 0,
+        "questions": 0,
+        "first_plan_error_codes": [],
+        "input_tokens": 4833,
+        "output_tokens": 288,
+        "cached_input_tokens": 3495,
+        "cache_write_tokens": 1335,
+        "cost": 0.006573,
+        "qa": []
+      },
+      "plan": {
+        "target": "class",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Reserve 20% of patients for evaluation while preserving the proportions of positive and negative diabetes results. Fit all subsequent preprocessing on the training set only.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "Put the medical measurements on comparable scales for compatibility with linear models. Robust scaling limits the influence of the many outliers flagged in pres and the skewed distributions of insu and pedi; preg remains numeric because it represents a count.",
+            "op": "scale",
+            "columns": [
+              "preg",
+              "plas",
+              "pres",
+              "skin",
+              "insu",
+              "mass",
+              "pedi",
+              "age"
+            ],
+            "method": "robust"
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 614,
+      "n_test": 154,
+      "n_features": 8,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 614,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.6514727442356391,
+                "std": 0.0021324803411968407
+              },
+              "f1_macro": {
+                "mean": 0.39447885675267036,
+                "std": 0.0007803736038628495
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7882447021191524,
+                "std": 0.015831826533925
+              },
+              "f1_macro": {
+                "mean": 0.7522000753087777,
+                "std": 0.016253961690698922
+              },
+              "roc_auc": {
+                "mean": 0.8343037098560353,
+                "std": 0.03473379336978286
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7638677862188458,
+                "std": 0.02443192566135477
+              },
+              "f1_macro": {
+                "mean": 0.7271569298758725,
+                "std": 0.02569275776308515
+              },
+              "roc_auc": {
+                "mean": 0.8120383444075305,
+                "std": 0.027893047746693458
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 9.589339900001505,
+      "baseline_seconds": 1.8920417000008456
+    },
+    {
+      "dataset": "telco-customer-churn",
+      "task_type": "classification",
+      "method": "reference",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [
+        "train_test_overlap"
+      ],
+      "agent": null,
+      "plan": {
+        "target": "Churn",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "TotalCharges is stored as text with 11 non-numeric entries and no step can convert it. It correlates 0.9996 with tenure times MonthlyCharges, which are kept, so almost nothing is lost.",
+            "op": "drop_columns",
+            "columns": [
+              "TotalCharges"
+            ]
+          },
+          {
+            "reason": "Stratified: only 26% of the customers churn.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "Every remaining text column has two to four values and no missing values; one-hot is the family-neutral encoding. PhoneService is a yes/no column, not personal data.",
+            "op": "encode",
+            "columns": [
+              "gender",
+              "Partner",
+              "Dependents",
+              "PhoneService",
+              "MultipleLines",
+              "InternetService",
+              "OnlineSecurity",
+              "OnlineBackup",
+              "DeviceProtection",
+              "TechSupport",
+              "StreamingTV",
+              "StreamingMovies",
+              "Contract",
+              "PaperlessBilling",
+              "PaymentMethod"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "Tenure (months) and MonthlyCharges are on different scales and neither has strong outliers. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+            "op": "scale",
+            "columns": [
+              "tenure",
+              "MonthlyCharges"
+            ],
+            "method": "standard"
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 5634,
+      "n_test": 1409,
+      "n_features": 44,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 5634,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7346467539058252,
+                "std": 0.00009424729039042568
+              },
+              "f1_macro": {
+                "mean": 0.42351374958585586,
+                "std": 0.000031324357700057705
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8012088239419638,
+                "std": 0.011206218112583632
+              },
+              "f1_macro": {
+                "mean": 0.7291134934636111,
+                "std": 0.017424316206014267
+              },
+              "roc_auc": {
+                "mean": 0.8448942948913805,
+                "std": 0.012134570002612106
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7834610189739653,
+                "std": 0.011979402138497427
+              },
+              "f1_macro": {
+                "mean": 0.6996322385235949,
+                "std": 0.016531338877569177
+              },
+              "roc_auc": {
+                "mean": 0.812307316810806,
+                "std": 0.013161073710202335
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.5286377000011271,
+      "baseline_seconds": 5.835919600001944
+    },
+    {
+      "dataset": "telco-customer-churn",
+      "task_type": "classification",
+      "method": "naive",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [
+        "train_test_overlap"
+      ],
+      "agent": null,
+      "plan": {
+        "target": "Churn",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Naive rule: 80/20 split with seed 42, stratified for classification.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "Naive rule: every non-numeric column is one-hot encoded.",
+            "op": "encode",
+            "columns": [
+              "gender",
+              "Partner",
+              "Dependents",
+              "PhoneService",
+              "MultipleLines",
+              "InternetService",
+              "OnlineSecurity",
+              "OnlineBackup",
+              "DeviceProtection",
+              "TechSupport",
+              "StreamingTV",
+              "StreamingMovies",
+              "Contract",
+              "PaperlessBilling",
+              "PaymentMethod"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "Naive rule: one-hot encode, keeping only the 50 most frequent categories of columns with more.",
+            "op": "encode",
+            "columns": [
+              "TotalCharges"
+            ],
+            "method": "onehot",
+            "max_categories": 50
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 5634,
+      "n_test": 1409,
+      "n_features": 94,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 5634,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7346467539058252,
+                "std": 0.00009424729039042568
+              },
+              "f1_macro": {
+                "mean": 0.42351374958585586,
+                "std": 0.000031324357700057705
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8020961353882814,
+                "std": 0.011676737216859415
+              },
+              "f1_macro": {
+                "mean": 0.7295794225970471,
+                "std": 0.018013186972396022
+              },
+              "roc_auc": {
+                "mean": 0.8457749571944296,
+                "std": 0.013088484649332755
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7795535389227125,
+                "std": 0.006906299369670811
+              },
+              "f1_macro": {
+                "mean": 0.6906051056005093,
+                "std": 0.0101088285642073
+              },
+              "roc_auc": {
+                "mean": 0.8115697745989093,
+                "std": 0.013580706365993782
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.6125356000011379,
+      "baseline_seconds": 9.849303999999393
+    },
+    {
+      "dataset": "telco-customer-churn",
+      "task_type": "classification",
+      "method": "agent",
+      "model": "gpt-6.1-sol",
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": {
+        "reported_model": "gpt-6.1-sol",
+        "calls": 2,
+        "revisions": 0,
+        "schema_retries": 0,
+        "questions": 1,
+        "first_plan_error_codes": [],
+        "input_tokens": 11487,
+        "output_tokens": 846,
+        "cached_input_tokens": 6990,
+        "cache_write_tokens": 4491,
+        "cost": 0.0203985,
+        "qa": [
+          {
+            "question": "How should we handle TotalCharges? It is stored as text, although its values mostly look like monetary amounts.",
+            "answer": "Drop TotalCharges and retain tenure and MonthlyCharges."
+          }
+        ]
+      },
+      "plan": {
+        "target": "Churn",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Remove the 22 exact duplicate rows before splitting to prevent identical records from appearing in both training and test sets.",
+            "op": "dedupe",
+            "subset": null,
+            "keep": "first"
+          },
+          {
+            "reason": "Drop TotalCharges as requested, retaining tenure and MonthlyCharges as numeric predictors.",
+            "op": "drop_columns",
+            "columns": [
+              "TotalCharges"
+            ]
+          },
+          {
+            "reason": "Reserve 20% of the data for evaluation while preserving the proportions of churn and non-churn customers.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "Standardize the numeric predictors for compatibility with linear models, fitting only on training data. SeniorCitizen can remain a numeric 0/1 indicator; tenure and MonthlyCharges have no reported IQR outliers.",
+            "op": "scale",
+            "columns": [
+              "SeniorCitizen",
+              "tenure",
+              "MonthlyCharges"
+            ],
+            "method": "standard"
+          },
+          {
+            "reason": "One-hot encode all text predictors without imposing an artificial order, making them usable by both linear and tree models. Learn categories only from the training set.",
+            "op": "encode",
+            "columns": [
+              "gender",
+              "Partner",
+              "Dependents",
+              "PhoneService",
+              "MultipleLines",
+              "InternetService",
+              "OnlineSecurity",
+              "OnlineBackup",
+              "DeviceProtection",
+              "TechSupport",
+              "StreamingTV",
+              "StreamingMovies",
+              "Contract",
+              "PaperlessBilling",
+              "PaymentMethod"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 5616,
+      "n_test": 1405,
+      "n_features": 44,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 5616,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7355768895592957,
+                "std": 0.00009411749793226676
+              },
+              "f1_macro": {
+                "mean": 0.4238227018600137,
+                "std": 0.00003124261176663534
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8025264368763132,
+                "std": 0.012999596187091251
+              },
+              "f1_macro": {
+                "mean": 0.7315801394499835,
+                "std": 0.017349795674645035
+              },
+              "roc_auc": {
+                "mean": 0.8440969658839027,
+                "std": 0.015066713947850086
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7843658793965073,
+                "std": 0.011835919011566557
+              },
+              "f1_macro": {
+                "mean": 0.6994443215606919,
+                "std": 0.014682893374917752
+              },
+              "roc_auc": {
+                "mean": 0.8145745373646918,
+                "std": 0.011437206910107462
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 24.224524299999757,
+      "baseline_seconds": 4.791614800000389
+    },
+    {
+      "dataset": "adult",
+      "task_type": "classification",
+      "method": "reference",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": null,
+      "plan": {
+        "target": "class",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "52 rows are exact copies of another row in all 15 columns. Because fnlwgt (the census weight, 28,523 distinct values) is one of them, such a row is almost certainly a copy and not two people who happen to share every attribute. Removing them before fnlwgt is dropped keeps train and test free of repeated records.",
+            "op": "dedupe",
+            "subset": null,
+            "keep": "first"
+          },
+          {
+            "reason": "fnlwgt is the census sampling weight, a property of the survey and not of the person. education repeats education-num one to one, so the numeric version is kept.",
+            "op": "drop_columns",
+            "columns": [
+              "fnlwgt",
+              "education"
+            ]
+          },
+          {
+            "reason": "Stratified: 24% of the people earn more than 50K.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "These columns are missing for 2% to 6% of the people and the missingness is itself informative (unknown workclass and occupation go together), so it becomes its own category.",
+            "op": "impute",
+            "columns": [
+              "workclass",
+              "occupation",
+              "native-country"
+            ],
+            "strategy": "constant",
+            "fill_value": "Unknown",
+            "add_indicator": false
+          },
+          {
+            "reason": "Text categories with up to 14 values; one-hot is the family-neutral encoding.",
+            "op": "encode",
+            "columns": [
+              "workclass",
+              "marital-status",
+              "occupation",
+              "relationship",
+              "race",
+              "sex"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "41 countries, 90% of them the United States; rare countries are grouped to avoid dozens of near-empty columns.",
+            "op": "encode",
+            "columns": [
+              "native-country"
+            ],
+            "method": "onehot",
+            "max_categories": 10
+          },
+          {
+            "reason": "Numeric columns are on very different scales (capital-gain reaches the tens of thousands). The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+            "op": "scale",
+            "columns": [
+              "age",
+              "education-num",
+              "capital-gain",
+              "capital-loss",
+              "hours-per-week"
+            ],
+            "method": "standard"
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 39032,
+      "n_test": 9758,
+      "n_features": 59,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 39032,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7605810607500885,
+                "std": 0.000015024574998572338
+              },
+              "f1_macro": {
+                "mean": 0.43200570404478816,
+                "std": 4.847174241064167e-6
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8529923331974979,
+                "std": 0.0021819860500150536
+              },
+              "f1_macro": {
+                "mean": 0.7846391534848737,
+                "std": 0.0037052734098662462
+              },
+              "roc_auc": {
+                "mean": 0.9070762282999059,
+                "std": 0.00126745274439616
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8474585980423633,
+                "std": 0.0027409065060164384
+              },
+              "f1_macro": {
+                "mean": 0.7803962850324633,
+                "std": 0.004399385848689548
+              },
+              "roc_auc": {
+                "mean": 0.8939782333494588,
+                "std": 0.002014275177928136
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 1.4645464000022912,
+      "baseline_seconds": 26.739523700001882
+    },
+    {
+      "dataset": "adult",
+      "task_type": "classification",
+      "method": "naive",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [
+        "train_test_overlap"
+      ],
+      "agent": null,
+      "plan": {
+        "target": "class",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Naive rule: 80/20 split with seed 42, stratified for classification.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "Naive rule: other columns with missing values get the most frequent value.",
+            "op": "impute",
+            "columns": [
+              "workclass",
+              "occupation",
+              "native-country"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Naive rule: every non-numeric column is one-hot encoded.",
+            "op": "encode",
+            "columns": [
+              "workclass",
+              "education",
+              "marital-status",
+              "occupation",
+              "relationship",
+              "race",
+              "sex",
+              "native-country"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 39073,
+      "n_test": 9769,
+      "n_features": 105,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 39073,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7607299168233403,
+                "std": 0.00004364572891931182
+              },
+              "f1_macro": {
+                "mean": 0.43205372325437635,
+                "std": 0.000014078075759401095
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8423718112789012,
+                "std": 0.00388230303301937
+              },
+              "f1_macro": {
+                "mean": 0.7660469811206825,
+                "std": 0.003026701557481816
+              },
+              "roc_auc": {
+                "mean": 0.8848189649819599,
+                "std": 0.003830239853292894
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.85194361024334,
+                "std": 0.004354867225128045
+              },
+              "f1_macro": {
+                "mean": 0.7849311553696368,
+                "std": 0.0067674304231268734
+              },
+              "roc_auc": {
+                "mean": 0.9004858182749829,
+                "std": 0.004313462335610911
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 1.188895399998728,
+      "baseline_seconds": 73.16388860000006
+    },
+    {
+      "dataset": "adult",
+      "task_type": "classification",
+      "method": "agent",
+      "model": "gpt-6.1-sol",
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": {
+        "reported_model": "gpt-6.1-sol",
+        "calls": 1,
+        "revisions": 0,
+        "schema_retries": 0,
+        "questions": 0,
+        "first_plan_error_codes": [],
+        "input_tokens": 5837,
+        "output_tokens": 793,
+        "cached_input_tokens": 3495,
+        "cache_write_tokens": 2339,
+        "cost": 0.014133,
+        "qa": []
+      },
+      "plan": {
+        "target": "class",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "The profile reports 52 duplicate rows. Remove exact duplicates before splitting to prevent identical records from appearing in both training and test sets.",
+            "op": "dedupe",
+            "subset": null,
+            "keep": "first"
+          },
+          {
+            "reason": "education-num represents education-level codes rather than a measured quantity. Treat these codes as categories so linear models do not assume equally spaced effects between education levels.",
+            "op": "cast_to_category",
+            "columns": [
+              "education-num"
+            ]
+          },
+          {
+            "reason": "Reserve 20% of the records for evaluation while preserving the proportions of the two income classes. Fit all subsequent preprocessing only on the training set.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "workclass, occupation, and native-country contain missing values. Fill them with their training-set modal categories before encoding.",
+            "op": "impute",
+            "columns": [
+              "workclass",
+              "occupation",
+              "native-country"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Scale numeric predictors for compatibility with linear models. Robust scaling limits sensitivity to the many outliers reported in capital-gain and hours-per-week and the skewed distributions of other monetary predictors.",
+            "op": "scale",
+            "columns": [
+              "age",
+              "fnlwgt",
+              "capital-gain",
+              "capital-loss",
+              "hours-per-week"
+            ],
+            "method": "robust"
+          },
+          {
+            "reason": "Convert all categorical predictors, including text-valued sex and the education-level codes, into numeric features. One-hot encoding avoids imposing an artificial category order and supports both linear and tree models.",
+            "op": "encode",
+            "columns": [
+              "workclass",
+              "education",
+              "education-num",
+              "marital-status",
+              "occupation",
+              "relationship",
+              "race",
+              "sex",
+              "native-country"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 39032,
+      "n_test": 9758,
+      "n_features": 120,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 39032,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.7605810607500885,
+                "std": 0.000015024574998572338
+              },
+              "f1_macro": {
+                "mean": 0.43200570404478816,
+                "std": 4.847174241064167e-6
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8514295280377515,
+                "std": 0.0018938979718129544
+              },
+              "f1_macro": {
+                "mean": 0.7819753674072312,
+                "std": 0.003780377987013781
+              },
+              "roc_auc": {
+                "mean": 0.904909660003117,
+                "std": 0.001125037437322011
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8507891132605625,
+                "std": 0.0011813698231389566
+              },
+              "f1_macro": {
+                "mean": 0.7837823657714607,
+                "std": 0.0011792216496450277
+              },
+              "roc_auc": {
+                "mean": 0.9005982502523109,
+                "std": 0.0016857113792351512
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 25.515392100001918,
+      "baseline_seconds": 68.52187279999998
+    },
+    {
+      "dataset": "bank-marketing",
+      "task_type": "classification",
+      "method": "reference",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [
+        "train_test_overlap"
+      ],
+      "agent": null,
+      "plan": {
+        "target": "SubscribeTermDeposit",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Stratified: only 11.7% of the clients subscribe, so an unstratified split could leave the test set with few positives.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "Text categories with two to twelve values and no missing values. 'unknown' is kept as a category of its own because a client whose job or contact is unknown may behave differently.",
+            "op": "encode",
+            "columns": [
+              "job",
+              "marital",
+              "education",
+              "default",
+              "housing",
+              "loan",
+              "contact",
+              "poutcome"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "balance, campaign, pdays and previous are heavily skewed with outliers (pdays is -1 for the 82% never contacted), so the robust scaler is used. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+            "op": "scale",
+            "columns": [
+              "age",
+              "balance",
+              "campaign",
+              "pdays",
+              "previous"
+            ],
+            "method": "robust"
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 36168,
+      "n_test": 9043,
+      "n_features": 37,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 36168,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8830181385725526,
+                "std": 0.00005256047063157839
+              },
+              "f1_macro": {
+                "mean": 0.46893766964070566,
+                "std": 0.000014824073788585262
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8921699078284524,
+                "std": 0.001343260959782764
+              },
+              "f1_macro": {
+                "mean": 0.6010985629425648,
+                "std": 0.011668028558888174
+              },
+              "roc_auc": {
+                "mean": 0.7422177038550609,
+                "std": 0.006350681444641004
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8848982987039749,
+                "std": 0.003077750685510757
+              },
+              "f1_macro": {
+                "mean": 0.6144578385549263,
+                "std": 0.010892290621992004
+              },
+              "roc_auc": {
+                "mean": 0.7114172962704169,
+                "std": 0.004681705569087687
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.4412341999995988,
+      "baseline_seconds": 13.642293100001552
+    },
+    {
+      "dataset": "bank-marketing",
+      "task_type": "classification",
+      "method": "naive",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [
+        "train_test_overlap"
+      ],
+      "agent": null,
+      "plan": {
+        "target": "SubscribeTermDeposit",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Naive rule: 80/20 split with seed 42, stratified for classification.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "Naive rule: every non-numeric column is one-hot encoded.",
+            "op": "encode",
+            "columns": [
+              "job",
+              "marital",
+              "education",
+              "default",
+              "housing",
+              "loan",
+              "contact",
+              "poutcome"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 36168,
+      "n_test": 9043,
+      "n_features": 37,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 36168,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8830181385725526,
+                "std": 0.00005256047063157839
+              },
+              "f1_macro": {
+                "mean": 0.46893766964070566,
+                "std": 0.000014824073788585262
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.892059322765008,
+                "std": 0.0013856028591391018
+              },
+              "f1_macro": {
+                "mean": 0.6006564141311912,
+                "std": 0.012481265015778733
+              },
+              "roc_auc": {
+                "mean": 0.7417272372394633,
+                "std": 0.005745262283527811
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8845664479543254,
+                "std": 0.002823020235363246
+              },
+              "f1_macro": {
+                "mean": 0.6138678746176961,
+                "std": 0.008421440256218786
+              },
+              "roc_auc": {
+                "mean": 0.7126352329570855,
+                "std": 0.007200229793808528
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.43969279999873834,
+      "baseline_seconds": 17.260271099999954
+    },
+    {
+      "dataset": "bank-marketing",
+      "task_type": "classification",
+      "method": "agent",
+      "model": "gpt-6.1-sol",
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": {
+        "reported_model": "gpt-6.1-sol",
+        "calls": 1,
+        "revisions": 0,
+        "schema_retries": 0,
+        "questions": 0,
+        "first_plan_error_codes": [],
+        "input_tokens": 5276,
+        "output_tokens": 493,
+        "cached_input_tokens": 3495,
+        "cache_write_tokens": 1778,
+        "cost": 0.0097305,
+        "qa": []
+      },
+      "plan": {
+        "target": "SubscribeTermDeposit",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "The profile reports 274 duplicate rows. Remove exact duplicates before splitting to prevent identical records from appearing in both training and test sets.",
+            "op": "dedupe",
+            "subset": null,
+            "keep": "first"
+          },
+          {
+            "reason": "Reserve 20% of the data for evaluation while preserving the proportions of subscribers and non-subscribers. Fit all subsequent preprocessing only on the training set.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": true,
+            "random_state": 42
+          },
+          {
+            "reason": "Standardize age so its numerical scale is suitable for linear models as well as tree models.",
+            "op": "scale",
+            "columns": [
+              "age"
+            ],
+            "method": "standard"
+          },
+          {
+            "reason": "These numeric features are flagged for high skew and many outliers, so use robust scaling to reduce the influence of extreme values on scaling statistics.",
+            "op": "scale",
+            "columns": [
+              "balance",
+              "campaign",
+              "pdays",
+              "previous"
+            ],
+            "method": "robust"
+          },
+          {
+            "reason": "Encode all text predictors, including yes/no features, without imposing an artificial category order. Keep explicit 'unknown' categories because the profile reports no missing values.",
+            "op": "encode",
+            "columns": [
+              "job",
+              "marital",
+              "education",
+              "default",
+              "housing",
+              "loan",
+              "contact",
+              "poutcome"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 35949,
+      "n_test": 8988,
+      "n_features": 37,
+      "baseline": {
+        "task_type": "classification",
+        "n_rows": 35949,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "accuracy",
+          "f1_macro",
+          "roc_auc"
+        ],
+        "models": [
+          {
+            "name": "dummy_most_frequent",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8823611254329023,
+                "std": 0.00004909370307863981
+              },
+              "f1_macro": {
+                "mean": 0.46875230944316854,
+                "std": 0.000013854884563690995
+              },
+              "roc_auc": {
+                "mean": 0.5,
+                "std": 0.0
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "logistic_regression",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8923196948823259,
+                "std": 0.0031296224118623132
+              },
+              "f1_macro": {
+                "mean": 0.6048627371335042,
+                "std": 0.01681417200174684
+              },
+              "roc_auc": {
+                "mean": 0.7486995167650212,
+                "std": 0.002049812748725591
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "accuracy": {
+                "mean": 0.8843083555060458,
+                "std": 0.0016088162769634033
+              },
+              "f1_macro": {
+                "mean": 0.6169517637060413,
+                "std": 0.011000039936671464
+              },
+              "roc_auc": {
+                "mean": 0.7202412129148218,
+                "std": 0.009495136569974277
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 15.31038080000144,
+      "baseline_seconds": 13.881505400000606
+    },
+    {
+      "dataset": "house-prices",
+      "task_type": "regression",
+      "method": "reference",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": null,
+      "plan": {
+        "target": "SalePrice",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Id is a row counter. GarageYrBlt tracks YearBuilt (correlation 0.83) and is missing exactly when GarageType is, i.e. when there is no garage, which the other garage columns already say. Utilities has one value except for a single house. Alley, PoolQC and MiscFeature are 94% to 99.5% 'none', too few rows to learn from.",
+            "op": "drop_columns",
+            "columns": [
+              "Id",
+              "GarageYrBlt",
+              "Utilities",
+              "Alley",
+              "PoolQC",
+              "MiscFeature"
+            ]
+          },
+          {
+            "reason": "MSSubClass is a building-class code stored as a number (20 is a one-story house built 1946 or later, 60 a two-story one), not an amount: class 120 is not six times class 20. Casting it to text lets it be one-hot encoded, so that a linear model does not read the code as a quantity.",
+            "op": "cast_to_category",
+            "columns": [
+              "MSSubClass"
+            ]
+          },
+          {
+            "reason": "Regression: no stratification. 20% of 1460 houses is 292 test rows.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": false,
+            "random_state": 42
+          },
+          {
+            "reason": "In this data a missing value means the house has no such feature (no basement, no garage, no fireplace, no fence, no veneer), not that a value was lost, so it becomes the category 'None'. MasVnrType already has 'None' as a category (864 houses without veneer); only its 8 real gaps are filled here, and 'None' matches the area of 0 that MasVnrArea gets for them.",
+            "op": "impute",
+            "columns": [
+              "MasVnrType",
+              "BsmtQual",
+              "BsmtCond",
+              "BsmtExposure",
+              "BsmtFinType1",
+              "BsmtFinType2",
+              "FireplaceQu",
+              "GarageType",
+              "GarageFinish",
+              "GarageQual",
+              "GarageCond",
+              "Fence"
+            ],
+            "strategy": "constant",
+            "fill_value": "None",
+            "add_indicator": false
+          },
+          {
+            "reason": "One house has no electrical value; this is a lost value, so the most frequent type is used.",
+            "op": "impute",
+            "columns": [
+              "Electrical"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Eight houses have no area. For 59% of the houses the area is 0, so the median is 0, the same as 'no veneer'.",
+            "op": "impute",
+            "columns": [
+              "MasVnrArea"
+            ],
+            "strategy": "median",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "18% of the lot frontages are missing and the column is skewed with outliers, so the median is used. The indicator keeps the fact that it was unknown.",
+            "op": "impute",
+            "columns": [
+              "LotFrontage"
+            ],
+            "strategy": "median",
+            "fill_value": null,
+            "add_indicator": true
+          },
+          {
+            "reason": "All remaining text columns are encoded with one-hot. Quality grades (Ex, Gd, TA ...) look ordered, but the ordinal encoder would order them alphabetically, which is wrong, so one-hot is the only encoding that does not invent an order.",
+            "op": "encode",
+            "columns": [
+              "MSZoning",
+              "Street",
+              "LotShape",
+              "LandContour",
+              "LotConfig",
+              "LandSlope",
+              "Neighborhood",
+              "Condition1",
+              "Condition2",
+              "BldgType",
+              "HouseStyle",
+              "RoofStyle",
+              "RoofMatl",
+              "Exterior1st",
+              "Exterior2nd",
+              "MasVnrType",
+              "ExterQual",
+              "ExterCond",
+              "Foundation",
+              "BsmtQual",
+              "BsmtCond",
+              "BsmtExposure",
+              "BsmtFinType1",
+              "BsmtFinType2",
+              "Heating",
+              "HeatingQC",
+              "CentralAir",
+              "Electrical",
+              "KitchenQual",
+              "Functional",
+              "FireplaceQu",
+              "GarageType",
+              "GarageFinish",
+              "GarageQual",
+              "GarageCond",
+              "PavedDrive",
+              "Fence",
+              "SaleType",
+              "SaleCondition"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "MSSubClass became text in the cast step and has 15 codes and no missing values; one-hot gives each code its own column and invents no order between the codes.",
+            "op": "encode",
+            "columns": [
+              "MSSubClass"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "Areas and counts are skewed with many outliers, so the robust scaler is used. The year columns are calendar values and are scaled as numbers. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+            "op": "scale",
+            "columns": [
+              "LotFrontage",
+              "MasVnrArea",
+              "LotArea",
+              "OverallQual",
+              "OverallCond",
+              "YearBuilt",
+              "YearRemodAdd",
+              "BsmtFinSF1",
+              "BsmtFinSF2",
+              "BsmtUnfSF",
+              "TotalBsmtSF",
+              "1stFlrSF",
+              "2ndFlrSF",
+              "LowQualFinSF",
+              "GrLivArea",
+              "BsmtFullBath",
+              "BsmtHalfBath",
+              "FullBath",
+              "HalfBath",
+              "BedroomAbvGr",
+              "KitchenAbvGr",
+              "TotRmsAbvGrd",
+              "Fireplaces",
+              "GarageCars",
+              "GarageArea",
+              "WoodDeckSF",
+              "OpenPorchSF",
+              "EnclosedPorch",
+              "3SsnPorch",
+              "ScreenPorch",
+              "PoolArea",
+              "MiscVal",
+              "MoSold",
+              "YrSold"
+            ],
+            "method": "robust"
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 1168,
+      "n_test": 292,
+      "n_features": 300,
+      "baseline": {
+        "task_type": "regression",
+        "n_rows": 1168,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "r2",
+          "rmse",
+          "mae"
+        ],
+        "models": [
+          {
+            "name": "dummy_mean",
+            "scores": {
+              "r2": {
+                "mean": -0.0016230320026094259,
+                "std": 0.0012786520023305792
+              },
+              "rmse": {
+                "mean": 77160.10845671482,
+                "std": 3673.252797736224
+              },
+              "mae": {
+                "mean": 56318.232277232826,
+                "std": 2612.1484999703557
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "ridge",
+            "scores": {
+              "r2": {
+                "mean": 0.8119651247307795,
+                "std": 0.07234397808234862
+              },
+              "rmse": {
+                "mean": 33058.37048647867,
+                "std": 7365.515525027906
+              },
+              "mae": {
+                "mean": 19122.05123356207,
+                "std": 923.9495950589348
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "r2": {
+                "mean": 0.8406012576766818,
+                "std": 0.04390077833190006
+              },
+              "rmse": {
+                "mean": 30592.56433829411,
+                "std": 5095.690136584028
+              },
+              "mae": {
+                "mean": 18236.266719305968,
+                "std": 1114.372438677906
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.3150655000026745,
+      "baseline_seconds": 7.097384900000179
+    },
+    {
+      "dataset": "house-prices",
+      "task_type": "regression",
+      "method": "naive",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": null,
+      "plan": {
+        "target": "SalePrice",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Naive rule: the profile marks these columns as identifiers or constants.",
+            "op": "drop_columns",
+            "columns": [
+              "Id"
+            ]
+          },
+          {
+            "reason": "Naive rule: 80/20 split with seed 42, stratified for classification.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": false,
+            "random_state": 42
+          },
+          {
+            "reason": "Naive rule: numeric columns with missing values get the median.",
+            "op": "impute",
+            "columns": [
+              "LotFrontage",
+              "MasVnrArea",
+              "GarageYrBlt"
+            ],
+            "strategy": "median",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Naive rule: other columns with missing values get the most frequent value.",
+            "op": "impute",
+            "columns": [
+              "Alley",
+              "MasVnrType",
+              "BsmtQual",
+              "BsmtCond",
+              "BsmtExposure",
+              "BsmtFinType1",
+              "BsmtFinType2",
+              "Electrical",
+              "FireplaceQu",
+              "GarageType",
+              "GarageFinish",
+              "GarageQual",
+              "GarageCond",
+              "PoolQC",
+              "Fence",
+              "MiscFeature"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Naive rule: every non-numeric column is one-hot encoded.",
+            "op": "encode",
+            "columns": [
+              "MSZoning",
+              "Street",
+              "Alley",
+              "LotShape",
+              "LandContour",
+              "Utilities",
+              "LotConfig",
+              "LandSlope",
+              "Neighborhood",
+              "Condition1",
+              "Condition2",
+              "BldgType",
+              "HouseStyle",
+              "RoofStyle",
+              "RoofMatl",
+              "Exterior1st",
+              "Exterior2nd",
+              "MasVnrType",
+              "ExterQual",
+              "ExterCond",
+              "Foundation",
+              "BsmtQual",
+              "BsmtCond",
+              "BsmtExposure",
+              "BsmtFinType1",
+              "BsmtFinType2",
+              "Heating",
+              "HeatingQC",
+              "CentralAir",
+              "Electrical",
+              "KitchenQual",
+              "Functional",
+              "FireplaceQu",
+              "GarageType",
+              "GarageFinish",
+              "GarageQual",
+              "GarageCond",
+              "PavedDrive",
+              "PoolQC",
+              "Fence",
+              "MiscFeature",
+              "SaleType",
+              "SaleCondition"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 1168,
+      "n_test": 292,
+      "n_features": 286,
+      "baseline": {
+        "task_type": "regression",
+        "n_rows": 1168,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "r2",
+          "rmse",
+          "mae"
+        ],
+        "models": [
+          {
+            "name": "dummy_mean",
+            "scores": {
+              "r2": {
+                "mean": -0.0016230320026094259,
+                "std": 0.0012786520023305792
+              },
+              "rmse": {
+                "mean": 77160.10845671482,
+                "std": 3673.252797736224
+              },
+              "mae": {
+                "mean": 56318.232277232826,
+                "std": 2612.1484999703557
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "ridge",
+            "scores": {
+              "r2": {
+                "mean": 0.8131012763329004,
+                "std": 0.07159707217174703
+              },
+              "rmse": {
+                "mean": 32959.853984731446,
+                "std": 7306.128506573787
+              },
+              "mae": {
+                "mean": 18802.30512837185,
+                "std": 1088.4196095344091
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "r2": {
+                "mean": 0.8419241518393509,
+                "std": 0.04372567058851211
+              },
+              "rmse": {
+                "mean": 30455.97258339213,
+                "std": 5057.59501079508
+              },
+              "mae": {
+                "mean": 18167.63697674333,
+                "std": 1196.7417284533894
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.28259459999753744,
+      "baseline_seconds": 6.596042200002557
+    },
+    {
+      "dataset": "house-prices",
+      "task_type": "regression",
+      "method": "agent",
+      "model": "gpt-6.1-sol",
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": {
+        "reported_model": "gpt-6.1-sol",
+        "calls": 1,
+        "revisions": 0,
+        "schema_retries": 0,
+        "questions": 0,
+        "first_plan_error_codes": [],
+        "input_tokens": 14347,
+        "output_tokens": 1526,
+        "cached_input_tokens": 3495,
+        "cache_write_tokens": 10849,
+        "cost": 0.042738,
+        "qa": []
+      },
+      "plan": {
+        "target": "SalePrice",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Id uniquely identifies each row and is flagged as a possible identifier, so remove it from the predictors.",
+            "op": "drop_columns",
+            "columns": [
+              "Id"
+            ]
+          },
+          {
+            "reason": "MSSubClass represents building-class codes, and MoSold represents calendar months. Treat both as categories rather than numeric quantities for compatibility with linear models.",
+            "op": "cast_to_category",
+            "columns": [
+              "MSSubClass",
+              "MoSold"
+            ]
+          },
+          {
+            "reason": "Reserve 20% of houses for reproducible evaluation of sale-price predictions. Fit all imputation, encoding, and scaling on the training partition only.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": false,
+            "random_state": 42
+          },
+          {
+            "reason": "Fill missing numeric measurements with training-set medians, which are resistant to the skew and outliers shown in LotFrontage and MasVnrArea. Add indicators to preserve information about which measurements were missing.",
+            "op": "impute",
+            "columns": [
+              "LotFrontage",
+              "MasVnrArea",
+              "GarageYrBlt"
+            ],
+            "strategy": "median",
+            "fill_value": null,
+            "add_indicator": true
+          },
+          {
+            "reason": "Preserve missing categorical values as a distinct category instead of replacing them with an observed house characteristic. Retain the high-missing columns so their observed categories and missingness remain available as predictors.",
+            "op": "impute",
+            "columns": [
+              "Alley",
+              "MasVnrType",
+              "BsmtQual",
+              "BsmtCond",
+              "BsmtExposure",
+              "BsmtFinType1",
+              "BsmtFinType2",
+              "Electrical",
+              "FireplaceQu",
+              "GarageType",
+              "GarageFinish",
+              "GarageQual",
+              "GarageCond",
+              "PoolQC",
+              "Fence",
+              "MiscFeature"
+            ],
+            "strategy": "constant",
+            "fill_value": "__MISSING__",
+            "add_indicator": false
+          },
+          {
+            "reason": "One-hot encode all categorical predictors, including text-valued binary features and the converted numeric codes. This avoids imposing arbitrary category order and supports both linear and tree models.",
+            "op": "encode",
+            "columns": [
+              "MSSubClass",
+              "MSZoning",
+              "Street",
+              "Alley",
+              "LotShape",
+              "LandContour",
+              "Utilities",
+              "LotConfig",
+              "LandSlope",
+              "Neighborhood",
+              "Condition1",
+              "Condition2",
+              "BldgType",
+              "HouseStyle",
+              "RoofStyle",
+              "RoofMatl",
+              "Exterior1st",
+              "Exterior2nd",
+              "MasVnrType",
+              "ExterQual",
+              "ExterCond",
+              "Foundation",
+              "BsmtQual",
+              "BsmtCond",
+              "BsmtExposure",
+              "BsmtFinType1",
+              "BsmtFinType2",
+              "Heating",
+              "HeatingQC",
+              "CentralAir",
+              "Electrical",
+              "KitchenQual",
+              "Functional",
+              "FireplaceQu",
+              "GarageType",
+              "GarageFinish",
+              "GarageQual",
+              "GarageCond",
+              "PavedDrive",
+              "PoolQC",
+              "Fence",
+              "MiscFeature",
+              "MoSold",
+              "SaleType",
+              "SaleCondition"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "Numeric predictors span very different units, and several have many outliers or strong skew. Use training-fitted robust scaling to support linear models without allowing extreme measurements to dominate the scaling statistics.",
+            "op": "scale",
+            "columns": [
+              "LotFrontage",
+              "LotArea",
+              "OverallQual",
+              "OverallCond",
+              "YearBuilt",
+              "YearRemodAdd",
+              "MasVnrArea",
+              "BsmtFinSF1",
+              "BsmtFinSF2",
+              "BsmtUnfSF",
+              "TotalBsmtSF",
+              "1stFlrSF",
+              "2ndFlrSF",
+              "LowQualFinSF",
+              "GrLivArea",
+              "BsmtFullBath",
+              "BsmtHalfBath",
+              "FullBath",
+              "HalfBath",
+              "BedroomAbvGr",
+              "KitchenAbvGr",
+              "TotRmsAbvGrd",
+              "Fireplaces",
+              "GarageYrBlt",
+              "GarageCars",
+              "GarageArea",
+              "WoodDeckSF",
+              "OpenPorchSF",
+              "EnclosedPorch",
+              "3SsnPorch",
+              "ScreenPorch",
+              "PoolArea",
+              "MiscVal",
+              "YrSold"
+            ],
+            "method": "robust"
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 1168,
+      "n_test": 292,
+      "n_features": 330,
+      "baseline": {
+        "task_type": "regression",
+        "n_rows": 1168,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "r2",
+          "rmse",
+          "mae"
+        ],
+        "models": [
+          {
+            "name": "dummy_mean",
+            "scores": {
+              "r2": {
+                "mean": -0.0016230320026094259,
+                "std": 0.0012786520023305792
+              },
+              "rmse": {
+                "mean": 77160.10845671482,
+                "std": 3673.252797736224
+              },
+              "mae": {
+                "mean": 56318.232277232826,
+                "std": 2612.1484999703557
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "ridge",
+            "scores": {
+              "r2": {
+                "mean": 0.8114904941412912,
+                "std": 0.07039690841296634
+              },
+              "rmse": {
+                "mean": 33119.053539212866,
+                "std": 7175.906563034824
+              },
+              "mae": {
+                "mean": 19139.887731334962,
+                "std": 1034.4098355575366
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "r2": {
+                "mean": 0.8416699757645698,
+                "std": 0.041687930076689715
+              },
+              "rmse": {
+                "mean": 30507.558788801874,
+                "std": 4889.2805966666965
+              },
+              "mae": {
+                "mean": 18278.14007530905,
+                "std": 1108.6607335678243
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 34.84291129999838,
+      "baseline_seconds": 7.265295499997592
+    },
+    {
+      "dataset": "employee-salaries",
+      "task_type": "regression",
+      "method": "reference",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": null,
+      "plan": {
+        "target": "current_annual_salary",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "full_name is personal data and unique per employee. department_name repeats department one to one. date_first_hired is a date stored as text that no step can parse, and year_first_hired holds the same information. 2016_gross_pay_received is what the employee was paid for the salary being predicted (correlation 0.89), so it would leak the target.",
+            "op": "drop_columns",
+            "columns": [
+              "full_name",
+              "department_name",
+              "date_first_hired",
+              "2016_gross_pay_received"
+            ]
+          },
+          {
+            "reason": "The target is continuous, so there are no classes to stratify on; a seeded random 80/20 split keeps the run reproducible.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": false,
+            "random_state": 42
+          },
+          {
+            "reason": "17 genders are missing; the most frequent value is a safe fill for so few rows.",
+            "op": "impute",
+            "columns": [
+              "gender"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "88% of the values are missing, and the missing value means the employee holds the title they were hired for; a value means they are temporarily in a lower title. The two groups differ in pay (median 73,296 against 53,788), so the fact is kept as the category 'None'.",
+            "op": "impute",
+            "columns": [
+              "underfilled_job_title"
+            ],
+            "strategy": "constant",
+            "fill_value": "None",
+            "add_indicator": false
+          },
+          {
+            "reason": "32% are missing while only 6 rows hold an explicit 0, so a missing overtime pay evidently means no overtime and the fill is 0. The indicator is kept because the missing values are concentrated in a few departments (all of ZAH, 7% of DLC) and the rows with a missing value have a higher median salary, which fits departments that do not record overtime.",
+            "op": "impute",
+            "columns": [
+              "2016_overtime_pay"
+            ],
+            "strategy": "constant",
+            "fill_value": 0,
+            "add_indicator": true
+          },
+          {
+            "reason": "Text categories with two to 37 values; one-hot is the family-neutral encoding.",
+            "op": "encode",
+            "columns": [
+              "gender",
+              "department",
+              "assignment_category"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "694 divisions; the 50 most frequent cover 47% of the rows and the rest are grouped.",
+            "op": "encode",
+            "columns": [
+              "division"
+            ],
+            "method": "onehot",
+            "max_categories": 50
+          },
+          {
+            "reason": "385 position titles and the position is the strongest signal for pay, so the 100 most frequent are kept (88% of the rows) and the rest are grouped.",
+            "op": "encode",
+            "columns": [
+              "employee_position_title"
+            ],
+            "method": "onehot",
+            "max_categories": 100
+          },
+          {
+            "reason": "Only 84 titles, and the column is mostly 'None'; the 10 most frequent are kept and the rest are grouped to avoid near-empty columns.",
+            "op": "encode",
+            "columns": [
+              "underfilled_job_title"
+            ],
+            "method": "onehot",
+            "max_categories": 10
+          },
+          {
+            "reason": "Overtime pay is skewed with many outliers. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+            "op": "scale",
+            "columns": [
+              "2016_overtime_pay",
+              "year_first_hired"
+            ],
+            "method": "robust"
+          }
+        ]
+      },
+      "leaky_columns": [
+        "2016_gross_pay_received"
+      ],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 7382,
+      "n_test": 1846,
+      "n_features": 204,
+      "baseline": {
+        "task_type": "regression",
+        "n_rows": 7382,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "r2",
+          "rmse",
+          "mae"
+        ],
+        "models": [
+          {
+            "name": "dummy_mean",
+            "scores": {
+              "r2": {
+                "mean": -0.0020597418935011545,
+                "std": 0.0018901411882165505
+              },
+              "rmse": {
+                "mean": 29065.15280830061,
+                "std": 624.6689487690725
+              },
+              "mae": {
+                "mean": 22779.382659093215,
+                "std": 309.8707120910479
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "ridge",
+            "scores": {
+              "r2": {
+                "mean": 0.8119588915916018,
+                "std": 0.009480828996556065
+              },
+              "rmse": {
+                "mean": 12590.717789357102,
+                "std": 525.260183294547
+              },
+              "mae": {
+                "mean": 7118.701914114727,
+                "std": 52.539693665660344
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "r2": {
+                "mean": 0.7924156829376068,
+                "std": 0.006875055908418108
+              },
+              "rmse": {
+                "mean": 13229.532850687625,
+                "std": 439.3083457821278
+              },
+              "mae": {
+                "mean": 6436.7719026267405,
+                "std": 213.68781962596606
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.2592862999990757,
+      "baseline_seconds": 19.38726609999867
+    },
+    {
+      "dataset": "employee-salaries",
+      "task_type": "regression",
+      "method": "naive",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": null,
+      "plan": {
+        "target": "current_annual_salary",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Naive rule: 80/20 split with seed 42, stratified for classification.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": false,
+            "random_state": 42
+          },
+          {
+            "reason": "Naive rule: numeric columns with missing values get the median.",
+            "op": "impute",
+            "columns": [
+              "2016_gross_pay_received",
+              "2016_overtime_pay"
+            ],
+            "strategy": "median",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Naive rule: other columns with missing values get the most frequent value.",
+            "op": "impute",
+            "columns": [
+              "gender",
+              "underfilled_job_title"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Naive rule: every non-numeric column is one-hot encoded.",
+            "op": "encode",
+            "columns": [
+              "gender",
+              "department",
+              "department_name",
+              "assignment_category"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "Naive rule: one-hot encode, keeping only the 50 most frequent categories of columns with more.",
+            "op": "encode",
+            "columns": [
+              "full_name",
+              "division",
+              "employee_position_title",
+              "underfilled_job_title",
+              "date_first_hired"
+            ],
+            "method": "onehot",
+            "max_categories": 50
+          }
+        ]
+      },
+      "leaky_columns": [
+        "2016_gross_pay_received"
+      ],
+      "kept_leaky_columns": [
+        "2016_gross_pay_received"
+      ],
+      "leaky_columns_kept": 1,
+      "n_train": 7382,
+      "n_test": 1846,
+      "n_features": 331,
+      "baseline": {
+        "task_type": "regression",
+        "n_rows": 7382,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "r2",
+          "rmse",
+          "mae"
+        ],
+        "models": [
+          {
+            "name": "dummy_mean",
+            "scores": {
+              "r2": {
+                "mean": -0.0020597418935011545,
+                "std": 0.0018901411882165505
+              },
+              "rmse": {
+                "mean": 29065.15280830061,
+                "std": 624.6689487690725
+              },
+              "mae": {
+                "mean": 22779.382659093215,
+                "std": 309.8707120910479
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "ridge",
+            "scores": {
+              "r2": {
+                "mean": 0.9366966696784497,
+                "std": 0.0058044887808460024
+              },
+              "rmse": {
+                "mean": 7292.5601295043,
+                "std": 243.42791837189606
+              },
+              "mae": {
+                "mean": 4185.851463157759,
+                "std": 46.766369263164044
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "r2": {
+                "mean": 0.9716320360463782,
+                "std": 0.0036099886551019967
+              },
+              "rmse": {
+                "mean": 4876.6417243379765,
+                "std": 233.66830309556758
+              },
+              "mae": {
+                "mean": 2271.136303623607,
+                "std": 81.0978606009962
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.34217220000209636,
+      "baseline_seconds": 20.092521999999008
+    },
+    {
+      "dataset": "employee-salaries",
+      "task_type": "regression",
+      "method": "agent",
+      "model": "gpt-6.1-sol",
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": {
+        "reported_model": "gpt-6.1-sol",
+        "calls": 2,
+        "revisions": 0,
+        "schema_retries": 0,
+        "questions": 1,
+        "first_plan_error_codes": [],
+        "input_tokens": 11329,
+        "output_tokens": 1149,
+        "cached_input_tokens": 6990,
+        "cache_write_tokens": 4333,
+        "cost": 0.0230335,
+        "qa": [
+          {
+            "question": "Which 2016 pay columns will be available when you predict an employee's annual salary, and refer to a period before the salary being predicted?",
+            "answer": "Exclude both 2016 pay columns"
+          }
+        ]
+      },
+      "plan": {
+        "target": "current_annual_salary",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Remove full_name because it contains personal information and is nearly unique. Exclude both 2016 pay columns as requested, and remove the unsupported hire-date field while retaining year_first_hired as a numeric measure of hiring timing.",
+            "op": "drop_columns",
+            "columns": [
+              "full_name",
+              "2016_gross_pay_received",
+              "2016_overtime_pay",
+              "date_first_hired"
+            ]
+          },
+          {
+            "reason": "Reserve 20% of employees for evaluating salary predictions, with a reproducible split. Stratification is not appropriate for this continuous regression target.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": false,
+            "random_state": 42
+          },
+          {
+            "reason": "Fill the 17 missing gender values with the most frequent training-set category.",
+            "op": "impute",
+            "columns": [
+              "gender"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Preserve the available underfilled-job titles despite the high missing rate. Use a distinct missing category rather than assigning an observed job title to employees whose value is absent.",
+            "op": "impute",
+            "columns": [
+              "underfilled_job_title"
+            ],
+            "strategy": "constant",
+            "fill_value": "__MISSING__",
+            "add_indicator": false
+          },
+          {
+            "reason": "Standardize the numeric hiring year using training-set statistics so it is suitable for linear models as well as trees. Hiring year represents elapsed-time differences rather than a category code.",
+            "op": "scale",
+            "columns": [
+              "year_first_hired"
+            ],
+            "method": "standard"
+          },
+          {
+            "reason": "One-hot encode every retained text feature so linear models do not impose an artificial category order. Retain all learned categories, including detailed divisions and position titles that may help explain salary differences.",
+            "op": "encode",
+            "columns": [
+              "gender",
+              "department",
+              "department_name",
+              "division",
+              "assignment_category",
+              "employee_position_title",
+              "underfilled_job_title"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          }
+        ]
+      },
+      "leaky_columns": [
+        "2016_gross_pay_received"
+      ],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 7382,
+      "n_test": 1846,
+      "n_features": 1197,
+      "baseline": {
+        "task_type": "regression",
+        "n_rows": 7382,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "r2",
+          "rmse",
+          "mae"
+        ],
+        "models": [
+          {
+            "name": "dummy_mean",
+            "scores": {
+              "r2": {
+                "mean": -0.0020597418935011545,
+                "std": 0.0018901411882165505
+              },
+              "rmse": {
+                "mean": 29065.15280830061,
+                "std": 624.6689487690725
+              },
+              "mae": {
+                "mean": 22779.382659093215,
+                "std": 309.8707120910479
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "ridge",
+            "scores": {
+              "r2": {
+                "mean": 0.8829545951921819,
+                "std": 0.01566565484192367
+              },
+              "rmse": {
+                "mean": 9916.605511654034,
+                "std": 754.0951711620925
+              },
+              "mae": {
+                "mean": 5737.352288240977,
+                "std": 78.4714058176854
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "r2": {
+                "mean": 0.825142740748308,
+                "std": 0.017846885381786942
+              },
+              "rmse": {
+                "mean": 12133.708016229326,
+                "std": 819.505308472049
+              },
+              "mae": {
+                "mean": 5530.663012085143,
+                "std": 153.15163811046807
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 37.28348610000103,
+      "baseline_seconds": 83.0952595000017
+    },
+    {
+      "dataset": "bike-sharing-demand",
+      "task_type": "regression",
+      "method": "reference",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [
+        "train_test_overlap"
+      ],
+      "agent": null,
+      "plan": {
+        "target": "count",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "feel_temp is almost the same column as temp (correlation 0.99); keeping both only adds collinearity for linear models.",
+            "op": "drop_columns",
+            "columns": [
+              "feel_temp"
+            ]
+          },
+          {
+            "reason": "hour, month and weekday are categories stored as integers. Mean demand is 6 at hour 4, 359 at hour 8 and 461 at hour 17, and it climbs towards the summer months and falls again, so one number per column, which a linear model can only weight by a straight line, cannot follow either pattern. Casting them to text lets the encode step treat them as categories.",
+            "op": "cast_to_category",
+            "columns": [
+              "hour",
+              "month",
+              "weekday"
+            ]
+          },
+          {
+            "reason": "The target is continuous, so there are no classes to stratify on; a seeded random 80/20 split keeps the run reproducible.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": false,
+            "random_state": 42
+          },
+          {
+            "reason": "One-hot encodes season and weather, which are text, and hour, month and weekday, which are text after the cast. One-hot gives every value its own column and invents no order, which suits any model family; there are no missing values, so no impute step is needed. Hour adds 24 columns, which is small next to the number of rows.",
+            "op": "encode",
+            "columns": [
+              "season",
+              "weather",
+              "hour",
+              "month",
+              "weekday"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "temp, humidity and windspeed are the numeric measurements left, on different scales (degrees against a share between 0 and 1), and the model family is open and may include linear models. Standard scaling puts them on comparable footing and costs trees nothing. year, holiday and workingday have two values and are left as they are, like the one-hot columns.",
+            "op": "scale",
+            "columns": [
+              "temp",
+              "humidity",
+              "windspeed"
+            ],
+            "method": "standard"
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 13903,
+      "n_test": 3476,
+      "n_features": 57,
+      "baseline": {
+        "task_type": "regression",
+        "n_rows": 13903,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "r2",
+          "rmse",
+          "mae"
+        ],
+        "models": [
+          {
+            "name": "dummy_mean",
+            "scores": {
+              "r2": {
+                "mean": -0.001092127874340143,
+                "std": 0.0015973800555781539
+              },
+              "rmse": {
+                "mean": 182.1790653655705,
+                "std": 5.019419778362777
+              },
+              "mae": {
+                "mean": 143.28918767518138,
+                "std": 3.408587748845763
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "ridge",
+            "scores": {
+              "r2": {
+                "mean": 0.6831826126737115,
+                "std": 0.014079268750110585
+              },
+              "rmse": {
+                "mean": 102.42368738756227,
+                "std": 2.327573409649424
+              },
+              "mae": {
+                "mean": 75.88013722410564,
+                "std": 1.925179650179549
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "r2": {
+                "mean": 0.918611500891636,
+                "std": 0.003504006386195734
+              },
+              "rmse": {
+                "mean": 51.91539420119433,
+                "std": 1.2007711683315818
+              },
+              "mae": {
+                "mean": 32.32490295394259,
+                "std": 0.5730104462200785
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.1404006999982812,
+      "baseline_seconds": 21.975413500000286
+    },
+    {
+      "dataset": "bike-sharing-demand",
+      "task_type": "regression",
+      "method": "naive",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [
+        "train_test_overlap"
+      ],
+      "agent": null,
+      "plan": {
+        "target": "count",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Naive rule: 80/20 split with seed 42, stratified for classification.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": false,
+            "random_state": 42
+          },
+          {
+            "reason": "Naive rule: every non-numeric column is one-hot encoded.",
+            "op": "encode",
+            "columns": [
+              "season",
+              "weather"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 13903,
+      "n_test": 3476,
+      "n_features": 18,
+      "baseline": {
+        "task_type": "regression",
+        "n_rows": 13903,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "r2",
+          "rmse",
+          "mae"
+        ],
+        "models": [
+          {
+            "name": "dummy_mean",
+            "scores": {
+              "r2": {
+                "mean": -0.001092127874340143,
+                "std": 0.0015973800555781539
+              },
+              "rmse": {
+                "mean": 182.1790653655705,
+                "std": 5.019419778362777
+              },
+              "mae": {
+                "mean": 143.28918767518138,
+                "std": 3.408587748845763
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "ridge",
+            "scores": {
+              "r2": {
+                "mean": 0.39607398824972045,
+                "std": 0.00983513880088741
+              },
+              "rmse": {
+                "mean": 141.49709061526863,
+                "std": 4.148117017305012
+              },
+              "mae": {
+                "mean": 106.0244362326317,
+                "std": 2.5223625836080528
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "r2": {
+                "mean": 0.9414452560261705,
+                "std": 0.00591921795634258
+              },
+              "rmse": {
+                "mean": 43.95725737500336,
+                "std": 1.47087693258557
+              },
+              "mae": {
+                "mean": 26.624182312454245,
+                "std": 0.6014928574053239
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.10465339999791468,
+      "baseline_seconds": 12.998847499999101
+    },
+    {
+      "dataset": "bike-sharing-demand",
+      "task_type": "regression",
+      "method": "agent",
+      "model": "gpt-6.1-sol",
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": {
+        "reported_model": "gpt-6.1-sol",
+        "calls": 1,
+        "revisions": 0,
+        "schema_retries": 0,
+        "questions": 0,
+        "first_plan_error_codes": [],
+        "input_tokens": 5278,
+        "output_tokens": 787,
+        "cached_input_tokens": 3495,
+        "cache_write_tokens": 1780,
+        "cost": 0.0126755,
+        "qa": []
+      },
+      "plan": {
+        "target": "count",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "The profile reports two duplicate rows. Remove exact duplicates before splitting to prevent identical observations from appearing in both training and test sets.",
+            "op": "dedupe",
+            "subset": null,
+            "keep": "first"
+          },
+          {
+            "reason": "Month, hour and weekday represent calendar categories rather than quantities. Treat them as categories so linear models can learn separate effects without imposing a numeric trend.",
+            "op": "cast_to_category",
+            "columns": [
+              "month",
+              "hour",
+              "weekday"
+            ]
+          },
+          {
+            "reason": "Reserve 20% of observations for reproducible evaluation of rental-count predictions. This is regression, so do not stratify by the target.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": false,
+            "random_state": 42
+          },
+          {
+            "reason": "Encode season, weather and the calendar categories without imposing an artificial order. Learn categories only from training data.",
+            "op": "encode",
+            "columns": [
+              "season",
+              "month",
+              "hour",
+              "weekday",
+              "weather"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "Standardize numeric predictors for compatibility with linear models. Temperature measures have no reported IQR outliers, humidity has relatively few, and year is already a numeric binary indicator; boolean holiday and workingday flags can remain unchanged.",
+            "op": "scale",
+            "columns": [
+              "year",
+              "temp",
+              "feel_temp",
+              "humidity"
+            ],
+            "method": "standard"
+          },
+          {
+            "reason": "Windspeed has 342 reported IQR outliers. Robust scaling reduces their influence on the feature's scale while retaining all observations.",
+            "op": "scale",
+            "columns": [
+              "windspeed"
+            ],
+            "method": "robust"
+          }
+        ]
+      },
+      "leaky_columns": [],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 13901,
+      "n_test": 3476,
+      "n_features": 58,
+      "baseline": {
+        "task_type": "regression",
+        "n_rows": 13901,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "r2",
+          "rmse",
+          "mae"
+        ],
+        "models": [
+          {
+            "name": "dummy_mean",
+            "scores": {
+              "r2": {
+                "mean": -0.00009703585251101821,
+                "std": 0.0001261335531732565
+              },
+              "rmse": {
+                "mean": 182.87307310858273,
+                "std": 1.1427843436724208
+              },
+              "mae": {
+                "mean": 143.52347393125595,
+                "std": 1.734595132855529
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "ridge",
+            "scores": {
+              "r2": {
+                "mean": 0.6864015173819922,
+                "std": 0.005155335266914126
+              },
+              "rmse": {
+                "mean": 102.40092301292925,
+                "std": 1.1207378092108924
+              },
+              "mae": {
+                "mean": 75.85401684517387,
+                "std": 1.0825000882628872
+              }
+            },
+            "skipped_reason": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "r2": {
+                "mean": 0.9151268732429072,
+                "std": 0.0024934038895120677
+              },
+              "rmse": {
+                "mean": 53.26535959206065,
+                "std": 0.6535229346216285
+              },
+              "mae": {
+                "mean": 33.13610937455245,
+                "std": 0.307885683416797
+              }
+            },
+            "skipped_reason": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 24.60635750000074,
+      "baseline_seconds": 34.87730649999867
+    }
+  ]
+}
