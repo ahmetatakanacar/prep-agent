@@ -1,84 +1,66 @@
 # prep-agent
 
-Prepares a CSV dataset for machine learning from a natural-language goal: it profiles the data, has an LLM propose a structured preparation plan, validates the plan, and executes it.
+prep-agent prepares a CSV file for machine learning from a goal written in plain language, for example "prepare this for churn prediction, I will use XGBoost". It profiles the data, has an LLM propose a preparation plan, checks the plan with deterministic rules, runs it, and leaves behind the cleaned train and test files, a standalone script that repeats the preparation, and a report with baseline scores.
 
-**Status:** under development. The `profile`, `run`, `prepare` and `llm-check` commands work. `prepare` has the LLM plan the preparation; `run` takes a hand-written plan. Both write a `report.md`, baseline scores and, for a successful run, a standalone `pipeline.py` into the run folder.
+It exists because data preparation is where most leakage and quiet mistakes happen (a statistic fitted on the whole table, an identifier left in, a column that gives the answer away), and because letting an LLM write the code for it is a way to make those mistakes harder to see. Here the LLM chooses from a fixed set of operations, and code decides what is allowed.
 
-## Planned features
+## How it works
 
-- Data profiling: the LLM only ever sees a `profile.json` summary, never the raw data.
-- Plans as validated JSON: every step maps to a registered operation, and the LLM writes no free-form code.
-- Leakage protection built into the validator: stateful steps (impute, encode, scale) run after the train/test split and are fit on train only.
-- Reproducible output: cleaned train/test CSVs, a fitted pipeline, a standalone `pipeline.py`, and a report with baseline cross-validation scores.
-- Provider-independent LLM layer, tested with a fake client instead of real API calls.
+```
+CSV + goal
+   |
+   v
+profile ---------> profile.json (types, missing rates, cardinality, summaries, a few samples)
+   |
+   v
+planner (LLM) <--> ask_user: questions to you when a decision is open
+   |  JSON plan
+   v
+plan validation ---- errors: the plan goes back to the planner
+   |
+   v
+executor: stateless steps -> split -> stateful steps (fitted on train only)
+   |
+   v
+result validation -- errors: the plan goes back to the planner
+   |
+   v
+baseline: cross-validation on the train split
+   |
+   v
+report.md, train.csv, test.csv, pipeline.py, ...
+```
 
-## Install from source
+- **The LLM never sees the raw data.** It gets `profile.json` only: column types, missing rates, cardinality, distribution summaries and a few sample values. Columns that look like personal data have their samples left out.
+- **The LLM writes no code.** It returns a JSON plan that must match a Pydantic schema. Every step is an op from a registry (`dedupe`, `drop_columns`, `drop_missing_target`, `cast_to_category`, `split`, `impute`, `encode`, `scale`), and a step that does not match the schema or names an unknown op is rejected. pandas and scikit-learn do the work, in this project's code.
+- **Leakage rules are enforced by code.** Ops are either stateless (dedupe, drop columns, cast, drop rows with a missing target) or stateful (impute, encode, scale). Stateless steps must come before the single split, stateful steps after it, and they are fitted on the train set only. The validator checks this from the kind of each op, so the planner cannot get it wrong.
+- **Open decisions become questions.** When the target, a column with many missing values or a column that could be an identifier is unclear, the planner asks you instead of guessing. If you do not give a model family (`tree`, `linear`, `any`), it asks or uses `any`.
+- **The agent does not choose a model.** At the end it only scores two quick baselines per task (and a dummy model) with cross-validation on the train split. The test set is not used for that.
+
+A plan or a result with errors is sent back to the planner for a revision, up to `--max-revisions` times (default 2); warnings are reported but do not fail a run.
+
+## Install
 
 Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
 
 ```powershell
-uv sync
+git clone https://github.com/ahmetatakanacar/prep-agent.git
+cd prep-agent
+uv sync --extra openai
 uv run prep-agent --help
 ```
 
-## Usage
+The commands that do not call a model (`profile` and `run`) work without the `openai` extra.
 
-Profile a CSV file and print a summary table. `--target` names the target column and `--out` saves the full profile as JSON.
+### LLM provider
 
-```powershell
-uv run prep-agent profile tests/fixtures/customers.csv --target churned --out runs/profile.json
+The LLM layer is a small `LLMClient` interface with one adapter, OpenAI's (Responses API, structured outputs). Put your key in the environment or in a `.env` file in the working directory (`.env` is git-ignored):
+
+```
+OPENAI_API_KEY=sk-...
 ```
 
-Columns that look like they hold personal data (email addresses, phone numbers, or names such as `email` or `user_name` whose values are mostly distinct) are flagged `possible_pii` and their sample values, top values and numeric statistics are left out of the profile. Pass `--no-samples` to leave sample values out for every column.
-
-CSV files are read with pandas' usual list of missing-value strings (empty cell, `NA`, `NaN`, `null`, `N/A`, ...), except for the text `None`, which is kept as a category: in many datasets it means that a feature is absent (no pool, no veneer). The list is `NA_VALUES` in `profiler.py`, and the generated `pipeline.py` reads its input with the same one.
-
-Run a hand-written plan on a CSV file. The plan's `target` is the target column. The plan is validated first; if it has errors, nothing is run or written.
-
-```powershell
-uv run prep-agent run tests/fixtures/customers.csv --plan tests/fixtures/customers_plan.json --out-dir runs
-```
-
-This writes `runs/<run_id>/` with `profile.json`, `plan.json`, `train.csv`, `test.csv`, `pipeline.joblib`, `pipeline.py`, `issues.json`, `report.md`, `baseline.json` and `run.json`. The exit code is 1 if the plan has errors or the result fails validation (in the second case the files are still written, with status `failed` in `run.json`); warnings do not fail a run. Pass `--dry-run` to only validate the plan and `--no-baseline` to skip the baseline scores.
-
-`pipeline.joblib` contains only the fitted impute, encode and scale steps. It does not include the stateless steps or the split, so it cannot be applied to a raw file.
-
-`pipeline.py` is the complete version. It needs only pandas and scikit-learn (prep-agent does not have to be installed) and repeats every step on a raw CSV file:
-
-```powershell
-python runs/<run_id>/pipeline.py tests/fixtures/customers.csv --out-dir out
-```
-
-It writes `train.csv` and `test.csv` to `--out-dir` (the current directory if left out). It stops with an error if either file already exists; `--force` overwrites them. If the input file is not the one the run was made from (its sha256 differs from the one in the header), it prints a warning to stderr and carries on. The files are identical to the files in the run folder when run on the same input with the same pandas and scikit-learn versions. The functions `apply_stateless_steps`, `split_train_test`, `build_pipeline` and `prepare` can also be imported and called one by one. The header of the script records the prep-agent version, the run id, the sha256 of the input, the target, the task type, the model family and the library versions it was generated with, and the reason of every step stands above its code as a comment. Each op writes its own code (`codegen` in its registry entry), and column names and parameters are written as literals, never as code. The script is only written for runs with status `ok`.
-
-Let the LLM write the plan. `prepare` needs an LLM provider (see below). It profiles the data, asks the model for a plan, asks you when a decision is open, validates the plan, sends it back to the model if it has errors, then runs it and saves the same run folder as `run`:
-
-```powershell
-uv run prep-agent prepare tests/fixtures/customers.csv --goal "prepare for churn prediction, I will use XGBoost" --target churned --model-family tree
-```
-
-The model only sees the profile, never the raw data. Questions are asked in the terminal with numbered options; the recommended one is marked and Enter picks it. `--non-interactive` answers every question with the recommended option. `--max-revisions N` (default 2) limits how often a plan or result with errors is sent back; if errors remain, the command exits 1 and still saves the run with status `failed` (without `plan.json`, train and test files if the planner never produced a plan or the plan never ran). A question can allow a typed answer of your own (the last option); `--model-family` is enforced, so a plan for another family is sent back. Besides the usual files, the run folder has `llm_trace.json` (every model call: purpose, model, token usage, the issue codes it was asked to fix, and its answer) and `qa.json` (the questions and your answers), and `run.json` records the goal, the model, the total token usage and, for a failed run, the error.
-
-## Report and baseline
-
-Every run folder gets a `report.md`, including failed runs. It is built from the run's own data, not written by an LLM: goal, input file and short sha256, date, model and token use, row and column counts before and after (with the dropped columns), the questions and answers, the plan with each step's parameters and reason, the validator issues (or an explicit "no issues"), the baseline scores, notes on the leakage guarantees, and how to reproduce the run with `pipeline.py`. A failed run's report names the reason and has no baseline or reproduce section.
-
-The agent does not choose a model. On a successful run it only computes reference scores with 5-fold cross-validation (stratified for classification, fewer folds if the smallest class is smaller) and writes them to `baseline.json` and the report:
-
-- classification: a dummy model (most frequent class), logistic regression and a random forest; accuracy, macro F1 and, for a binary target, ROC AUC
-- regression: a dummy model (mean), ridge and a random forest; R², RMSE and MAE
-
-The dummy model ignores the features, so it is the floor the others should beat. Metric headers carry an arrow (↑ higher is better, ↓ lower is better), and with fewer than 100 train rows the report warns that the scores are not reliable. Cross-validation runs on the raw train split with a fresh copy of the impute, encode and scale steps in every fold, so those steps never see a fold's validation rows. The test set is not used. A model that cannot run on the prepared data (a column left with missing values or text, for example) is listed as skipped with the reason, and if the target allows no cross-validation at all the whole baseline is skipped. Pass `--no-baseline` to `run` or `prepare` to leave the baseline out; the report then says so.
-
-## LLM provider
-
-The LLM layer is a small `LLMClient` interface with an OpenAI adapter (Responses API, structured outputs). The adapter is an optional extra:
-
-```powershell
-uv sync --extra openai
-```
-
-Put `OPENAI_API_KEY` in your environment or in a `.env` file in the working directory (`.env` is git-ignored). The default model is `gpt-6.1-sol`. Set `PREP_AGENT_MODEL` to pick another one, for example:
+The default model is `gpt-6.1-sol`. Set `PREP_AGENT_MODEL` to choose another:
 
 | Model | Use |
 |---|---|
@@ -87,74 +69,129 @@ Put `OPENAI_API_KEY` in your environment or in a `.env` file in the working dire
 | `gpt-6-luna` | most efficient, for focused high-volume tasks |
 
 ```powershell
-$env:PREP_AGENT_MODEL="gpt-6-astra"
-```
-
-`PREP_AGENT_PROVIDER` selects the provider (only `openai` exists). Check the setup with one small request; it prints the model and token usage, and exits 1 with a message if the key is missing or the request fails:
-
-```powershell
+$env:PREP_AGENT_MODEL="gpt-6-luna"
 uv run prep-agent llm-check
 ```
 
-Tests never call the real API. The few tests that do are marked `llm` and skipped unless you opt in:
+`llm-check` sends one small request and prints the model and token usage; it exits 1 with a message if the key is missing or the request fails. `PREP_AGENT_PROVIDER` selects the provider; only `openai` exists.
+
+## Usage
+
+### Profile a file
 
 ```powershell
-$env:PREP_AGENT_RUN_LLM_TESTS="1"; uv run pytest -m llm -v -s
+uv run prep-agent profile tests/fixtures/customers.csv --target churned --out runs/profile.json
 ```
 
-## Known limitations
+Prints a summary table; `--out` saves the full profile as JSON. Columns that look like personal data (email addresses, phone numbers, or names such as `email` whose values are mostly distinct) are flagged `possible_pii` and their sample values and statistics are left out. `--no-samples` leaves sample values out for every column. CSV files are read with pandas' usual missing-value strings, except the text `None`, which is kept as a category because in many datasets it means that a feature is absent.
 
-- A very long column name (about 80 characters or more) can make a line of the generated `pipeline.py` longer than the lint limit, so `ruff check` may report E501 for it. The script still runs.
-- PII detection relies on a list of column-name parts and on email and phone value patterns. Email addresses or phone numbers inside free text are not detected.
+### Run a plan you wrote
+
+```powershell
+uv run prep-agent run tests/fixtures/customers.csv --plan tests/fixtures/customers_plan.json --out-dir runs
+```
+
+The plan is validated first; if it has errors nothing runs. `--dry-run` only validates, `--no-baseline` skips the baseline scores. The exit code is 1 if the plan has errors or the result fails validation.
+
+### Let the LLM plan
+
+```powershell
+uv run prep-agent prepare tests/fixtures/customers.csv --goal "prepare for churn prediction, I will use XGBoost" --target churned --model-family tree
+```
+
+Questions are asked in the terminal with numbered options; the recommended one is marked and Enter picks it, and some questions allow an answer of your own as the last option. For unattended use:
+
+```powershell
+uv run prep-agent prepare tests/fixtures/customers.csv --goal "prepare for churn prediction" --target churned --non-interactive
+```
+
+`--non-interactive` answers every question with the recommended option. `--model-family` is enforced: a plan for another family is sent back. If errors remain after the revisions, the command exits 1 and still saves the run with status `failed`.
+
+### What a run leaves behind
+
+Every run writes `runs/<run_id>/`:
+
+| File | Content |
+|---|---|
+| `report.md` | goal, input, row and column counts before and after, questions and answers, every step with its reason, validator issues, baseline scores, leakage notes, how to reproduce. Built from the run's data, not written by an LLM. Failed runs get one too. |
+| `plan.json` | the validated plan |
+| `profile.json` | the profile the planner saw |
+| `train.csv`, `test.csv` | the prepared data |
+| `pipeline.py` | the whole preparation as a standalone script (successful runs only) |
+| `pipeline.joblib` | the fitted impute, encode and scale steps only; not applicable to a raw file |
+| `baseline.json` | cross-validation scores of the baseline models |
+| `issues.json`, `run.json` | validator issues; status, goal, model, token use, error |
+| `llm_trace.json`, `qa.json` | `prepare` only: every model call (purpose, model, token usage, issue codes, answer; no prompts, no data) and your answers |
+
+`pipeline.py` needs only pandas and scikit-learn; prep-agent does not have to be installed. It repeats every step on a raw CSV file and gives the same `train.csv` and `test.csv` as the run folder, when the pandas and scikit-learn versions match:
+
+```powershell
+python runs/<run_id>/pipeline.py tests/fixtures/customers.csv --out-dir out
+```
+
+It stops if the output files exist (`--force` overwrites) and warns if the input file differs from the one the run was made from (its sha256 is in the header, together with the target, the library versions and the run id). The reason of every step stands above its code as a comment.
+
+### Baseline
+
+On a successful run the baseline scores a dummy model, a logistic regression and a random forest (classification: accuracy, macro F1, ROC AUC for a binary target) or a dummy model, ridge and a random forest (regression: R², RMSE, MAE) with 5-fold cross-validation on the train split. The stateful steps are fitted again inside every fold. The test set is not used. With fewer than 100 train rows the report warns that the scores are not reliable.
 
 ## Benchmark
 
-The `benchmarks/` folder measures the agent on real datasets against two other plans: a hand-written reference plan and a rule-based naive plan. Every plan is validated and executed by the same code and scored with the baseline of this project (5-fold cross-validation on its own train split, the test set is not used), so a score depends on the plan only.
+`benchmarks/` runs the agent on nine OpenML datasets and compares it with a hand-reviewed reference plan and a rule-based naive plan, all scored by the same baseline. In two runs (gpt-6-luna with 3 repeats, gpt-6.1-sol with 1) the agent ended with a valid executed plan in 35 of 36 runs and dropped every column that gives the target away, including `boat` and `body` in titanic and a same-year pay column in employee-salaries, which the validator's rules cannot see and which make the naive plan look far better than it is. Its scores were within noise of the reference plans on 8 of 9 datasets for both models; careful preparation changed the score little compared with sensible defaults, and the main difference was leakage. A run costs about $0.002 with gpt-6-luna and $0.02 with gpt-6.1-sol. There is one repeat of gpt-6.1-sol, nine datasets, and the two runs used different versions of the code; see [docs/benchmark.md](docs/benchmark.md) for the method, tables, limitations and how to repeat it.
 
-- `benchmarks/datasets.yaml` lists 9 OpenML datasets (6 classification, 3 regression, from 768 to 48842 rows) with the target, a goal sentence written like a user, the license OpenML reports and the difficulty each one tests. Two of them also list `leaky_columns` (titanic: `boat`, `body`; employee-salaries: `2016_gross_pay_received`), columns that give the target away: a plan that keeps one scores higher for a reason that has nothing to do with preparation, so its score is marked with a dagger in `summary.md` and left out of the comparison with the naive plan. Every job in `results.json` also records `leaky_columns_kept`, how many of those columns its plan still has at the end, and `summary.md` tabulates it per dataset and method.
-- `benchmarks/reference/` holds one reference plan per dataset. They are drafts that still need a human review, except bike-sharing-demand, which has been reviewed; `benchmarks/reference/README.md` gives the status of each.
-- The naive plan drops identifier and constant columns, imputes with the median (numeric) or the most frequent value, and one-hot encodes every other column.
+## Validation rules
 
-```powershell
-uv run python benchmarks/download.py
-uv run python benchmarks/run_benchmark.py --dry-run
-uv run python benchmarks/run_benchmark.py --models gpt-6-luna --dry-run
-uv run python benchmarks/run_benchmark.py --models gpt-6-luna --repeats 3 --out-dir benchmarks/results/first
-```
+The checks that decide what a plan or a result may do live in [src/prep_agent/validators.py](src/prep_agent/validators.py) (plan, before anything runs) and [src/prep_agent/result_validator.py](src/prep_agent/result_validator.py) (result, after the executor). Errors fail the check and go back to the planner; warnings are reported in `report.md` and `issues.json`.
 
-`download.py` writes `benchmarks/datasets/<name>.csv` (the folder is git-ignored). `benchmarks/manifest.json` is committed and holds the sha256 of every file; the downloader compares each file with it and warns when a hash differs, so a change of the data (or of how pandas writes it) does not go unnoticed. The manifest is left as it is until you pass `--update-manifest`. Files that exist are not downloaded again but are checked against the registry; a dataset whose OpenML id, name, version or shape differs from the registry is refused.
+| Check | Errors | Warnings |
+|---|---|---|
+| Order and leakage | `stateless_after_split`, `stateful_before_split`, `invalid_split_count` (exactly one split) | `train_test_overlap` (the same raw record in train and test), `possible_target_leakage` (numeric feature with a correlation above 0.98 with a numeric target) |
+| Target and columns | `target_mismatch`, `target_not_in_profile`, `target_in_step`, `unknown_column`, `model_family_mismatch` | |
+| Column types | `impute_non_numeric`, `fill_value_type_mismatch`, `scale_non_numeric`, `encode_numeric`, `ordinal_with_missing` | `cast_non_numeric`, `onehot_before_impute`, `ordinal_for_linear`, `scale_for_tree` |
+| Split | `stratify_regression` | `stratify_disabled`, `class_distribution_shift` |
+| Steps that do nothing | | `repeated_op`, `impute_without_missing`, `dedupe_without_duplicates`, `drop_missing_target_without_missing` |
+| End state of the plan or result | `empty_split`, `column_mismatch`, `target_altered` | `nan_in_output`, `non_numeric_output`, `missing_values_remain`, `unencoded_column_remains`, `uninformative_column_kept` |
 
-`run_benchmark.py` runs the agent non-interactively (questions are answered with the recommended option) with the dataset's target and the model family `any`, once per dataset, model and repeat, plus the reference and naive plans once per dataset. Without `--models` it runs only the reference and naive plans, which calls no model. `--datasets a,b` runs a subset, `--out-dir` sets where `results.json` and `summary.md` go (default `benchmarks/results/<timestamp>`).
+## Known limitations
 
-Nothing is spent without a price and an approval:
+- The op registry cannot express everything a good plan needs. Found while reviewing the benchmark's reference plans (`benchmarks/reference/REVIEW.md`): turning special values into missing (a zero that stands for "not measured", `pdays = -1`, a top-coded 99999), ordinal encoding in a given order (quality grades, ordered scales), converting text to numbers (a number stored as text such as `TotalCharges`), and extracting features from text (the title in a passenger name). The planner can only drop or one-hot encode those columns.
+- There is no date parsing: datetime and free-text columns can only be dropped.
+- The profile does not detect columns that are copies of each other (`department` and `department_name`, `education` and `education-num`), so the planner has to notice them from names and samples.
+- Only one LLM adapter exists, OpenAI's.
+- Tabular data only: CSV files that fit in memory, classification and regression. No text or NLP data sets.
+- A very long column name (about 80 characters or more) can make a line of the generated `pipeline.py` longer than the lint limit, so `ruff check` may report E501 for it. The script still runs.
+- PII detection relies on a list of column-name parts and on email and phone value patterns. Email addresses or phone numbers inside free text are not detected.
+- The benchmark covers nine datasets and one repeat of the more expensive model; see its limitations.
 
-- Prices are read from `benchmarks/prices.yaml`, which you fill in. The shipped file has no prices, because the project does not guess them. Each entry is named like the model passed to `--models` and has `input_per_million` and `output_per_million`:
+## Roadmap
 
-  ```yaml
-  currency: USD
-  models:
-    my-model:
-      input_per_million: 1.0
-      output_per_million: 4.0
-  ```
+Possible next steps, roughly in the order they would change the results:
 
-- Two more numbers are optional: `cached_input_per_million` and `cache_write_per_million`, the prices of input tokens served from or written to the provider's prompt cache (both are part of the reported input tokens). With them, the cost of a run charges those tokens their own price and the rest of the input the normal price; without them every input token is charged the input price, and `summary.md` says which case applied to each model. The pre-run estimate assumes the dearest input price.
-- A model without a price is refused, in a dry run too.
-- Before anything runs, the command lists the jobs and the estimated maximum use and cost of the agent runs, and asks for approval (`--yes` skips the question; declining runs nothing). The estimate is an upper bound from the size of the real prompts and the most calls the agent can make; a model that bills hidden reasoning as output can still exceed it.
-- `--dry-run` stops after that listing and calls no model.
+- Ops for the gaps above: special values to missing, ordinal encoding in a given order, text to number, and a few text features.
+- Date parsing, so that a date column can become year, month and weekday instead of being dropped.
+- Detection of duplicated columns in the profile.
+- More LLM adapters behind the existing `LLMClient` interface.
+- More benchmark datasets and repeats of the second model.
 
-A failing job never stops the run. Each job is recorded as `ok`, `failed` (the plan or its result was rejected, with the validator codes) or `error` (anything unexpected, with the message), and `results.json` is rewritten after every job. For agent runs it records whether the run succeeded, the revisions, the questions asked, the error codes of the first plan, the warning codes of the final plan, token use, cost and time. `summary.md` has the scores per dataset and method, the difference to the naive plan, the agent statistics and the most frequent issue codes.
-
-The tests that need the downloaded files (the reference and naive plans against the real profiles) are skipped when the files are missing.
+Out of scope: model selection or AutoML, a web interface, a database, multi-user features.
 
 ## Development
 
 ```powershell
+uv sync
 uv run pytest -q
 uv run ruff check .
 uv run ruff format --check .
 ```
 
+Tests never call the real API; they use a fake LLM. The few tests that do are marked `llm` and skipped unless you opt in. They need `OPENAI_API_KEY` and cost a few cents:
+
+```powershell
+$env:PREP_AGENT_RUN_LLM_TESTS="1"; uv run pytest -m llm -v -s
+```
+
+The tests that need the downloaded benchmark datasets (`uv run python benchmarks/download.py`) are skipped when the files are missing. CI runs ruff and pytest on Ubuntu and Windows.
+
 ## License
 
-MIT
+MIT, see [LICENSE](LICENSE).
