@@ -7,7 +7,7 @@ that is least sensitive to scaling and encoding choices.
 """
 
 from collections import Counter
-from statistics import fmean
+from statistics import fmean, stdev
 
 from bench_results import BenchmarkResults, JobResult
 from prep_agent.baseline import BaselineResult, BaselineScore, metric_label
@@ -29,6 +29,8 @@ def render_summary(results: BenchmarkResults) -> str:
     if agent_jobs:
         sections.append(_against(results, "naive", "the naive plan"))
         sections.append(_against(results, "reference", "the reference plan"))
+    if agent_jobs and results.config.repeats > 1:
+        sections.append(_repeats(results))
     sections.append(_agent_runs(results, agent_jobs))
     sections.append(_issue_codes(results, agent_jobs))
     sections.append(_failures(results))
@@ -245,6 +247,55 @@ def _forest_spread(jobs: list[JobResult], metric: str) -> float:
     return fmean(
         _fold_score(job.baseline, (FOREST,), metric).std for job in jobs if _has_metric(job, metric)
     )
+
+
+# --- agent repeats ---
+
+
+def _repeats(results: BenchmarkResults) -> str:
+    task_types = {job.dataset: job.task_type for job in results.jobs}
+    rows = []
+    for dataset in results.config.datasets:
+        for model in results.config.models:
+            jobs = _of(results, dataset, f"agent: {model}")
+            if jobs:
+                rows.append(
+                    [dataset, model, *_repeat_cells(jobs, MAIN_METRIC[task_types[dataset]])]
+                )
+    return "\n".join(
+        [
+            "## Agent repeats",
+            "",
+            "Per dataset and model, over the repeats of the agent: how many runs succeeded, how "
+            "many of the leaky columns the plans dropped (every run counted on its own; a run "
+            "without a plan is left out) and the standard deviation of the random forest's score "
+            "on the main metric from run to run (n/a below two scored runs).",
+            "",
+            _table(
+                [
+                    "dataset",
+                    "model",
+                    "successful runs",
+                    "leaky columns caught",
+                    "score std across runs",
+                ],
+                rows,
+            ),
+        ]
+    )
+
+
+def _repeat_cells(jobs: list[JobResult], metric: str) -> list[str]:
+    ok = sum(job.status == "ok" for job in jobs)
+    planned = [job for job in jobs if job.leaky_columns_kept is not None]
+    leaky = sum(len(job.leaky_columns) for job in planned)
+    caught = leaky - sum(job.leaky_columns_kept for job in planned)
+    scores = [_score(job.baseline, (FOREST,), metric) for job in jobs if _has_metric(job, metric)]
+    return [
+        f"{ok} of {len(jobs)} ({round(100 * ok / len(jobs))}%)",
+        f"{caught} of {leaky} ({round(100 * caught / leaky)}%)" if leaky else DASH,
+        f"{stdev(scores):.3f}" if len(scores) > 1 else "n/a",
+    ]
 
 
 # --- agent runs ---

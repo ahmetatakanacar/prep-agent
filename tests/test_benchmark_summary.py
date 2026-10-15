@@ -417,6 +417,113 @@ class TestAgainstReference:
         assert self.HEADING not in render_summary(results(jobs, models=()))
 
 
+class TestRepeats:
+    HEADING = "## Agent repeats"
+
+    def repeated(self, scores, dataset="d1", model="m1", **kwargs):
+        return [
+            job(
+                dataset,
+                "agent",
+                model=model,
+                repeat=i,
+                baseline=classification_baseline(0.5, forest),
+                **kwargs,
+            )
+            for i, forest in enumerate(scores, start=1)
+        ]
+
+    def test_gives_success_rate_and_the_spread_of_the_score_across_runs(self):
+        jobs = [
+            *self.repeated([0.60, 0.70, 0.80]),
+            job("d1", "agent", repeat=4, status="failed"),
+        ]
+        rows = table(render_summary(results(jobs, repeats=4)), self.HEADING)
+        assert rows[0] == [
+            "dataset",
+            "model",
+            "successful runs",
+            "leaky columns caught",
+            "score std across runs",
+        ]
+        assert row(rows, "d1") == ["d1", "m1", "3 of 4 (75%)", "–", "0.100"]
+
+    def test_counts_the_caught_leaky_columns_of_every_run_separately(self):
+        def leaky(repeat, kept):
+            return job(
+                "d1",
+                "agent",
+                repeat=repeat,
+                leaky_columns=["boat", "body"],
+                kept_leaky_columns=kept,
+                leaky_columns_kept=len(kept),
+                baseline=classification_baseline(0.5, 0.7),
+            )
+
+        jobs = [leaky(1, []), leaky(2, ["body"]), leaky(3, ["boat", "body"])]
+        rows = table(render_summary(results(jobs, repeats=3)), self.HEADING)
+        assert row(rows, "d1")[3] == "3 of 6 (50%)"
+
+    def test_a_run_without_a_plan_is_left_out_of_the_leaky_count(self):
+        jobs = [
+            job(
+                "d1",
+                "agent",
+                repeat=1,
+                leaky_columns=["boat"],
+                leaky_columns_kept=0,
+                baseline=classification_baseline(0.5, 0.7),
+            ),
+            job("d1", "agent", repeat=2, status="failed", leaky_columns=["boat"]),
+        ]
+        rows = table(render_summary(results(jobs, repeats=2)), self.HEADING)
+        assert row(rows, "d1")[3] == "1 of 1 (100%)"
+
+    def test_one_row_per_dataset_and_model(self):
+        jobs = [
+            *self.repeated([0.6, 0.7], dataset="d1", model="a"),
+            *self.repeated([0.6, 0.6], dataset="d1", model="b"),
+            *self.repeated([0.6, 0.8], dataset="d2", model="a"),
+        ]
+        md = render_summary(results(jobs, models=("a", "b"), repeats=2, datasets=("d1", "d2")))
+        rows = table(md, self.HEADING)[1:]
+        assert [(r[0], r[1], r[4]) for r in rows] == [
+            ("d1", "a", "0.071"),
+            ("d1", "b", "0.000"),
+            ("d2", "a", "0.141"),
+        ]
+
+    def test_the_spread_needs_two_scored_runs(self):
+        jobs = [
+            *self.repeated([0.7]),
+            job("d1", "agent", repeat=2, status="failed"),
+        ]
+        rows = table(render_summary(results(jobs, repeats=2)), self.HEADING)
+        assert row(rows, "d1")[4] == "n/a"
+
+    def test_the_spread_is_taken_on_the_main_metric_of_the_task(self):
+        jobs = [
+            job(
+                "r",
+                "agent",
+                task_type="regression",
+                repeat=i,
+                baseline=regression_baseline(0.5, r2),
+            )
+            for i, r2 in enumerate([0.2, 0.4], start=1)
+        ]
+        rows = table(render_summary(results(jobs, repeats=2, datasets=("r",))), self.HEADING)
+        assert row(rows, "r")[4] == "0.141"
+
+    def test_is_left_out_without_repeats(self):
+        md = render_summary(results(self.repeated([0.6]), repeats=1))
+        assert self.HEADING not in md
+
+    def test_is_left_out_without_agent_runs(self):
+        md = render_summary(results([job("d1", "naive")], models=(), repeats=3))
+        assert self.HEADING not in md
+
+
 class TestAgentRuns:
     HEADING = "## Agent runs"
 
