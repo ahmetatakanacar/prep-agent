@@ -64,8 +64,15 @@ class TestLoadPrices:
         with pytest.raises(PriceError, match="could not read"):
             load_prices(path)
 
-    def test_the_shipped_file_loads_and_leaves_the_prices_to_the_user(self):
-        assert load_prices(DEFAULT_PRICES).models == {}
+    def test_the_shipped_file_is_well_formed(self):
+        table = load_prices(DEFAULT_PRICES)
+        raw = yaml.safe_load(DEFAULT_PRICES.read_text(encoding="utf-8"))
+        assert table.currency
+        for name, entry in raw["models"].items():
+            for field in ("input_per_million", "output_per_million"):
+                value = entry[field]
+                assert isinstance(value, int | float) and not isinstance(value, bool), (name, field)
+                assert value > 0, (name, field)
 
 
 class TestRequirePrices:
