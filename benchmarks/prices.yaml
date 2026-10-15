@@ -6,4 +6,7 @@
 # model is passed to --models and has two numbers: `input_per_million` and `output_per_million`,
 # the price of one million input and output tokens. Copy them from your provider's price list.
 currency: USD
-models: {}
+models:
+  gpt-6-luna:
+    input_per_million: 0.10
+    output_per_million: 0.50
