@@ -59,9 +59,9 @@ class TestReferencePlanFiles:
             assert len(step.reason.split()) >= 6, f"{step.op}: {step.reason!r}"
 
 
-def test_the_readme_marks_every_plan_as_a_draft_and_has_a_section_for_each():
+def test_the_readme_has_a_section_for_each_plan_and_calls_none_of_them_a_draft():
     text = (DEFAULT_REFERENCE_DIR / "README.md").read_text(encoding="utf-8")
-    assert "draft, needs human review" in text
+    assert "draft" not in text.lower()
     for name in NAMES:
         assert f"## {name}" in text, name
 
@@ -77,10 +77,7 @@ def test_every_readme_section_states_the_review_status_of_its_plan(name):
     [status] = [
         line for line in readme_section(name).splitlines() if line.startswith("**Review status:**")
     ]
-    if name == "bike-sharing-demand":
-        assert status == "**Review status:** reviewed by human"
-    else:
-        assert status.startswith("**Review status:** draft, needs human review")
+    assert status.startswith("**Review status:** reviewed by human")
 
 
 def steps_of(name: str, op: str) -> list:
