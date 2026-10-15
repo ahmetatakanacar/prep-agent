@@ -160,6 +160,15 @@ def test_system_prompt_forbids_casting_the_target():
     assert "(drop_columns, cast_to_category, impute, encode, scale)" in prompt
 
 
+def test_system_prompt_forbids_steps_the_data_does_not_need():
+    prompt = build_system_prompt()
+
+    assert "Do not add steps the data does not need" in prompt
+    assert "`n_duplicate_rows`" in prompt
+    assert "the target has missing values" in prompt
+    assert "says that the step is unnecessary, leave that step out" in prompt
+
+
 def test_system_prompt_requires_recommended_to_repeat_an_option_verbatim():
     prompt = build_system_prompt()
 

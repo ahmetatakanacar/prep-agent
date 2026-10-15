@@ -3,7 +3,9 @@
 The validator walks the steps in order and simulates, for every column, whether it still exists,
 its type and whether it still contains missing values:
 
-- `drop_columns` removes the columns.
+- `drop_columns` removes the columns. Rows that differed only in them become duplicates.
+- `dedupe` removes the duplicates; one over all columns is a step without effect when the
+  profile counted none and no dropped column could have created some.
 - `cast_to_category` makes the column categorical: encode is then allowed, mean and median
   impute and scale are errors, and the missing values stay.
 - `impute` clears the missing values.
@@ -67,6 +69,8 @@ IssueCode = Literal[
     "scale_for_tree",
     "repeated_op",
     "impute_without_missing",
+    "dedupe_without_duplicates",
+    "drop_missing_target_without_missing",
     "uninformative_column_kept",
     "missing_values_remain",
     "unencoded_column_remains",
@@ -108,6 +112,8 @@ SEVERITY: dict[IssueCode, Severity] = {
     "scale_for_tree": "warning",
     "repeated_op": "warning",
     "impute_without_missing": "warning",
+    "dedupe_without_duplicates": "warning",
+    "drop_missing_target_without_missing": "warning",
     "uninformative_column_kept": "warning",
     "missing_values_remain": "warning",
     "unencoded_column_remains": "warning",
@@ -205,6 +211,8 @@ class _Validation:
             )
             for c in profile.columns
         }
+        # Whether rows that equal each other over all columns may still exist at this point.
+        self.duplicates_possible = profile.n_duplicate_rows > 0
         self.gone: dict[str, str] = {}
         self.applied: set[tuple[str, str]] = set()
         self.kinds = [get_op(step.op).kind for step in plan.steps]
@@ -312,16 +320,16 @@ class _Validation:
 
     def _simulate(self, index: int, step: Step) -> None:
         if isinstance(step, DedupeStep):
-            self._resolve(index, step.subset or [], allow_target=True)
+            self._dedupe(index, step)
         elif isinstance(step, DropColumnsStep):
             for name in self._resolve(index, step.columns):
                 del self.columns[name]
                 self.gone[name] = f"dropped by drop_columns at step {index}"
+                self.duplicates_possible = True
         elif isinstance(step, CastToCategoryStep):
             self._cast(index, step)
         elif isinstance(step, DropMissingTargetStep):
-            if self.plan.target in self.columns:
-                self.columns[self.plan.target].has_missing = False
+            self._drop_missing_target(index)
         elif isinstance(step, SplitStep):
             self._check_split(index, step)
         elif isinstance(step, ImputeStep):
@@ -391,6 +399,35 @@ class _Validation:
                 "between train and test; set stratify to true unless classes are too small.",
                 step_index=index,
             )
+
+    def _dedupe(self, index: int, step: DedupeStep) -> None:
+        self._resolve(index, step.subset or [], allow_target=True)
+        # A subset can match rows that differ elsewhere, which the profile's count of identical
+        # rows says nothing about, so only a dedupe over all columns can be called pointless.
+        if step.subset is None and not self.duplicates_possible:
+            self._add(
+                "dedupe_without_duplicates",
+                "the profile shows no duplicate rows, and nothing earlier in the plan can create "
+                "some, so this dedupe removes nothing on this data; remove the step unless it is "
+                "meant for duplicates in new data.",
+                step_index=index,
+            )
+        self.duplicates_possible = False
+
+    def _drop_missing_target(self, index: int) -> None:
+        target = self.columns.get(self.plan.target)
+        if target is None:
+            return
+        if not target.has_missing:
+            self._add(
+                "drop_missing_target_without_missing",
+                f"the target {self.plan.target!r} has no missing values in the profile or after "
+                "the earlier steps, so this step removes no rows on this data; remove it unless "
+                "it is meant for missing targets in new data.",
+                step_index=index,
+                column=self.plan.target,
+            )
+        target.has_missing = False
 
     def _cast(self, index: int, step: CastToCategoryStep) -> None:
         for name in self._resolve(index, step.columns):

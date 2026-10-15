@@ -136,7 +136,7 @@ def test_fixture_columns_have_the_expected_inferred_types():
 
 
 def test_valid_plan_has_no_issues():
-    assert validate(*VALID_STEPS) == []
+    assert validate(*VALID_STEPS, profile=needing_cleanup()) == []
 
 
 def test_every_issue_code_has_a_severity():
@@ -269,6 +269,92 @@ def test_imputing_a_column_twice_flags_the_second_step():
 
     [issue] = find(issues, "impute_without_missing")
     assert issue.step_index == 2 and issue.column == "income"
+
+
+def with_duplicates(n: int = 2) -> DatasetProfile:
+    return PROFILE.model_copy(update={"n_duplicate_rows": n, "duplicate_ratio": n / N_ROWS})
+
+
+def needing_cleanup() -> DatasetProfile:
+    """A profile with duplicate rows and missing target values, which VALID_STEPS clean up."""
+    return with_missing_target().model_copy(
+        update={"n_duplicate_rows": 2, "duplicate_ratio": 2 / N_ROWS}
+    )
+
+
+def with_missing_target() -> DatasetProfile:
+    frame = make_frame().assign(churn=lambda df: df["churn"].astype("float").mask(df.index == 3))
+    return profile_dataframe(frame, target="churn")
+
+
+def test_dedupe_on_data_without_duplicate_rows_is_a_warning():
+    issues = validate(dedupe(), split())
+
+    [issue] = find(issues, "dedupe_without_duplicates")
+    assert issue.severity == "warning"
+    assert issue.step_index == 0
+    assert issue.column is None
+    assert "no duplicate rows" in issue.message
+
+
+def test_dedupe_on_data_with_duplicate_rows_is_fine():
+    issues = validate(dedupe(), split(), profile=with_duplicates())
+
+    assert find(issues, "dedupe_without_duplicates") == []
+
+
+def test_dedupe_on_a_subset_is_not_flagged_because_rows_can_match_on_it_alone():
+    issues = validate(dedupe(["customer_id"]), split())
+
+    assert find(issues, "dedupe_without_duplicates") == []
+
+
+def test_dropping_columns_first_can_create_duplicates_so_the_dedupe_after_it_is_fine():
+    issues = validate(drop("customer_id"), dedupe(), split())
+
+    assert find(issues, "dedupe_without_duplicates") == []
+
+
+def test_a_second_dedupe_finds_nothing_left_to_remove():
+    issues = validate(dedupe(), dedupe(), split(), profile=with_duplicates())
+
+    assert [i.step_index for i in find(issues, "dedupe_without_duplicates")] == [1]
+
+
+def test_dedupe_after_a_subset_dedupe_is_flagged_on_data_without_duplicates():
+    issues = validate(dedupe(["customer_id"]), dedupe(), split())
+
+    assert [i.step_index for i in find(issues, "dedupe_without_duplicates")] == [1]
+
+
+def test_drop_missing_target_without_missing_target_values_is_a_warning():
+    issues = validate(drop_missing_target(), split())
+
+    [issue] = find(issues, "drop_missing_target_without_missing")
+    assert issue.severity == "warning"
+    assert issue.step_index == 0
+    assert issue.column == "churn"
+    assert "no missing values" in issue.message
+
+
+def test_drop_missing_target_with_missing_target_values_is_fine():
+    issues = validate(drop_missing_target(), split(), profile=with_missing_target())
+
+    assert find(issues, "drop_missing_target_without_missing") == []
+
+
+def test_a_second_drop_missing_target_is_flagged():
+    issues = validate(
+        drop_missing_target(), drop_missing_target(), split(), profile=with_missing_target()
+    )
+
+    assert [i.step_index for i in find(issues, "drop_missing_target_without_missing")] == [1]
+
+
+def test_drop_missing_target_is_not_flagged_when_the_target_is_unknown():
+    issues = validate(drop_missing_target(), split(), target="nope")
+
+    assert find(issues, "drop_missing_target_without_missing") == []
 
 
 def test_plan_without_a_split_is_an_error():
@@ -720,6 +806,7 @@ def test_a_plan_that_casts_before_the_split_and_encodes_after_it_has_no_issues()
         impute(["job"], "most_frequent"),
         encode(["city", "job", "gender", "age"], "onehot"),
         scale(["income"], "standard"),
+        profile=needing_cleanup(),
     )
 
     assert issues == []

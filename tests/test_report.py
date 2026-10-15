@@ -255,8 +255,17 @@ def test_a_pipe_in_a_reason_does_not_break_the_table(executed):
 # --- validation ---
 
 
-def test_no_issues_is_stated_explicitly(executed):
-    text = section(render(executed), "Validation")
+def test_no_issues_is_stated_explicitly():
+    # The customers target has no missing values, so the fixture plan's drop_missing_target
+    # step would be reported as pointless.
+    df = load_csv(CUSTOMERS_CSV)
+    plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
+    plan = plan.model_copy(
+        update={"steps": [s for s in plan.steps if s.op != "drop_missing_target"]}
+    )
+    clean = (plan, execute(df, plan, profile_dataframe(df, target=plan.target)))
+
+    text = section(render(clean), "Validation")
 
     assert "Plan validation: no issues." in text
     assert "Result validation: no issues." in text
