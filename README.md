@@ -135,6 +135,20 @@ It stops if the output files exist (`--force` overwrites) and warns if the input
 
 On a successful run the baseline scores a dummy model, a logistic regression and a random forest (classification: accuracy, macro F1, ROC AUC for a binary target) or a dummy model, ridge and a random forest (regression: R², RMSE, MAE) with 5-fold cross-validation on the train split. The stateful steps are fitted again inside every fold. The test set is not used. With fewer than 100 train rows the report warns that the scores are not reliable.
 
+## Web UI (local)
+
+`app/` is a small web interface for trying prep-agent on your own machine: upload a CSV or pick a sample, write the goal, answer the agent's questions on the page, and read the plan with the split line, the validators' notes, how a rejected plan was corrected, the baseline scores and report.md, then download the whole run folder as a zip. It shows the LLM calls and token counts of a run, not what they cost. The page is plain HTML, CSS and JavaScript (no build step), in English and Turkish.
+
+```powershell
+# demo: a scripted planner on tests/fixtures/customers.csv, no API calls
+uv run --extra web python -m app --fake
+
+# real LLM (needs the openai extra and a key, see above)
+uv run --extra openai --extra web python -m app
+```
+
+It listens on 127.0.0.1 only, at http://127.0.0.1:8000 (`--port` changes it) and is not meant to be deployed. Sessions live in memory and their files in a temporary folder that is removed when the session is deleted or the server stops. Uploads are limited to 20 MB (`--max-upload-mb`).
+
 ## Benchmark
 
 `benchmarks/` runs the agent on nine OpenML datasets and compares it with a hand-reviewed reference plan and a rule-based naive plan, all scored by the same baseline. In two runs (gpt-6-luna with 3 repeats, gpt-6.1-sol with 1) the agent ended with a valid executed plan in 35 of 36 runs and never kept a column that gives the target away, a kind of leakage the validator's rules cannot see and that makes the naive plan look far better than it is. On titanic the agent dropped `boat` and `body` by itself; on employee-salaries it asked the user about the 2016 pay columns in every run and recommended dropping them, and the benchmark used that recommended answer, so asking instead of guessing when a case is unclear is designed behaviour and what is measured there is whether the recommendation is right. Its scores were within noise of the reference plans on 8 of 9 datasets for both models; careful preparation changed the score little compared with sensible defaults, and the main difference was leakage. A run costs about $0.002 with gpt-6-luna and $0.02 with gpt-6.1-sol. There is one repeat of gpt-6.1-sol, nine datasets, and the two runs used different versions of the code; see [docs/benchmark.md](docs/benchmark.md) for the method, tables, limitations and how to repeat it.
@@ -173,7 +187,7 @@ Possible next steps, roughly in the order they would change the results:
 - More LLM adapters behind the existing `LLMClient` interface.
 - More benchmark datasets and repeats of the second model.
 
-Out of scope: model selection or AutoML, a web interface, a database, multi-user features.
+Out of scope: model selection or AutoML, a database, multi-user features.
 
 ## Development
 
