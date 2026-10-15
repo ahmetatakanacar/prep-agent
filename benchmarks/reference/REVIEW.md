@@ -570,3 +570,24 @@ No `low_cardinality_numeric` or `possible_id` columns. Duplicates: 0.
 - Facts: `department_name` is one to one with `department` (37 each, checked). `date_first_hired` is a date stored as text with no usable op; `year_first_hired` equals its year in 100% of the rows.
 - Suggestion: Confirm both drops.
 - Decision: agreed with the suggestion; the plan is unchanged.
+
+## Tool gaps found in review
+
+Things a good plan needs but the op registry cannot express. Each one is a limit of the tools, not of the plans, and each is a candidate for a new op (or, if the agent can never do it, a known limit to state in the report).
+
+1. **Turn special values into missing.** A sentinel or placeholder that is not a real measurement stays a number, and imputation never sees it.
+   - diabetes zeros in `plas`, `pres`, `skin`, `insu`, `mass` (diabetes-2)
+   - bank-marketing `pdays` = -1 for clients never contacted (bank-marketing-2)
+   - adult `capital-gain` = 99999, a top-code (adult-5)
+2. **Ordinal encoding in a given order.** The ordinal encoder sorts alphabetically, so ordered scales are one-hot encoded and the order is lost.
+   - credit-g `checking_status`, `savings_status`, `employment` (credit-g-2)
+   - house-prices quality grades (`ExterQual`, `KitchenQual`, `BsmtQual` and others, Ex/Gd/TA/Fa/Po). No question was written for these; they appear in the one-hot `encode` step of the plan and in the README.
+3. **Convert text to numbers.** A numeric column stored as text can only be dropped.
+   - telco-customer-churn `TotalCharges` (telco-customer-churn-1)
+4. **Extract features from text.** Structure inside a text column cannot be used, so the whole column is dropped.
+   - titanic title in `name`: Mr, Mrs, Miss, Master (titanic-2)
+
+Also seen in the questions, not on your list:
+
+- **Parse dates.** employee-salaries `date_first_hired` is dropped because no op parses it; `year_first_hired` happens to hold the same information (employee-salaries-6).
+- **Clip or transform skewed values.** adult `capital-gain` and `capital-loss` are only standard-scaled (adult-5).
