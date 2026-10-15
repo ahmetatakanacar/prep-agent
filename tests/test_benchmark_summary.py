@@ -531,10 +531,10 @@ def plan(drop=(), encode=None, cast=()) -> Plan:
     steps.append(
         {"op": "split", "test_size": 0.2, "stratify": True, "random_state": 1, "reason": "r"}
     )
-    steps += [
-        {"op": "encode", "columns": [c], "method": method, "reason": "r"}
-        for c, method in (encode or {}).items()
-    ]
+    for column, how in (encode or {}).items():
+        method, max_categories = how if isinstance(how, tuple) else (how, None)
+        step = {"op": "encode", "columns": [column], "method": method, "reason": "r"}
+        steps.append(step | ({"max_categories": max_categories} if max_categories else {}))
     return Plan.model_validate(
         {"target": "y", "task_type": "classification", "model_family": "any", "steps": steps}
     )
@@ -547,7 +547,7 @@ class TestPlanDifferences:
         "agent run",
         "dropped by the reference only",
         "dropped by the agent only",
-        "encoded or cast differently",
+        "encoded or cast differently (reference vs agent)",
     ]
 
     def pair(self, reference: Plan, agent: Plan, dataset="d1", **kwargs):
@@ -573,11 +573,27 @@ class TestPlanDifferences:
             ),
         )
         cells = row(table(render_summary(results(jobs)), self.HEADING), "d1")
-        assert cells[2:] == ["–", "–", "city, pclass"]
+        assert cells[2:] == ["–", "–", "city (onehot vs ordinal), pclass (cast vs onehot)"]
 
     def test_a_column_only_one_side_encodes_counts_as_different(self):
         jobs = self.pair(plan(encode={"city": "onehot"}), plan())
-        assert row(table(render_summary(results(jobs)), self.HEADING), "d1")[4] == "city"
+        cells = row(table(render_summary(results(jobs)), self.HEADING), "d1")
+        assert cells[4] == "city (onehot vs none)"
+
+    def test_a_different_category_cap_counts_and_is_shown_with_the_method(self):
+        jobs = self.pair(
+            plan(encode={"city": ("onehot", 100), "job": ("onehot", 20), "sex": ("onehot", 10)}),
+            plan(encode={"city": "onehot", "job": ("onehot", 50), "sex": ("onehot", 10)}),
+        )
+        cells = row(table(render_summary(results(jobs)), self.HEADING), "d1")
+        assert cells[4] == "city (onehot(100) vs onehot), job (onehot(20) vs onehot(50))"
+
+    def test_a_column_cast_and_encoded_shows_both_treatments(self):
+        jobs = self.pair(
+            plan(encode={"city": "onehot"}, cast=["city"]), plan(encode={"city": "ordinal"})
+        )
+        cells = row(table(render_summary(results(jobs)), self.HEADING), "d1")
+        assert cells[4] == "city (cast + onehot vs ordinal)"
 
     def test_a_dropped_column_is_not_also_listed_as_treated_differently(self):
         jobs = self.pair(plan(encode={"city": "onehot"}), plan(drop=["city"]))

@@ -19,6 +19,7 @@ LINEAR_MODELS = ("logistic_regression", "ridge")
 FOREST = "random_forest"
 DASH = "–"
 LEAK_MARK = "†"
+NO_TREATMENT = "none"
 NOISE_MARK = "≈"
 TALLY_LABEL = "better / worse / within noise"
 _MAX_REASON = 200
@@ -276,7 +277,7 @@ def _plan_differences(results: BenchmarkResults) -> str:
         "agent run",
         "dropped by the reference only",
         "dropped by the agent only",
-        "encoded or cast differently",
+        "encoded or cast differently (reference vs agent)",
     ]
     return "\n".join(
         [
@@ -297,15 +298,20 @@ def _has_plan(job: JobResult) -> bool:
 def _differences(reference: Plan, agent: Plan) -> list[str]:
     ref_dropped, agent_dropped = _dropped(reference), _dropped(agent)
     ref_treated, agent_treated = _treatments(reference), _treatments(agent)
-    treated = {
-        column
-        for column in ref_treated.keys() | agent_treated.keys()
+    treated = [
+        f"{column} ({ref_treated.get(column, NO_TREATMENT)} vs "
+        f"{agent_treated.get(column, NO_TREATMENT)})"
+        for column in sorted(ref_treated.keys() | agent_treated.keys())
         if column not in ref_dropped | agent_dropped
         and ref_treated.get(column) != agent_treated.get(column)
-    }
+    ]
     return [
-        ", ".join(sorted(columns)) or DASH
-        for columns in (ref_dropped - agent_dropped, agent_dropped - ref_dropped, treated)
+        ", ".join(columns) or DASH
+        for columns in (
+            sorted(ref_dropped - agent_dropped),
+            sorted(agent_dropped - ref_dropped),
+            treated,
+        )
     ]
 
 
@@ -318,20 +324,22 @@ def _dropped(plan: Plan) -> set[str]:
     }
 
 
-def _treatments(plan: Plan) -> dict[str, set[str]]:
-    """How the plan encodes or casts each column it touches. Only the method counts, not the
-    category cap of a one-hot encoding."""
-    treatments: dict[str, set[str]] = {}
+def _treatments(plan: Plan) -> dict[str, str]:
+    """How the plan encodes or casts each column it touches, e.g. `onehot(100)` for a one-hot
+    encoding capped at 100 categories or `cast + onehot` for a cast followed by an encoding."""
+    labels: dict[str, set[str]] = {}
     for step in plan.steps:
         if isinstance(step, EncodeStep):
-            label = f"encode {step.method}"
+            label = step.method
+            if step.max_categories is not None:
+                label += f"({step.max_categories})"
         elif isinstance(step, CastToCategoryStep):
             label = "cast"
         else:
             continue
         for column in step.columns:
-            treatments.setdefault(column, set()).add(label)
-    return treatments
+            labels.setdefault(column, set()).add(label)
+    return {column: " + ".join(sorted(names)) for column, names in labels.items()}
 
 
 # --- agent repeats ---
