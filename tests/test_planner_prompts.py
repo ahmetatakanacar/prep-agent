@@ -278,6 +278,18 @@ def test_plan_only_notice_says_the_previous_answer_was_refused(profile):
     assert 'Answer with kind "plan" now' in prompt
 
 
+def test_schema_error_notice_is_absent_by_default(profile):
+    assert "was rejected" not in user_prompt(profile).replace("Previous plan, rejected", "")
+
+
+def test_schema_error_notice_quotes_the_validation_error(profile):
+    prompt = user_prompt(profile, schema_error="questions.0: recommended must be one of options")
+
+    assert "## Your previous answer was rejected" in prompt
+    assert "did not match the response schema: questions.0: recommended must be one" in prompt
+    assert prompt.index("was rejected") < prompt.index("## What to do now")
+
+
 def revision_with(plan, *, warnings) -> Revision:
     error = ValidationIssue(code="unknown_column", severity="error", column="ghost", message="m1")
     return Revision(plan=plan, issues=[error], warnings=warnings)

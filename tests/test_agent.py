@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from prep_agent.agent import AgentError, RevisionBudgetError, run_agent
+from prep_agent.agent import MAX_SCHEMA_RETRIES, AgentError, RevisionBudgetError, run_agent
 from prep_agent.llm.base import LLMAPIError, TokenUsage
 from prep_agent.llm.fake import FakeLLM
 from prep_agent.plan import Plan
@@ -36,6 +36,11 @@ def question(qid: str = "family", **overrides) -> dict:
         "reason": "it changes the plan",
     }
     return {**data, **overrides}
+
+
+def invalid_reply(note: str = "Question a?") -> dict:
+    """The failure behind a crashed benchmark run: `recommended` is not one of the options."""
+    return questions_reply(question("a", question=note, recommended="maybe"))
 
 
 def plan_with_impute_before_split() -> dict:
@@ -504,6 +509,128 @@ def test_an_llm_failure_on_the_first_call_has_no_plan(df):
     assert caught.value.trace.calls == []
 
 
+# --- answers that do not match the response schema ---
+
+
+def test_the_default_gives_a_rejected_answer_one_more_try():
+    assert MAX_SCHEMA_RETRIES == 1
+
+
+def test_a_schema_error_is_retried_and_the_run_succeeds(df):
+    result, llm, _ = run(df, [invalid_reply(), plan_reply(VALID_PLAN)])
+
+    assert len(llm.calls) == 2
+    assert result.plan == Plan.model_validate(VALID_PLAN)
+
+
+def test_the_retry_prompt_carries_the_original_prompt_and_the_validation_error(df):
+    _, llm, _ = run(df, [invalid_reply(), plan_reply(VALID_PLAN)])
+
+    first, second = llm.calls[0].user, llm.calls[1].user
+    assert "rejected" not in first
+    assert second.startswith(first.split("## What to do now")[0])
+    assert "did not match the response schema" in second
+    assert "recommended must be one of options" in second
+
+
+def test_the_retry_prompt_leaves_out_the_rejected_answer_and_the_error_is_short(df):
+    leaky = invalid_reply(note="SECRET-VALUE-123 " + "x" * 5000)
+
+    _, llm, _ = run(df, [leaky, plan_reply(VALID_PLAN)])
+
+    assert "SECRET-VALUE-123" not in llm.calls[1].user
+    assert len(llm.calls[1].user) < len(llm.calls[0].user) + 1500
+
+
+def test_the_trace_names_the_retry_and_keeps_the_rejected_call(df):
+    result, _, _ = run(df, [invalid_reply(), plan_reply(VALID_PLAN)])
+
+    assert [c.purpose for c in result.calls] == ["plan", "schema_retry"]
+    assert [c.response_kind for c in result.calls] == ["invalid", "plan"]
+    assert [c.index for c in result.calls] == [0, 1]
+    rejected = json.loads(result.calls[0].model_dump_json())
+    assert rejected["response"] is None
+
+
+def test_a_rejected_revision_is_retried_with_the_same_issues(df):
+    responses = [
+        plan_reply(plan_with_impute_before_split()),
+        invalid_reply(),
+        plan_reply(VALID_PLAN),
+    ]
+
+    result, llm, _ = run(df, responses)
+
+    assert [c.purpose for c in result.calls] == ["plan", "revise", "schema_retry"]
+    assert result.calls[1].issue_codes == result.calls[2].issue_codes != []
+    assert "stateful_before_split" in llm.calls[2].user
+    assert "Previous plan, rejected" in llm.calls[2].user
+
+
+def test_two_schema_errors_in_a_row_stop_the_agent_with_a_clear_error(df):
+    with pytest.raises(AgentError) as caught:
+        run(df, [invalid_reply(), invalid_reply()])
+
+    error = caught.value
+    assert "response schema" in str(error)
+    assert "recommended must be one of options" in str(error)
+    assert "2 attempt(s)" in str(error)
+    assert [c.purpose for c in error.trace.calls] == ["plan", "schema_retry"]
+    assert [c.response_kind for c in error.trace.calls] == ["invalid", "invalid"]
+    assert error.plan is None
+
+
+def test_a_schema_error_after_a_plan_keeps_that_plan_on_the_error(df):
+    responses = [plan_reply(plan_with_impute_before_split()), invalid_reply(), invalid_reply()]
+
+    with pytest.raises(AgentError) as caught:
+        run(df, responses)
+
+    assert caught.value.plan is not None
+    assert len(caught.value.trace.calls) == 3
+
+
+def test_the_schema_retry_does_not_use_up_the_revision_budget(df):
+    # With one revision allowed: a rejected plan is revised once, the revision is answered with a
+    # broken reply that gets its retry, and that retry may still be sent back for nothing else.
+    responses = [
+        invalid_reply(),
+        plan_reply(plan_with_impute_before_split()),
+        plan_reply(VALID_PLAN),
+    ]
+
+    result, _, _ = run(df, responses, max_revisions=1)
+
+    assert [c.purpose for c in result.calls] == ["plan", "schema_retry", "revise"]
+
+
+def test_the_retry_is_allowed_for_every_planner_call(df):
+    responses = [
+        invalid_reply(),
+        questions_reply(question("a")),
+        invalid_reply(),
+        plan_reply(VALID_PLAN),
+    ]
+
+    result, _, _ = run(df, responses)
+
+    assert [c.purpose for c in result.calls] == ["plan", "schema_retry", "plan", "schema_retry"]
+
+
+def test_without_retries_a_schema_error_ends_the_run_at_once(df):
+    with pytest.raises(AgentError, match="1 attempt"):
+        run(df, [invalid_reply()], max_schema_retries=0)
+
+
+def test_more_retries_can_be_allowed(df):
+    result, llm, _ = run(
+        df, [invalid_reply(), invalid_reply(), plan_reply(VALID_PLAN)], max_schema_retries=2
+    )
+
+    assert len(llm.calls) == 3
+    assert [c.purpose for c in result.calls] == ["plan", "schema_retry", "schema_retry"]
+
+
 # --- records ---
 
 
@@ -564,7 +691,9 @@ def test_the_input_frame_is_not_modified(df):
     pd.testing.assert_frame_equal(df, before)
 
 
-@pytest.mark.parametrize("kwargs", [{"max_revisions": -1}, {"max_question_rounds": -1}])
+@pytest.mark.parametrize(
+    "kwargs", [{"max_revisions": -1}, {"max_question_rounds": -1}, {"max_schema_retries": -1}]
+)
 def test_negative_limits_are_rejected(df, kwargs):
     with pytest.raises(ValueError):
         run(df, [], **kwargs)

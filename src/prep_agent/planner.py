@@ -141,9 +141,11 @@ def build_user_prompt(
     revision: Revision | None,
     question_rounds_left: int,
     plan_only: bool = False,
+    schema_error: str | None = None,
 ) -> str:
     """Render the user message. `question_rounds_left == 0` tells the planner to stop asking;
-    `plan_only` adds that its previous answer asked questions anyway and was refused."""
+    `plan_only` adds that its previous answer asked questions anyway and was refused;
+    `schema_error` adds that its previous answer did not match the response schema, and why."""
     return _ENV.get_template("user.j2").render(
         goal=goal,
         target=target,
@@ -154,4 +156,5 @@ def build_user_prompt(
         previous_plan_json=revision.plan.model_dump_json(exclude_none=True) if revision else "",
         question_rounds_left=question_rounds_left,
         plan_only=plan_only,
+        schema_error=schema_error,
     )

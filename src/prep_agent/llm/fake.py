@@ -6,7 +6,12 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, ValidationError
 
-from prep_agent.llm.base import LLMResult, LLMSchemaError, TokenUsage
+from prep_agent.llm.base import (
+    LLMResult,
+    LLMSchemaError,
+    TokenUsage,
+    describe_validation_error,
+)
 
 FakeResponse = BaseModel | dict | str | BaseException
 
@@ -68,4 +73,6 @@ def _validate[T: BaseModel](response: BaseModel | dict | str, schema: type[T]) -
             return schema.model_validate_json(response)
         return schema.model_validate(response)
     except ValidationError as exc:
-        raise LLMSchemaError(f"fake response does not match {schema.__name__}: {exc}") from exc
+        raise LLMSchemaError(
+            f"fake response does not match {schema.__name__}: {describe_validation_error(exc)}"
+        ) from exc

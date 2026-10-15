@@ -8,7 +8,7 @@ how structured output is requested) stays in the adapters.
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 
 class LLMError(Exception):
@@ -29,6 +29,18 @@ class LLMRefusalError(LLMError):
 
 class LLMSchemaError(LLMError):
     """The model answered, but the answer does not match the requested schema."""
+
+
+def describe_validation_error(error: ValidationError) -> str:
+    """Say where and why validation failed without echoing the rejected values.
+
+    Pydantic's own text quotes the input, which here is the model's answer and may repeat
+    profile values; this one can be shown to the model again or logged.
+    """
+    return "; ".join(
+        f"{'.'.join(str(part) for part in item['loc']) or '<root>'}: {item['msg']}"
+        for item in error.errors()
+    )
 
 
 @dataclass(frozen=True)

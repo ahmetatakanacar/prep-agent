@@ -1,7 +1,7 @@
 import dataclasses
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from prep_agent.llm.base import (
     LLMAPIError,
@@ -12,11 +12,17 @@ from prep_agent.llm.base import (
     LLMResult,
     LLMSchemaError,
     TokenUsage,
+    describe_validation_error,
 )
 
 
 class Answer(BaseModel):
     value: int
+
+
+class Pair(BaseModel):
+    a: int
+    b: int
 
 
 @pytest.mark.parametrize("error", [LLMConfigError, LLMAPIError, LLMRefusalError, LLMSchemaError])
@@ -63,3 +69,21 @@ def test_protocol_is_runtime_checkable():
 
     assert isinstance(Good(), LLMClient)
     assert not isinstance(Bad(), LLMClient)
+
+
+def test_validation_errors_are_described_without_the_rejected_values():
+    with pytest.raises(ValidationError) as raised:
+        Answer.model_validate({"value": "SECRET-VALUE-123"})
+
+    text = describe_validation_error(raised.value)
+
+    assert text.startswith("value: ")
+    assert "SECRET-VALUE-123" not in text
+    assert "input_value" not in text
+
+
+def test_every_validation_error_is_listed():
+    with pytest.raises(ValidationError) as raised:
+        Pair.model_validate({"a": "x", "b": "y"})
+
+    assert describe_validation_error(raised.value).count(";") == 1

@@ -47,6 +47,14 @@
 Your previous answer asked questions, but no more questions are allowed. Answer with kind "plan" now.
 {% endif %}
 
+{% if schema_error %}
+
+## Your previous answer was rejected
+
+Your previous answer did not match the response schema: {{ schema_error }}
+Answer again with a response that matches the schema exactly.
+{% endif %}
+
 ## What to do now
 
 {% if revision %}Return a complete corrected plan that fixes every issue above.

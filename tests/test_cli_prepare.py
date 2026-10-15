@@ -338,6 +338,36 @@ def test_a_plan_that_stays_invalid_fails_with_a_saved_failed_run(invoke_cli, mon
     assert str(run_dir) in result.output.replace("\n", "")
 
 
+def broken_question_reply() -> dict:
+    return questions_reply({**family_question(), "recommended": "maybe"})
+
+
+def test_a_schema_retry_shows_in_the_saved_trace(invoke_cli, monkeypatch, tmp_path):
+    llm = use_llm(monkeypatch, [broken_question_reply(), plan_reply(VALID_PLAN)])
+
+    result = invoke_cli(prepare_args(tmp_path, "--non-interactive", "--target", "churned"))
+
+    assert result.exit_code == 0
+    assert len(llm.calls) == 2
+    calls = read_json(only_run(tmp_path) / "llm_trace.json")["calls"]
+    assert [c["purpose"] for c in calls] == ["plan", "schema_retry"]
+    assert [c["response_kind"] for c in calls] == ["invalid", "plan"]
+    assert calls[0]["response"] is None
+
+
+def test_two_schema_errors_fail_with_a_saved_failed_run(invoke_cli, monkeypatch, tmp_path):
+    use_llm(monkeypatch, [broken_question_reply()] * 2)
+
+    result = invoke_cli(prepare_args(tmp_path, "--non-interactive", "--target", "churned"))
+
+    assert result.exit_code == 1
+    assert "response schema" in " ".join(result.output.split())
+    run_dir = only_run(tmp_path)
+    assert read_json(run_dir / "run.json")["status"] == "failed"
+    calls = read_json(run_dir / "llm_trace.json")["calls"]
+    assert [c["purpose"] for c in calls] == ["plan", "schema_retry"]
+
+
 def test_max_revisions_zero_stops_at_the_first_error(invoke_cli, monkeypatch, tmp_path):
     llm = use_llm(monkeypatch, [plan_reply(plan_with_impute_before_split())])
 

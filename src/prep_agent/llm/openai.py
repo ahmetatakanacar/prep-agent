@@ -25,6 +25,7 @@ from prep_agent.llm.base import (
     LLMResult,
     LLMSchemaError,
     TokenUsage,
+    describe_validation_error,
 )
 from prep_agent.llm.strict_schema import drop_added_nulls, to_strict_schema
 
@@ -100,8 +101,11 @@ class OpenAIClient:
                 json.dumps(drop_added_nulls(json.loads(text), schema))
             )
         except (json.JSONDecodeError, ValidationError) as exc:
+            problem = (
+                describe_validation_error(exc) if isinstance(exc, ValidationError) else str(exc)
+            )
             raise LLMSchemaError(
-                f"model output does not match {schema.__name__}: {self._redact(str(exc))}"
+                f"model output does not match {schema.__name__}: {self._redact(problem)}"
             ) from None
 
         usage = response.usage

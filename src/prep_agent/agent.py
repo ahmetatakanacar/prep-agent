@@ -12,6 +12,11 @@ caps how often a plan is sent back, and plan errors, result errors and that retr
 same budget. When the budget is used up
 and errors remain, `RevisionBudgetError` carries the last plan and its issues.
 
+An answer that does not match the response schema is not a plan to revise: the call is repeated,
+with the validation error added to the prompt, up to `max_schema_retries` times (a limit of its
+own, `MAX_SCHEMA_RETRIES` by default, per planner call and apart from the revision budget). If
+the last attempt fails too, `AgentError` is raised.
+
 The planner only ever sees the profile (see `prep_agent.planner`), never the data frame.
 """
 
@@ -23,7 +28,7 @@ import pandas as pd
 from pydantic import BaseModel
 
 from prep_agent.executor import ExecutionError, ExecutionResult, PlanValidationError, execute
-from prep_agent.llm.base import LLMClient, LLMError, TokenUsage
+from prep_agent.llm.base import LLMClient, LLMError, LLMSchemaError, TokenUsage
 from prep_agent.plan import Plan
 from prep_agent.planner import (
     PlannerResponse,
@@ -36,6 +41,13 @@ from prep_agent.planner import (
 from prep_agent.profiler import DatasetProfile, profile_dataframe
 from prep_agent.validators import ValidationIssue, partition_issues
 
+MAX_SCHEMA_RETRIES = 1
+"""How often one planner call is repeated after an answer that does not match the schema."""
+
+# The validation error goes back to the model; this keeps a long list of errors from bloating
+# the prompt.
+_SCHEMA_ERROR_LIMIT = 600
+
 AskFn = Callable[[list[Question]], dict[str, str]]
 """Takes the planner's questions and returns `{question id: chosen option}` for every one."""
 
@@ -44,16 +56,17 @@ class LLMCallRecord(BaseModel):
     """What one planner call left behind. The prompts are not kept: they carry profile values."""
 
     index: int
-    purpose: Literal["plan", "revise"]
-    model: str
+    purpose: Literal["plan", "revise", "schema_retry"]
+    model: str | None
     usage: TokenUsage | None
     # Codes of the validator errors this call was asked to fix; empty for a first plan.
     issue_codes: list[str]
     # Codes of the warnings it was asked to fix too if it could.
     warning_codes: list[str]
-    # What the planner answered with; `purpose` only says why it was called.
-    response_kind: Literal["plan", "questions"]
-    response: PlannerResponse
+    # What the planner answered with; `purpose` only says why it was called. "invalid" is an
+    # answer that did not match the response schema, so there is no response to keep.
+    response_kind: Literal["plan", "questions", "invalid"]
+    response: PlannerResponse | None
 
 
 @dataclass(frozen=True)
@@ -66,7 +79,7 @@ class AgentTrace:
 
     @property
     def model(self) -> str | None:
-        return self.calls[0].model if self.calls else None
+        return next((call.model for call in self.calls if call.model is not None), None)
 
     @property
     def total_usage(self) -> TokenUsage | None:
@@ -158,13 +171,24 @@ def run_agent(
     model_family: str | None = None,
     max_question_rounds: int = 2,
     max_revisions: int = 2,
+    max_schema_retries: int = MAX_SCHEMA_RETRIES,
 ) -> AgentResult:
     """Prepare `df` for `goal`. Raises `ProfilerError` for an unusable frame or target, and
     `AgentError` if no valid result could be produced. `df` is not modified."""
-    if max_question_rounds < 0 or max_revisions < 0:
-        raise ValueError("max_question_rounds and max_revisions must not be negative")
+    if max_question_rounds < 0 or max_revisions < 0 or max_schema_retries < 0:
+        raise ValueError(
+            "max_question_rounds, max_revisions and max_schema_retries must not be negative"
+        )
     return _Agent(
-        df, goal, llm, ask_fn, target, model_family, max_question_rounds, max_revisions
+        df,
+        goal,
+        llm,
+        ask_fn,
+        target,
+        model_family,
+        max_question_rounds,
+        max_revisions,
+        max_schema_retries,
     ).run()
 
 
@@ -179,6 +203,7 @@ class _Agent:
         model_family: str | None,
         max_question_rounds: int,
         max_revisions: int,
+        max_schema_retries: int,
     ) -> None:
         self.df = df
         self.goal = goal
@@ -188,6 +213,7 @@ class _Agent:
         self.model_family = model_family
         self.max_question_rounds = max_question_rounds
         self.max_revisions = max_revisions
+        self.max_schema_retries = max_schema_retries
 
         self.profile = profile_dataframe(df, target=target)
         self.system_prompt = build_system_prompt()
@@ -232,33 +258,62 @@ class _Agent:
             revision = Revision(plan=plan, issues=errors, warnings=warnings)
 
     def _call_planner(self, revision: Revision | None, plan_only: bool) -> PlannerResponse:
-        user = build_user_prompt(
-            goal=self.goal,
-            profile=self.profile,
-            target=self.target,
-            model_family=self.model_family,
-            qa_history=self.qa_history,
-            revision=revision,
-            question_rounds_left=self.max_question_rounds - self.question_rounds,
-            plan_only=plan_only,
+        purpose: Literal["plan", "revise", "schema_retry"] = (
+            "revise" if revision or plan_only else "plan"
         )
-        try:
-            result = self.llm.generate(self.system_prompt, user, PlannerResponse)
-        except LLMError as exc:
-            raise AgentError(f"the LLM call failed: {exc}", **self._failure()) from exc
+        schema_error: str | None = None
+        attempts = 0
+        while True:
+            attempts += 1
+            user = build_user_prompt(
+                goal=self.goal,
+                profile=self.profile,
+                target=self.target,
+                model_family=self.model_family,
+                qa_history=self.qa_history,
+                revision=revision,
+                question_rounds_left=self.max_question_rounds - self.question_rounds,
+                plan_only=plan_only,
+                schema_error=schema_error,
+            )
+            try:
+                result = self.llm.generate(self.system_prompt, user, PlannerResponse)
+            except LLMSchemaError as exc:
+                self._record(purpose, revision, model=None, usage=None, response=None)
+                if attempts > self.max_schema_retries:
+                    raise AgentError(
+                        "the planner's answer did not match the response schema in "
+                        f"{attempts} attempt(s); last error: {exc}",
+                        **self._failure(),
+                    ) from exc
+                schema_error = _shorten(str(exc))
+                purpose = "schema_retry"
+                continue
+            except LLMError as exc:
+                raise AgentError(f"the LLM call failed: {exc}", **self._failure()) from exc
+            self._record(purpose, revision, result.model, result.usage, result.parsed)
+            return result.parsed
+
+    def _record(
+        self,
+        purpose: Literal["plan", "revise", "schema_retry"],
+        revision: Revision | None,
+        model: str | None,
+        usage: TokenUsage | None,
+        response: PlannerResponse | None,
+    ) -> None:
         self.calls.append(
             LLMCallRecord(
                 index=len(self.calls),
-                purpose="revise" if revision or plan_only else "plan",
-                model=result.model,
-                usage=result.usage,
+                purpose=purpose,
+                model=model,
+                usage=usage,
                 issue_codes=[issue.code for issue in revision.issues] if revision else [],
                 warning_codes=[issue.code for issue in revision.warnings] if revision else [],
-                response_kind=result.parsed.kind,
-                response=result.parsed,
+                response_kind="invalid" if response is None else response.kind,
+                response=response,
             )
         )
-        return result.parsed
 
     def _charge_plan_only_retry(self) -> None:
         """Allow one more call after questions past the limit, or give up."""
@@ -337,6 +392,12 @@ class _Agent:
             "issues": attempt.issues,
             "execution": attempt.execution,
         }
+
+
+def _shorten(text: str) -> str:
+    if len(text) <= _SCHEMA_ERROR_LIMIT:
+        return text
+    return text[: _SCHEMA_ERROR_LIMIT - 3] + "..."
 
 
 def _describe(issues: list[ValidationIssue]) -> str:
