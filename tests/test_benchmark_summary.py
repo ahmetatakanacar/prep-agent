@@ -8,11 +8,11 @@ CLASSIFIERS = ("dummy_most_frequent", "logistic_regression", "random_forest")
 REGRESSORS = ("dummy_mean", "ridge", "random_forest")
 
 
-def _scores(**means) -> dict:
-    return {metric: BaselineScore(mean=mean, std=0.01) for metric, mean in means.items()}
+def _scores(std, **means) -> dict:
+    return {metric: BaselineScore(mean=mean, std=std) for metric, mean in means.items()}
 
 
-def _baseline(task_type, linear: dict, forest: dict) -> BaselineResult:
+def _baseline(task_type, linear: dict, forest: dict, std=0.01) -> BaselineResult:
     names = CLASSIFIERS if task_type == "classification" else REGRESSORS
     return BaselineResult(
         task_type=task_type,
@@ -21,22 +21,22 @@ def _baseline(task_type, linear: dict, forest: dict) -> BaselineResult:
         n_folds=5,
         metrics=list(linear),
         models=[
-            ModelBaseline(name=names[0], scores=_scores(**{m: 0.0 for m in linear})),
-            ModelBaseline(name=names[1], scores=_scores(**linear)),
-            ModelBaseline(name=names[2], scores=_scores(**forest)),
+            ModelBaseline(name=names[0], scores=_scores(std, **{m: 0.0 for m in linear})),
+            ModelBaseline(name=names[1], scores=_scores(std, **linear)),
+            ModelBaseline(name=names[2], scores=_scores(std, **forest)),
         ],
     )
 
 
-def classification_baseline(linear_f1, forest_f1, linear_auc=None, forest_auc=None):
+def classification_baseline(linear_f1, forest_f1, linear_auc=None, forest_auc=None, std=0.01):
     linear, forest = {"f1_macro": linear_f1}, {"f1_macro": forest_f1}
     if linear_auc is not None:
         linear["roc_auc"], forest["roc_auc"] = linear_auc, forest_auc
-    return _baseline("classification", linear, forest)
+    return _baseline("classification", linear, forest, std)
 
 
-def regression_baseline(linear_r2, forest_r2):
-    return _baseline("regression", {"r2": linear_r2}, {"r2": forest_r2})
+def regression_baseline(linear_r2, forest_r2, std=0.01):
+    return _baseline("regression", {"r2": linear_r2}, {"r2": forest_r2}, std)
 
 
 def job(dataset="d1", method="agent", model="m1", repeat=1, status="ok", **kwargs) -> JobResult:
@@ -156,6 +156,9 @@ class TestScores:
         assert header == ["dataset", "reference", "naive", "agent: b", "agent: a"]
 
 
+TALLY = "better / worse / within noise"
+
+
 class TestLeakyPlans:
     def test_a_score_of_a_plan_that_kept_a_leaky_column_is_marked(self):
         jobs = [
@@ -206,7 +209,7 @@ class TestLeakyPlans:
         rows = table(md, "## Agent against the naive plan")
         assert row(rows, "leaky")[2] == "-0.300 †"
         assert row(rows, "clean")[2] == "+0.050"
-        assert row(rows, "better than naive")[2] == "1 of 1 (1 excluded †)"
+        assert row(rows, TALLY)[2] == "1 / 0 / 0 (1 excluded †)"
 
 
 class TestLeakyColumnsKept:
@@ -296,7 +299,56 @@ class TestAgainstNaive:
         assert rows[0] == ["dataset", "metric", "agent: m1"]
         assert row(rows, "d1") == ["d1", "f1_macro", "+0.050"]
         assert row(rows, "r") == ["r", "r2", "-0.050"]
-        assert row(rows, "better than naive")[2] == "1 of 2"
+        assert row(rows, TALLY)[2] == "1 / 1 / 0"
+
+    def test_a_difference_below_the_larger_fold_spread_is_marked_and_not_counted(self):
+        jobs = [
+            job("small", "naive", baseline=classification_baseline(0.5, 0.600, std=0.01)),
+            job("small", "agent", baseline=classification_baseline(0.5, 0.605, std=0.02)),
+            job("equal", "naive", baseline=classification_baseline(0.5, 0.600, std=0.0)),
+            job("equal", "agent", baseline=classification_baseline(0.5, 0.600, std=0.0)),
+            job("up", "naive", baseline=classification_baseline(0.5, 0.60, std=0.01)),
+            job("up", "agent", baseline=classification_baseline(0.5, 0.65, std=0.02)),
+            job("down", "naive", baseline=classification_baseline(0.5, 0.65, std=0.02)),
+            job("down", "agent", baseline=classification_baseline(0.5, 0.60, std=0.01)),
+        ]
+        md = render_summary(results(jobs, datasets=("small", "equal", "up", "down")))
+        rows = table(md, self.HEADING)
+        assert row(rows, "small")[2] == "+0.005 ≈"
+        assert row(rows, "equal")[2] == "+0.000 ≈"
+        assert row(rows, "up")[2] == "+0.050"
+        assert row(rows, "down")[2] == "-0.050"
+        assert row(rows, TALLY)[2] == "1 / 1 / 2"
+
+    def test_the_larger_spread_of_the_two_plans_decides(self):
+        jobs = [
+            job("d1", "naive", baseline=classification_baseline(0.5, 0.60, std=0.001)),
+            job("d1", "agent", baseline=classification_baseline(0.5, 0.65, std=0.06)),
+        ]
+        assert row(table(render_summary(results(jobs)), self.HEADING), "d1")[2] == "+0.050 ≈"
+
+    def test_a_leaking_comparison_is_excluded_even_when_within_noise(self):
+        jobs = [
+            job(
+                "d1",
+                "naive",
+                baseline=classification_baseline(0.5, 0.60),
+                kept_leaky_columns=["boat"],
+            ),
+            job("d1", "agent", baseline=classification_baseline(0.5, 0.601)),
+        ]
+        rows = table(render_summary(results(jobs)), self.HEADING)
+        assert row(rows, "d1")[2] == "+0.001 †"
+        assert row(rows, TALLY)[2] == "0 / 0 / 0 (1 excluded †)"
+
+    def test_the_spread_of_a_repeated_agent_is_the_mean_of_its_fold_spreads(self):
+        jobs = [
+            job("d1", "naive", baseline=classification_baseline(0.5, 0.60, std=0.01)),
+            job("d1", "agent", repeat=1, baseline=classification_baseline(0.5, 0.64, std=0.02)),
+            job("d1", "agent", repeat=2, baseline=classification_baseline(0.5, 0.66, std=0.06)),
+        ]
+        cell = row(table(render_summary(results(jobs, repeats=2)), self.HEADING), "d1")[2]
+        assert cell == "+0.050"
 
     def test_a_dash_stands_in_when_either_side_has_no_score(self):
         jobs = [

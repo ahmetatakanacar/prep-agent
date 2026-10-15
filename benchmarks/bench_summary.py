@@ -10,7 +10,7 @@ from collections import Counter
 from statistics import fmean
 
 from bench_results import BenchmarkResults, JobResult
-from prep_agent.baseline import BaselineResult, metric_label
+from prep_agent.baseline import BaselineResult, BaselineScore, metric_label
 
 METRICS = ("f1_macro", "roc_auc", "r2")
 MAIN_METRIC = {"classification": "f1_macro", "regression": "r2"}
@@ -18,6 +18,8 @@ LINEAR_MODELS = ("logistic_regression", "ridge")
 FOREST = "random_forest"
 DASH = "–"
 LEAK_MARK = "†"
+NOISE_MARK = "≈"
+TALLY_LABEL = "better / worse / within noise"
 _MAX_REASON = 200
 
 
@@ -122,11 +124,18 @@ def _has_metric(job: JobResult, metric: str) -> bool:
 
 
 def _score(baseline: BaselineResult | None, names: tuple[str, ...], metric: str) -> float | None:
+    fold_score = _fold_score(baseline, names, metric)
+    return fold_score.mean if fold_score else None
+
+
+def _fold_score(
+    baseline: BaselineResult | None, names: tuple[str, ...], metric: str
+) -> BaselineScore | None:
     if baseline is None:
         return None
     for model in baseline.models:
         if model.name in names and metric in model.scores:
-            return model.scores[metric].mean
+            return model.scores[metric]
     return None
 
 
@@ -163,55 +172,66 @@ def _kept_cell(jobs: list[JobResult], n_leaky: int) -> str:
     return cell + f" ({len(counted)} runs)" if len(counted) > 1 else cell
 
 
-# --- agent against naive ---
+# --- agent against the naive plan ---
 
 
 def _against_naive(results: BenchmarkResults) -> str:
+    return _against(results, "naive", "the naive plan")
+
+
+def _against(results: BenchmarkResults, other: str, name: str) -> str:
     agents = [f"agent: {model}" for model in results.config.models]
     task_types = {job.dataset: job.task_type for job in results.jobs}
     rows = []
-    better = dict.fromkeys(agents, 0)
-    comparable = dict.fromkeys(agents, 0)
-    excluded = dict.fromkeys(agents, 0)
-    for name in results.config.datasets:
-        if name not in task_types:
+    tally = {label: Counter() for label in agents}
+    for dataset in results.config.datasets:
+        if dataset not in task_types:
             continue
-        metric = MAIN_METRIC[task_types[name]]
-        naive_jobs = _of(results, name, "naive")
-        naive = _forest_mean(naive_jobs, metric)
+        metric = MAIN_METRIC[task_types[dataset]]
+        other_jobs = _of(results, dataset, other)
         cells = []
         for label in agents:
-            agent_jobs = _of(results, name, label)
-            agent = _forest_mean(agent_jobs, metric)
-            if agent is None or naive is None:
-                cells.append(DASH)
-            elif _leaks(agent_jobs) or _leaks(naive_jobs):
-                excluded[label] += 1
-                cells.append(f"{agent - naive:+.3f} {LEAK_MARK}")
-            else:
-                comparable[label] += 1
-                better[label] += agent > naive
-                cells.append(f"{agent - naive:+.3f}")
-        rows.append([name, metric, *cells])
-    rows.append(
-        ["better than naive", "", *(_tally(better, comparable, excluded, a) for a in agents)]
-    )
+            agent_jobs = _of(results, dataset, label)
+            verdict, cell = _compare(agent_jobs, other_jobs, metric)
+            tally[label][verdict] += 1
+            cells.append(cell)
+        rows.append([dataset, metric, *cells])
+    rows.append([TALLY_LABEL, "", *(_tally(tally[label]) for label in agents)])
     return "\n".join(
         [
-            "## Agent against the naive plan",
+            f"## Agent against {name}",
             "",
             "Difference in the random forest's score on the main metric (macro F1 for "
-            "classification, R² for regression): positive means the agent's plan scored higher.",
+            "classification, R² for regression): positive means the agent's plan scored higher. "
+            f"{NOISE_MARK} marks a difference smaller than the larger of the two plans' "
+            "fold standard deviations (for an agent with repeats, the mean over its runs); it is "
+            "not counted as better or worse.",
             "",
             _table(["dataset", "metric", *agents], rows),
         ]
     )
 
 
-def _tally(better: dict, comparable: dict, excluded: dict, label: str) -> str:
-    text = f"{better[label]} of {comparable[label]}"
-    if excluded[label]:
-        text += f" ({excluded[label]} excluded {LEAK_MARK})"
+def _compare(
+    agent_jobs: list[JobResult], other_jobs: list[JobResult], metric: str
+) -> tuple[str | None, str]:
+    """The verdict (better, worse, noise, excluded; None without a score) and the cell."""
+    agent, other = _forest_mean(agent_jobs, metric), _forest_mean(other_jobs, metric)
+    if agent is None or other is None:
+        return None, DASH
+    diff = agent - other
+    if _leaks(agent_jobs) or _leaks(other_jobs):
+        return "excluded", f"{diff:+.3f} {LEAK_MARK}"
+    spread = max(_forest_spread(agent_jobs, metric), _forest_spread(other_jobs, metric))
+    if abs(diff) < spread or diff == 0:
+        return "noise", f"{diff:+.3f} {NOISE_MARK}"
+    return ("better" if diff > 0 else "worse"), f"{diff:+.3f}"
+
+
+def _tally(counts: Counter) -> str:
+    text = f"{counts['better']} / {counts['worse']} / {counts['noise']}"
+    if counts["excluded"]:
+        text += f" ({counts['excluded']} excluded {LEAK_MARK})"
     return text
 
 
@@ -222,6 +242,12 @@ def _leaks(jobs: list[JobResult]) -> bool:
 def _forest_mean(jobs: list[JobResult], metric: str) -> float | None:
     scored = [_score(job.baseline, (FOREST,), metric) for job in jobs if _has_metric(job, metric)]
     return fmean(scored) if scored else None
+
+
+def _forest_spread(jobs: list[JobResult], metric: str) -> float:
+    return fmean(
+        _fold_score(job.baseline, (FOREST,), metric).std for job in jobs if _has_metric(job, metric)
+    )
 
 
 # --- agent runs ---
