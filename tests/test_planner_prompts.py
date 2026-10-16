@@ -365,3 +365,18 @@ def test_system_prompt_tells_any_to_scale_because_the_model_may_be_linear():
     assert "robust" in line and "outliers" in line
     assert "linear" in line
     assert "does not hurt tree models" in line
+
+
+def test_system_prompt_recommends_dropping_a_column_that_may_give_the_target_away():
+    prompt = build_system_prompt()
+
+    for expected in (
+        "give the target away",
+        "may not be known at prediction time",
+        "measured in the same period as the target",
+        "derived from the target",
+        "recorded after the outcome is known",
+        "`recommended` is always the option that drops the column",
+        "the user can change it if they know the column is available at prediction time",
+    ):
+        assert expected in prompt, expected
