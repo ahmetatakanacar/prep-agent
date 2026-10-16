@@ -262,9 +262,10 @@ function initLang() {
 }
 
 // A goal that is still the text a sample put there follows the language; one the user edited
-// does not.
+// does not. Once a plan was started the goal belongs to that request and is left alone.
 function swapPrefilledGoal(nextLang) {
   const b = state.brief;
+  if (!state.snap || state.snap.status !== "ready") return;
   if (!b.prefilled || b.goal !== b.prefilled.text) return;
   const sample = b.prefilled.sample;
   const text = nextLang === "tr" && sample.goal_tr ? sample.goal_tr : sample.goal;
@@ -625,7 +626,7 @@ function renderBriefSheet(snap) {
   clear(sheet);
   put(sheet, sheetHead("02", t("brief.title"), null, "h-brief"));
   if (snap.status !== "ready") {
-    put(sheet, briefSummary());
+    put(sheet, briefSummary(snap));
     return;
   }
   const b = state.brief;
@@ -706,9 +707,10 @@ function renderBriefSheet(snap) {
   put(sheet, form);
 }
 
-function briefSummary() {
-  const b = state.brief;
-  const family = b.family ? t(`fam.${b.family}`) : t("sum.family_auto");
+function briefSummary(snap) {
+  const sent = snap.request;
+  const target = sent.target;
+  const family = sent.model_family ? t(`fam.${sent.model_family}`) : t("sum.family_auto");
   const pair = (label, value, cls) => h("span", { class: "sum-item" }, h("b", {}, label), h("span", { class: cls || "" }, value));
   return h(
     "div",
@@ -716,8 +718,8 @@ function briefSummary() {
     h(
       "p",
       { class: "sum-line" },
-      pair(t("sum.goal"), b.goal, "sum-goal"),
-      pair(t("sum.target"), b.target || t("sum.target_auto"), b.target ? "mono" : ""),
+      pair(t("sum.goal"), sent.goal, "sum-goal"),
+      pair(t("sum.target"), target || t("sum.target_auto"), target ? "mono" : ""),
       pair(t("sum.family"), family),
     ),
     h("button", { type: "button", class: "btn quiet small", onclick: editBrief }, t("sum.edit")),
@@ -759,11 +761,13 @@ async function startRun(goalEl, goalError) {
   }
 }
 
-/* "edit": drop the run, keep the file, open the brief again with what was typed. */
+/* "edit": drop the run, keep the file, open the brief again with what was sent. */
 async function editBrief() {
   stopPolling();
   stopClock();
   state.generation += 1;
+  // The reset clears the request of the session, so the form is filled from it first.
+  const request = state.snap.request;
   try {
     state.snap = await api(`/api/sessions/${state.snap.id}/reset`, { method: "POST" });
   } catch (error) {
@@ -771,6 +775,12 @@ async function editBrief() {
     return;
   }
   Object.assign(state, { result: null, questionSig: "", questions: null, qChoices: {} });
+  if (request) {
+    const b = state.brief;
+    b.goal = request.goal;
+    b.target = request.target || "";
+    b.family = request.model_family || "";
+  }
   clearBanner();
   clear(sheets.agent);
   clear(sheets.outcome);

@@ -210,6 +210,38 @@ def test_the_language_notes_of_the_brief_and_plan_are_defined_and_shown_as_inten
     assert "plan.en_note" not in page
 
 
+def test_the_snapshot_of_a_started_run_carries_the_goal_that_was_sent(demo):
+    session_id = open_sample(demo)
+    goal = "I want to predict which customers will churn."
+
+    response = start(demo, session_id, goal=goal, target="churned", model_family="any", lang="en")
+
+    assert response.json()["request"] == {
+        "goal": goal,
+        "target": "churned",
+        "model_family": "any",
+    }
+
+
+def test_the_summary_shows_the_sent_goal_and_only_an_open_form_swaps_the_default_goal():
+    page = (STATIC / "app.js").read_text(encoding="utf-8")
+
+    swap = page[page.index("function swapPrefilledGoal") : page.index("function applyStatic")]
+    assert 'state.snap.status !== "ready"' in swap
+
+    summary = page[page.index("function briefSummary") : page.index("async function startRun")]
+    assert "snap.request" in summary
+    assert "b.goal" not in summary
+
+    edit = page[
+        page.index("async function editBrief") : page.index(
+            "/* ====", page.index("async function editBrief")
+        )
+    ]
+    assert edit.index("state.snap.request") < edit.index("/reset")
+    assert "b.goal = request.goal" in edit
+
+
 def test_upload_over_the_limit_is_refused():
     with make_client(max_upload_bytes=100) as client:
         response = client.post("/api/sessions", files={"file": ("big.csv", CUSTOMERS.read_bytes())})
