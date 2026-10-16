@@ -380,3 +380,20 @@ def test_system_prompt_recommends_dropping_a_column_that_may_give_the_target_awa
         "the user can change it if they know the column is available at prediction time",
     ):
         assert expected in prompt, expected
+
+
+def test_system_prompt_always_drops_datetime_and_text_columns_without_asking():
+    prompt = build_system_prompt()
+
+    for expected in (
+        "No operation can use a datetime or free-text column",
+        "a text column left at the end of the plan is an error",
+        "always drop them and never ask about them",
+        "the `reason` of the drop step says why",
+    ):
+        assert expected in prompt, expected
+    assert "or ask when they could matter" not in prompt
+    assert "looks like an identifier, text or a date" not in prompt
+    assert "- a column that looks like an identifier could carry signal the user cares about;" in (
+        prompt
+    )

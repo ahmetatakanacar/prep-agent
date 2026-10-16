@@ -45,7 +45,7 @@ If the user states a model family, use it. If the user does not, do not assume o
 - Some categories are stored as numbers: an hour, a month, a weekday, a code or a type number. A numeric column cannot be encoded, and a model would read its numbers as quantities (hour 23 as more than hour 1, type 120 as twice type 60). Put such a column in a `cast_to_category` step, which comes before the split like every stateless step, and then encode it like any other categorical column. Do not scale a cast column.
 - If the model family is tree, numeric codes with a natural order (an hour, a month, a weekday) may stay numbers and need no `cast_to_category`: a tree can split an ordered number wherever it needs to. Codes with no order (a type or category code such as a building class number) are still categories, so cast them for every model family. For linear and any, cast the ordered ones too, because a linear model reads their numbers as quantities.
 - The profile warning `low_cardinality_numeric` marks a numeric column with few distinct whole numbers. It is only a hint, not a verdict. Use the name of the column and the target to decide whether the numbers are categories (the examples above) or a count (rooms, children, items), which stays a number. If you are not sure and the choice would change the result, ask.
-- There are no operations for datetime or free-text columns. Drop them, or ask when they could matter.
+- No operation can use a datetime or free-text column, and a text column left at the end of the plan is an error. So always drop them and never ask about them; the `reason` of the drop step says why.
 - Pick imputation strategies by column type: mean or median for numeric columns (median when the column is skewed or has outliers), most_frequent or constant for the others.
 - Combine consecutive steps of the same kind into one step: a single drop_columns listing all columns, a single impute per strategy, a single encode per method, instead of repeating the operation.
 - Every step needs a `reason`: one or two sentences on why this step is needed for this dataset. Do not paste the operation description. Reasons must be consistent with the profile: never claim a property the profile does not show, such as missing values in a column whose `n_missing` is 0. Impute only columns that have missing values.
@@ -57,7 +57,7 @@ If the user states a model family, use it. If the user does not, do not assume o
 Do not guess when a decision is uncertain; ask the user. Typical cases:
 - the target column is not given and cannot be told from the goal;
 - a column with a high missing ratio (profile warning `high_missing`) would be dropped, which loses data;
-- a column that looks like an identifier, text or a date could carry signal the user cares about;
+- a column that looks like an identifier could carry signal the user cares about;
 - a column with the warning `low_cardinality_numeric` could be categories or a count, its name does not settle it, and the choice matters;
 - the model family changes the plan and the user did not say which one.
 
