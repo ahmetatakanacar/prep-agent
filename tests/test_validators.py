@@ -1075,6 +1075,56 @@ def test_a_missing_target_is_not_checked_when_the_target_is_not_a_column():
     assert find(issues, "missing_target_at_split") == []
 
 
+def with_personal_data() -> DatasetProfile:
+    frame = make_frame().assign(
+        email=[f"user{i}@example.com" for i in range(N_ROWS)],
+        full_name=[f"Person {i}" for i in range(N_ROWS)],
+    )
+    return profile_dataframe(frame, target="churn")
+
+
+def test_personal_data_fixture_is_flagged_by_the_profiler():
+    flagged = [c.name for c in with_personal_data().columns if "possible_pii" in c.warnings]
+
+    assert flagged == ["email", "full_name"]
+
+
+def test_personal_data_left_in_the_plan_is_a_warning_in_profile_order():
+    issues = validate(split(), profile=with_personal_data())
+
+    found = find(issues, "personal_data_kept")
+    assert [i.column for i in found] == ["email", "full_name"]
+    assert {i.severity for i in found} == {"warning"}
+    assert {i.step_index for i in found} == {None}
+    assert all("drop_columns" in i.message for i in found)
+    assert all("possible_pii" in i.message for i in found)
+
+
+def test_dropped_personal_data_is_not_reported():
+    issues = validate(drop("email"), split(), profile=with_personal_data())
+
+    assert [i.column for i in find(issues, "personal_data_kept")] == ["full_name"]
+
+
+@pytest.mark.parametrize("method", ["onehot", "ordinal"])
+def test_encoded_personal_data_is_still_in_the_data(method):
+    issues = validate(split(), encode(["email"], method), profile=with_personal_data())
+
+    assert "email" in [i.column for i in find(issues, "personal_data_kept")]
+
+
+def test_the_target_is_not_reported_as_personal_data():
+    profile = with_personal_data()
+
+    issues = validate(drop("email"), split(), target="full_name", profile=profile)
+
+    assert find(issues, "personal_data_kept") == []
+
+
+def test_a_plan_without_personal_data_has_no_such_warning():
+    assert find(validate(split()), "personal_data_kept") == []
+
+
 def test_unencoded_categorical_text_and_datetime_columns_warn():
     issues = validate(split())
 

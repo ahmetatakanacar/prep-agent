@@ -165,7 +165,7 @@ The checks that decide what a plan or a result may do live in [src/prep_agent/va
 | Split | `stratify_regression` | `stratify_disabled`, `class_distribution_shift` |
 | Steps that do nothing | | `repeated_op`, `impute_without_missing`, `dedupe_without_duplicates`, `drop_missing_target_without_missing` |
 | Run on the data | `execution_failed` (a step of a valid plan failed on the data; the agent sends the failure to the planner as an error) | |
-| End state of the plan or result | `empty_split`, `column_mismatch`, `target_altered` | `nan_in_output`, `non_numeric_output`, `missing_values_remain`, `unencoded_column_remains`, `uninformative_column_kept` |
+| End state of the plan or result | `empty_split`, `column_mismatch`, `target_altered` | `nan_in_output`, `non_numeric_output`, `missing_values_remain`, `unencoded_column_remains`, `uninformative_column_kept`, `personal_data_kept` (a column flagged `possible_pii` is still in the data, also as one-hot columns: drop it with `drop_columns`) |
 
 ## Known limitations
 

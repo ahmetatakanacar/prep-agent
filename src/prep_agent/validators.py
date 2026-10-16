@@ -82,6 +82,7 @@ IssueCode = Literal[
     "dedupe_without_duplicates",
     "drop_missing_target_without_missing",
     "uninformative_column_kept",
+    "personal_data_kept",
     "missing_values_remain",
     "unencoded_column_remains",
     "stratify_disabled",
@@ -132,6 +133,7 @@ SEVERITY: dict[IssueCode, Severity] = {
     "dedupe_without_duplicates": "warning",
     "drop_missing_target_without_missing": "warning",
     "uninformative_column_kept": "warning",
+    "personal_data_kept": "warning",
     "missing_values_remain": "warning",
     "unencoded_column_remains": "warning",
     "stratify_disabled": "warning",
@@ -152,6 +154,7 @@ UNENCODED_TYPES = frozenset({"categorical", "text", "datetime"})
 UNINFORMATIVE_TYPES = frozenset({"id_like", "constant"})
 UNINFORMATIVE_WARNINGS = frozenset({"possible_id", "constant"})
 LOW_CARDINALITY_WARNING = "low_cardinality_numeric"
+PII_WARNING = "possible_pii"
 
 
 class ValidationIssue(BaseModel):
@@ -642,6 +645,20 @@ class _Validation:
                 )
 
         # A target that still has missing values is `missing_target_at_split`, not this warning.
+        # One-hot encoding consumes a column, but its values live on in the dummy columns.
+        for column in self.profile.columns:
+            name = column.name
+            if name == target or PII_WARNING not in column.warnings:
+                continue
+            if name in self.columns or "one-hot" in self.gone.get(name, ""):
+                self._add(
+                    "personal_data_kept",
+                    f"column {name!r} may hold personal data ({PII_WARNING} in the profile) and "
+                    "is still in the data at the end of the plan; drop it with drop_columns "
+                    "unless the model needs it.",
+                    column=name,
+                )
+
         for name, column in self.columns.items():
             if column.has_missing and name != target:
                 self._add(
