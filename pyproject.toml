@@ -17,6 +17,10 @@ dependencies = [
     "joblib",
 ]
 
+[project.urls]
+Repository = "https://github.com/ahmetatakanacar/prep-agent"
+Documentation = "https://github.com/ahmetatakanacar/prep-agent/blob/main/docs/benchmark.md"
+
 [project.scripts]
 prep-agent = "prep_agent.cli:app"
 

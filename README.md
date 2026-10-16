@@ -1,5 +1,7 @@
 # prep-agent
 
+[![CI](https://github.com/ahmetatakanacar/prep-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmetatakanacar/prep-agent/actions/workflows/ci.yml)
+
 prep-agent prepares a CSV file for machine learning from a goal written in plain language, for example "prepare this for churn prediction, I will use XGBoost". It profiles the data, has an LLM propose a preparation plan, checks the plan with deterministic rules, runs it, and leaves behind the cleaned train and test files, a standalone script that repeats the preparation, and a report with baseline scores.
 
 It exists because data preparation is where most leakage and quiet mistakes happen (a statistic fitted on the whole table, an identifier left in, a column that gives the answer away), and because letting an LLM write the code for it is a way to make those mistakes harder to see. Here the LLM chooses from a fixed set of operations, and code decides what is allowed.
@@ -33,7 +35,7 @@ report.md, train.csv, test.csv, pipeline.py, ...
 
 - **The LLM never sees the raw data.** It gets `profile.json` only: column types, missing rates, cardinality, distribution summaries and a few sample values. Columns that look like personal data have their samples left out.
 - **The LLM writes no code.** It returns a JSON plan that must match a Pydantic schema. Every step is an op from a registry (`dedupe`, `drop_columns`, `drop_missing_target`, `cast_to_category`, `split`, `impute`, `encode`, `scale`), and a step that does not match the schema or names an unknown op is rejected. pandas and scikit-learn do the work, in this project's code.
-- **Leakage rules are enforced by code.** Ops are either stateless (dedupe, drop columns, cast, drop rows with a missing target) or stateful (impute, encode, scale). Stateless steps must come before the single split, stateful steps after it, and they are fitted on the train set only. The validator checks this from the kind of each op, so the planner cannot get it wrong.
+- **Leakage rules are enforced by code.** Ops are either stateless (dedupe, drop columns, cast, drop rows with a missing target) or stateful (impute, encode, scale). Stateless steps must come before the single split, stateful steps after it, and they are fitted on the train set only. The validator checks this from the kind of each op, so a plan that gets the order wrong is rejected before anything runs.
 - **Open decisions become questions.** When the target, a column with many missing values or a column that could be an identifier is unclear, the planner asks you instead of guessing. If you do not give a model family (`tree`, `linear`, `any`), it asks or uses `any`.
 - **The agent does not choose a model.** At the end it only scores two quick baselines per task (and a dummy model) with cross-validation on the train split. The test set is not used for that.
 

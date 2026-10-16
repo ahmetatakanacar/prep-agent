@@ -116,7 +116,8 @@ def create_app(settings: Settings | None = None, llm_factory: LLMFactory | None 
                     status_code=403,
                 )
         response = await call_next(request)
-        # The page is being designed: a reload must always show the files on disk.
+        # The static files have no versioned names, so a cached copy would outlive an upgrade; API
+        # answers carry the user's profile and report and should not stay in the browser cache.
         response.headers["Cache-Control"] = "no-store"
         return response
 
