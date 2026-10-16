@@ -260,7 +260,7 @@ window.I18N = {
     "plan.meta": "target {target} · {task} · model family {family}",
     "plan.lede":
       "Read it top to bottom. The heavy line is the split: above it every step sees all rows and learns nothing; below it every step learns from train only.",
-    "plan.en_note": "The agent's reasons are in the language of the goal, not of the interface.",
+    "plan.reasons_note": "The agent's reasons are in the language of the goal, not of the interface.",
     "plan.counts": "{errors}, {warnings}, all shown beside the step they belong to.",
     "plan.clean": "The validators found nothing to flag in the plan or in the result.",
     "findings.title": "Findings not tied to one step",
@@ -644,7 +644,8 @@ window.I18N = {
       "Yukarıdan aşağı oku. Kalın çizgi split: üstünde her adım tüm satırları görür ve hiçbir şey öğrenmez; altında her adım yalnızca train'den öğrenir.",
     "plan.counts": "{errors}, {warnings}; hepsi ait oldukları adımın yanında gösteriliyor.",
     "plan.clean": "Doğrulayıcılar plan ya da sonuç için işaretlenecek bir şey bulmadı.",
-    "plan.en_note": "Doğrulayıcı mesajları İngilizce gelir.",
+    "plan.validator_note": "Doğrulayıcı mesajları İngilizce gelir.",
+    "plan.reasons_note": "Agent'ın gerekçeleri arayüzün değil, amacın dilindedir.",
     "findings.title": "Tek bir adıma bağlı olmayan bulgular",
     "zone.all": "Tüm veri",
     "zone.all_text": "her satır · hiçbir şey öğrenilmez",

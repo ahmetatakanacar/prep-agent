@@ -191,16 +191,23 @@ def test_the_demo_mode_text_of_the_top_bar_is_short_enough_for_its_cell():
     assert '"tb.mode_demo": "demo (betikli)"' in texts
 
 
-def test_the_language_notes_of_the_brief_and_plan_exist_in_both_languages_and_are_shown_in_both():
+def test_the_language_notes_of_the_brief_and_plan_are_defined_and_shown_as_intended():
     texts = (STATIC / "i18n.js").read_text(encoding="utf-8")
     page = (STATIC / "app.js").read_text(encoding="utf-8")
 
-    for key in ("brief.langnote", "plan.en_note"):
+    for key in ("brief.langnote", "plan.reasons_note"):
         assert texts.count(f'"{key}":') == 2, "one entry for English and one for Turkish"
         assert f't("{key}")' in page
         assert f'lang === "tr" && hasText("{key}")' not in page
     assert "Questions and reasons come in the language you write the goal in." in texts
     assert "The agent's reasons are in the language of the goal, not of the interface." in texts
+    assert "Agent'ın gerekçeleri arayüzün değil, amacın dilindedir." in texts
+
+    assert texts.count('"plan.validator_note":') == 1, "Turkish only"
+    assert '"plan.validator_note": "Doğrulayıcı mesajları İngilizce gelir."' in texts
+    assert 'lang === "tr" && hasText("plan.validator_note")' in page
+    assert "plan.en_note" not in texts
+    assert "plan.en_note" not in page
 
 
 def test_upload_over_the_limit_is_refused():

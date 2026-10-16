@@ -1223,7 +1223,8 @@ function planBlock(result, ok) {
   const parts = [
     blockHead(t(ok ? "plan.title" : "plan.title_failed"), meta, "b-plan-h"),
     h("p", { class: "lede" }, t("plan.lede")),
-    h("p", { class: "hint note-line" }, t("plan.en_note")),
+    lang === "tr" && hasText("plan.validator_note") ? h("p", { class: "hint note-line" }, t("plan.validator_note")) : null,
+    h("p", { class: "hint note-line" }, t("plan.reasons_note")),
     planFlow(plan, issues),
   ];
   if (loose.length) parts.push(h("p", { class: "findings-title" }, t("findings.title")), findingsList(loose));
