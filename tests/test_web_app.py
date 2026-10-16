@@ -167,22 +167,24 @@ def test_question_answer_flow_ends_in_a_corrected_plan(demo):
     assert start(demo, session_id).status_code == 202
 
     waiting = wait_for(demo, session_id, {"waiting"})
-    assert [q["id"] for q in waiting["questions"]] == ["target", "signup_date"]
-    target_question = waiting["questions"][0]
+    assert [q["id"] for q in waiting["questions"]] == ["target", "model_family"]
+    target_question, family_question = waiting["questions"]
     assert target_question["recommended"] == "churned"
     assert target_question["allow_custom"] is True
-    assert not waiting["questions"][1]["allow_custom"]
+    assert family_question["options"] == ["tree", "linear", "any"]
+    assert family_question["recommended"] == "any"
+    assert family_question["allow_custom"] is False
 
     # A second run, or a wrong answer, must not disturb the waiting agent.
     assert start(demo, session_id).status_code == 409
-    assert answer(demo, session_id, {"signup_date": "Maybe"}).status_code == 422
+    assert answer(demo, session_id, {"model_family": "forest"}).status_code == 422
     assert demo.get(f"/api/sessions/{session_id}").json()["status"] == "waiting"
 
-    answers = {"target": "churned", "signup_date": "Drop it"}
+    answers = {"target": "churned", "model_family": "any"}
     assert answer(demo, session_id, answers).status_code == 200
     done = wait_for(demo, session_id, FINISHED)
     assert done["status"] == "done", done["error"]
-    assert [r["answer"] for r in done["qa"]] == ["churned", "Drop it"]
+    assert [r["answer"] for r in done["qa"]] == ["churned", "any"]
 
     result = demo.get(f"/api/sessions/{session_id}/result").json()
     assert result["status"] == "ok"
@@ -204,44 +206,77 @@ def test_question_answer_flow_ends_in_a_corrected_plan(demo):
     assert sorted(dropped) == ["country", "customer_id", "signup_date"]
     assert dropped["customer_id"]["kinds"] == ["identifier"]
     assert dropped["country"]["kinds"] == ["constant"]
-    # The date cannot be used by any op, and the user was asked about it.
-    assert dropped["signup_date"]["kinds"] == ["unsupported_type", "asked"]
-    assert dropped["signup_date"]["asked"][0]["answer"] == "Drop it"
+    # No op can use a date, so it goes without a question to the user.
+    assert dropped["signup_date"]["kinds"] == ["unsupported_type"]
+    assert dropped["signup_date"]["asked"] == []
 
 
 def test_a_chosen_target_means_no_target_question(demo):
     session_id = open_sample(demo)
     start(demo, session_id, target="churned")
     waiting = wait_for(demo, session_id, {"waiting"})
-    assert [q["id"] for q in waiting["questions"]] == ["signup_date"]
+    assert [q["id"] for q in waiting["questions"]] == ["model_family"]
+
+
+def test_a_brief_with_a_target_and_a_family_gets_a_plan_without_questions(demo):
+    session_id = open_sample(demo)
+    start(demo, session_id, target="churned", model_family="tree")
+
+    done = wait_for(demo, session_id, FINISHED)
+
+    assert done["status"] == "done", done["error"]
+    assert done["qa"] == []
+    result = demo.get(f"/api/sessions/{session_id}/result").json()
+    # The story of a rejected and a corrected plan does not depend on the questions.
+    assert len(result["revisions"]) == 1
+    assert result["issues"] == []
 
 
 def test_the_demo_asks_in_the_language_of_the_interface(demo):
     session_id = open_sample(demo)
     start(demo, session_id, lang="tr")
     waiting = wait_for(demo, session_id, {"waiting"})
-    date_question = waiting["questions"][1]
-    assert date_question["options"] == ["Düşür", "Tut"]
-    assert answer(demo, session_id, {"target": "churned", "signup_date": "Tut"}).status_code == 200
-    # No op can use a date, so keeping it leaves a column that is not numeric: the run fails.
-    assert wait_for(demo, session_id, FINISHED)["status"] == "failed"
+    target_question, family_question = waiting["questions"]
+    assert "hangi sütunu" in target_question["question"]
+    assert "tür modeli" in family_question["question"]
+    assert family_question["options"] == ["tree", "linear", "any"]
+    assert answer(demo, session_id, {"target": "churned", "model_family": "any"}).status_code == 200
+    assert wait_for(demo, session_id, FINISHED)["status"] == "done"
     result = demo.get(f"/api/sessions/{session_id}/result").json()
     drop = next(s for s in result["plan"]["steps"] if s["op"] == "drop_columns")
-    assert "signup_date" not in drop["columns"]
+    assert "signup_date" in drop["columns"]
+    assert "ham bir tarih metni" in drop["reason"]
     assert "düşürmeyi sen seçtin" not in drop["reason"]
-    assert any(i["code"] == "unencoded_column_remains" for i in result["issues"])
+
+
+@pytest.mark.parametrize("family", ["tree", "linear", "any"])
+def test_the_answer_about_the_family_shapes_the_plan(demo, family):
+    session_id = open_sample(demo)
+    start(demo, session_id, target="churned")
+    wait_for(demo, session_id, {"waiting"})
+    assert answer(demo, session_id, {"model_family": family}).status_code == 200
+    assert wait_for(demo, session_id, FINISHED)["status"] == "done"
+
+    plan = demo.get(f"/api/sessions/{session_id}/result").json()["plan"]
+
+    assert plan["model_family"] == family
+    scales = [s for s in plan["steps"] if s["op"] == "scale"]
+    if family == "tree":
+        assert scales == []
+    else:
+        assert [s["parameters"]["method"] for s in scales] == ["robust"]
 
 
 def test_a_free_text_answer_is_accepted_where_the_question_allows_it(demo):
     session_id = open_sample(demo)
     start(demo, session_id)
     wait_for(demo, session_id, {"waiting"})
-    empty = {"target": "  ", "signup_date": "Drop it"}
+    empty = {"target": "  ", "model_family": "any"}
     assert answer(demo, session_id, empty).status_code == 422
-    # The date question is limited to its options.
-    free = {"target": "age", "signup_date": "whenever"}
+    # The family question is limited to its options.
+    free = {"target": "age", "model_family": "whenever"}
     assert answer(demo, session_id, free).status_code == 422
-    free = {"target": "age", "signup_date": "Drop it"}
+    free = {"target": "age", "model_family": "any"}
     assert answer(demo, session_id, free).status_code == 200
     snap = wait_for(demo, session_id, FINISHED)
     # The script has no plan for another target and says so instead of pretending.
@@ -261,7 +296,7 @@ def test_reset_cancels_a_waiting_run_and_the_session_can_plan_again(demo):
 
     start(demo, session_id, target="churned")
     wait_for(demo, session_id, {"waiting"})
-    assert answer(demo, session_id, {"signup_date": "Drop it"}).status_code == 200
+    assert answer(demo, session_id, {"model_family": "any"}).status_code == 200
     done = wait_for(demo, session_id, FINISHED)
     # The first, cancelled run must not have written over the second one.
     assert done["status"] == "done"
@@ -273,7 +308,7 @@ def test_reset_after_a_finished_run_clears_the_result(demo):
     session_id = open_sample(demo)
     start(demo, session_id, target="churned")
     wait_for(demo, session_id, {"waiting"})
-    answer(demo, session_id, {"signup_date": "Drop it"})
+    answer(demo, session_id, {"model_family": "any"})
     wait_for(demo, session_id, {"done"})
     assert demo.post(f"/api/sessions/{session_id}/reset").json()["status"] == "ready"
     assert demo.get(f"/api/sessions/{session_id}/result").status_code == 409
@@ -298,7 +333,7 @@ def test_download_is_the_whole_run_folder(demo):
     session_id = open_sample(demo)
     start(demo, session_id)
     wait_for(demo, session_id, {"waiting"})
-    answer(demo, session_id, {"target": "churned", "signup_date": "Drop it"})
+    answer(demo, session_id, {"target": "churned", "model_family": "any"})
     wait_for(demo, session_id, FINISHED)
 
     response = demo.get(f"/api/sessions/{session_id}/download")
@@ -355,12 +390,23 @@ def test_the_result_has_token_counts_and_no_cost():
 
 
 @pytest.mark.parametrize("lang", ["en", "tr"])
-def test_the_demo_ends_with_a_plan_that_has_no_issues_at_all(demo, lang):
+@pytest.mark.parametrize(
+    ("brief", "asked"),
+    [
+        ({}, ["target", "model_family"]),
+        ({"target": "churned"}, ["model_family"]),
+        ({"target": "churned", "model_family": "linear"}, []),
+    ],
+    ids=["nothing given", "target given", "target and family given"],
+)
+def test_the_demo_ends_with_a_plan_that_has_no_issues_at_all(demo, lang, brief, asked):
     session_id = open_sample(demo)
-    assert start(demo, session_id, lang=lang).status_code == 202
-    wait_for(demo, session_id, {"waiting"})
-    answers = {"target": "churned", "signup_date": "Drop it" if lang == "en" else "Düşür"}
-    assert answer(demo, session_id, answers).status_code == 200
+    assert start(demo, session_id, lang=lang, **brief).status_code == 202
+    if asked:
+        waiting = wait_for(demo, session_id, {"waiting"})
+        assert [q["id"] for q in waiting["questions"]] == asked
+        answers = {"target": "churned", "model_family": "any"}
+        assert answer(demo, session_id, {k: answers[k] for k in asked}).status_code == 200
     assert wait_for(demo, session_id, FINISHED)["status"] == "done"
 
     result = demo.get(f"/api/sessions/{session_id}/result").json()

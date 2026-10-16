@@ -3,10 +3,11 @@ an API key.
 
 The script is built on `FakeLLM` and always tells the same story: a round of questions, a first
 plan the validators reject, and a corrected plan. It behaves the way the real agent does: it
-asks only what the rules cannot settle (which column is the target, whether to drop a date it
-cannot use), offers free text only where the answer cannot be limited to options, and writes
-in the language of the interface, as the real agent writes in the language of the goal. The
-mistakes in the first plan are real: the real validators find them.
+asks only what the brief leaves open (which column is the target, which model family) and skips
+the round when the brief answers both, drops a date without asking because no step can use it,
+offers free text only where the answer cannot be limited to options, and writes in the language
+of the interface, as the real agent writes in the language of the goal. The mistakes in the
+first plan are real: the real validators find them.
 """
 
 from collections.abc import Callable
@@ -21,30 +22,25 @@ TARGET = "churned"
 REQUIRED_COLUMNS = frozenset(
     {"customer_id", "age", "plan", "signup_date", "monthly_spend", "churned", "country"}
 )
-# The story has three calls; a fourth, if the plan is still rejected, repeats the last one.
-LAST_CALL = 2
+FAMILIES = ["tree", "linear", "any"]
 TARGET_TYPES = ("binary", "categorical", "numeric")
 MAX_TARGET_OPTIONS = 4
 
 TEXTS = {
     "en": {
-        "drop": "Drop it",
-        "keep": "Keep it",
         "target_q": "Which column should the model predict?",
         "target_why": (
             "The goal does not name a column and several could be predicted, so I do not guess. "
             "`churned` is a yes/no column, which fits a goal about customers leaving."
         ),
-        "date_q": (
-            "`signup_date` is stored as text and no step can turn it into date features. Drop it?"
-        ),
-        "date_why": (
-            "None of the available steps can extract features from a date string, so keeping it "
-            "would leave a text column in the data. Whether to keep it anyway is your call."
+        "family_q": "Which kind of model will you train on the prepared data?",
+        "family_why": (
+            "The goal does not say, and the preparation depends on it: tree models need no "
+            "scaling, linear models do. `any` keeps the plan safe for both."
         ),
         "drop_id": "customer_id identifies a customer and says nothing about churn",
         "drop_country": "country holds a single value",
-        "drop_date": "signup_date is a raw date string no step can use, and you chose to drop it",
+        "drop_date": "signup_date is a raw date string and no step can turn it into model input",
         "drop_ghost": "tenure_months is derived from signup_date, so it goes too.",
         "impute_early": "age has missing values; fill them with the median of the training rows.",
         "impute_late": (
@@ -66,26 +62,21 @@ TEXTS = {
         ),
     },
     "tr": {
-        "drop": "Düşür",
-        "keep": "Tut",
         "target_q": "Model hangi sütunu tahmin etsin?",
         "target_why": (
             "Hedef sütun belirtilmedi ve birden fazla sütun tahmin edilebilir, bu yüzden "
             "tahmin yürütmüyorum. `churned` evet/hayır sütunu ve müşterilerin ayrılmasıyla ilgili "
             "bir amaca uyuyor."
         ),
-        "date_q": (
-            "`signup_date` metin olarak duruyor ve hiçbir adım onu tarih özelliklerine "
-            "dönüştüremiyor. Düşürülsün mü?"
-        ),
-        "date_why": (
-            "Mevcut adımların hiçbiri tarih metninden özellik çıkaramıyor; tutarsak veride bir "
-            "metin sütunu kalır. Yine de tutup tutmamak senin kararın."
+        "family_q": "Hazırlanan veriyle hangi tür modeli eğiteceksin?",
+        "family_why": (
+            "Amaç bunu söylemiyor ve hazırlık buna bağlı: ağaç modelleri ölçeklemeye ihtiyaç "
+            "duymaz, doğrusal modeller duyar. `any` planı ikisi için de güvenli tutar."
         ),
         "drop_id": "customer_id bir müşteriyi tanımlar ve kayıp hakkında bir şey söylemez",
         "drop_country": "country tek bir değer taşıyor",
         "drop_date": (
-            "signup_date ham bir tarih metni, hiçbir adım onu kullanamıyor ve düşürmeyi sen seçtin"
+            "signup_date ham bir tarih metni ve hiçbir adım onu model girdisine çeviremiyor"
         ),
         "drop_ghost": "tenure_months signup_date'ten türetilmiş, o da gidiyor.",
         "impute_early": "age eksik değerler içeriyor; eğitim satırlarının medyanıyla doldur.",
@@ -156,17 +147,27 @@ class DemoLLM:
         self._text = TEXTS.get(lang, TEXTS["en"])
         self._profile = profile
         self._target_given = target is not None
-        self._family = model_family or "any"
+        self._family_given = model_family is not None
+        self._family = model_family
         self._answers = answers
         self._calls = 0
 
     def generate[T: BaseModel](self, system: str, user: str, schema: type[T]) -> LLMResult[T]:
-        index = min(self._calls, LAST_CALL)
+        # Without open questions the story starts at the first plan. A further call, if the plan
+        # is still rejected, repeats the last one.
+        story = ["plan_rejected", "plan_corrected"]
+        if not (self._target_given and self._family_given):
+            story.insert(0, "questions")
+        step = story[min(self._calls, len(story) - 1)]
         self._calls += 1
-        if index == 0:
+        if step == "questions":
             response: dict = {"kind": "questions", "plan": None, "questions": self._questions()}
         else:
-            response = {"kind": "plan", "plan": self._plan(rejected=index == 1), "questions": None}
+            response = {
+                "kind": "plan",
+                "plan": self._plan(rejected=step == "plan_rejected"),
+                "questions": None,
+            }
         # No usage is reported: a script used no tokens, and a made-up count would pass for a
         # real one.
         return FakeLLM([response]).generate(system, user, schema)
@@ -187,16 +188,17 @@ class DemoLLM:
                     "allow_custom": True,
                 }
             )
-        questions.append(
-            {
-                "id": "signup_date",
-                "question": text["date_q"],
-                "options": [text["drop"], text["keep"]],
-                "recommended": text["drop"],
-                "reason": text["date_why"],
-                "allow_custom": False,
-            }
-        )
+        if not self._family_given:
+            questions.append(
+                {
+                    "id": "model_family",
+                    "question": text["family_q"],
+                    "options": FAMILIES,
+                    "recommended": "any",
+                    "reason": text["family_why"],
+                    "allow_custom": False,
+                }
+            )
         return questions
 
     def _target_options(self) -> list[str]:
@@ -212,22 +214,19 @@ class DemoLLM:
         answers = self._answers()
         if answers.get("target", TARGET).strip() != TARGET:
             raise DemoScriptLimit(text["limit"])
-        keep_date = answers.get("signup_date", text["drop"]) == text["keep"]
+        family = self._family or answers.get("model_family", "any")
         build = _rejected_steps if rejected else _corrected_steps
         return {
             "target": TARGET,
             "task_type": "classification",
-            "model_family": self._family,
-            "steps": build(text, drop_date=not keep_date, scale=self._family != "tree"),
+            "model_family": family,
+            "steps": build(text, scale=family != "tree"),
         }
 
 
-def _drop_step(text: dict, *, drop_date: bool, ghost: bool) -> dict:
-    columns = ["customer_id", "country"]
-    reasons = [text["drop_id"], text["drop_country"]]
-    if drop_date:
-        columns.insert(1, "signup_date")
-        reasons.append(text["drop_date"])
+def _drop_step(text: dict, *, ghost: bool) -> dict:
+    columns = ["customer_id", "signup_date", "country"]
+    reasons = [text["drop_id"], text["drop_date"], text["drop_country"]]
     reason = "; ".join(reasons) + "."
     if ghost:
         columns.append("tenure_months")
@@ -271,10 +270,10 @@ def _scale_step(columns: list[str], reason: str) -> dict:
     return {"op": "scale", "columns": columns, "method": "robust", "reason": reason}
 
 
-def _rejected_steps(text: dict, *, drop_date: bool, scale: bool) -> list[dict]:
+def _rejected_steps(text: dict, *, scale: bool) -> list[dict]:
     fixed = _fixed_steps(text)
     steps = [
-        _drop_step(text, drop_date=drop_date, ghost=True),
+        _drop_step(text, ghost=True),
         _impute_step(text, early=True),
         fixed["dedupe"],
         fixed["missing"],
@@ -286,10 +285,10 @@ def _rejected_steps(text: dict, *, drop_date: bool, scale: bool) -> list[dict]:
     return steps
 
 
-def _corrected_steps(text: dict, *, drop_date: bool, scale: bool) -> list[dict]:
+def _corrected_steps(text: dict, *, scale: bool) -> list[dict]:
     fixed = _fixed_steps(text)
     steps = [
-        _drop_step(text, drop_date=drop_date, ghost=False),
+        _drop_step(text, ghost=False),
         fixed["dedupe"],
         fixed["split"],
         _impute_step(text, early=False),
