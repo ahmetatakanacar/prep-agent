@@ -397,3 +397,53 @@ def test_system_prompt_always_drops_datetime_and_text_columns_without_asking():
     assert "- a column that looks like an identifier could carry signal the user cares about;" in (
         prompt
     )
+
+
+def test_system_prompt_has_a_language_section_that_covers_questions_and_step_reasons():
+    prompt = build_system_prompt()
+
+    assert "\n## Language\n" in prompt
+    section = prompt.split("\n## Language\n", 1)[1].split("\n## ", 1)[0]
+    for expected in (
+        "Every text you write is in the language the user's goal is written in",
+        "`question`, `options` and `reason` of the questions",
+        "`reason` of every plan step",
+        "Only the goal decides the language",
+        "column names, sample values, the user's answers or these instructions",
+        "If you are not sure, write English",
+    ):
+        assert expected in section, expected
+    # The rule lives in one place, not at the end of the question paragraph.
+    assert prompt.count("in the language of the user's goal") == 0
+
+
+@pytest.mark.parametrize("goal", ["preparar los datos para predecir la baja", "müşteri kaybı için"])
+def test_answers_and_revisions_remind_the_planner_of_the_language_without_quoting_the_goal(
+    profile, goal
+):
+    plan = Plan.model_validate(
+        {
+            "target": "churned",
+            "task_type": "classification",
+            "model_family": "any",
+            "steps": [{"op": "dedupe", "keep": "first", "reason": "r"}],
+        }
+    )
+    issues = [ValidationIssue(code="unknown_column", severity="error", column="ghost", message="m")]
+    after_answers = user_prompt(
+        profile, goal=goal, qa_history=[QARecord(question=sample_question(), answer="tree")]
+    )
+    after_revision = user_prompt(profile, goal=goal, revision=Revision(plan=plan, issues=issues))
+
+    for prompt in (after_answers, after_revision):
+        [line] = [
+            line for line in prompt.splitlines() if line.startswith("Keep writing in the language")
+        ]
+        assert "the language of the goal" in line
+        assert goal not in line
+
+
+def test_the_first_message_has_no_language_reminder_because_the_system_prompt_has_the_rule(
+    profile,
+):
+    assert "Keep writing in the language" not in user_prompt(profile)

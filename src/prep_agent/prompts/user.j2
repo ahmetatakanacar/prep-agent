@@ -18,6 +18,8 @@
 - [{{ item.question.id }}] {{ item.question.question }}
   Answer: {{ item.answer }}
 {% endfor %}
+
+Keep writing in the language of the goal, not in the language of the answers.
 {% endif %}
 {% if revision %}
 
@@ -58,6 +60,7 @@ Answer again with a response that matches the schema exactly.
 ## What to do now
 
 {% if revision %}Return a complete corrected plan that fixes every issue above.
+Keep writing in the language of the goal, not in the language of these issues.
 {% else %}Prepare this dataset for the goal above.
 {% endif %}
 {% if question_rounds_left > 0 %}You may still ask questions ({{ question_rounds_left }} round(s) left), but only about decisions that are genuinely open.

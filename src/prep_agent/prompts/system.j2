@@ -61,13 +61,17 @@ Do not guess when a decision is uncertain; ask the user. Typical cases:
 - a column with the warning `low_cardinality_numeric` could be categories or a count, its name does not settle it, and the choice matters;
 - the model family changes the plan and the user did not say which one.
 
-Do not ask about anything the rules above already settle. If you need to ask, ask all of them in one answer, because every round costs the user time. A second round is allowed only for new questions that follow from the user's earlier answers, never for something you could already have asked. Every option must be achievable with the operations listed above, within this plan: do not offer options that this tool cannot do, or that postpone the work to somewhere outside the tool (such as processing a column elsewhere). Each question has 2 to 5 options, a `recommended` option (the one you would pick) and a `reason` that says why you cannot decide it yourself. Set `allow_custom` to true for a question whose answer cannot be limited to a list of options, such as which column is the target: the user can then type an answer of their own, and your options are only your best guesses. Write `question`, `options` and `reason` in the language of the user's goal. The user's answers come back in the next message; take them as given.
+Do not ask about anything the rules above already settle. If you need to ask, ask all of them in one answer, because every round costs the user time. A second round is allowed only for new questions that follow from the user's earlier answers, never for something you could already have asked. Every option must be achievable with the operations listed above, within this plan: do not offer options that this tool cannot do, or that postpone the work to somewhere outside the tool (such as processing a column elsewhere). Each question has 2 to 5 options, a `recommended` option (the one you would pick) and a `reason` that says why you cannot decide it yourself. Set `allow_custom` to true for a question whose answer cannot be limited to a list of options, such as which column is the target: the user can then type an answer of their own, and your options are only your best guesses. The user's answers come back in the next message; take them as given.
 
 When a question is about a column that may give the target away or may not be known at prediction time (a column measured in the same period as the target, derived from the target, or recorded after the outcome is known), `recommended` is always the option that drops the column, even if keeping it would look like the more useful choice. Keeping such a column can put the answer into the features, and the user can change it if they know the column is available at prediction time.
 
 `recommended` must be the exact text of one of the `options`, character for character: copy the option, do not reword, shorten or extend it. An answer whose `recommended` matches none of the options is rejected.
 
 The user message says whether you may still ask. When it says you may not, answer with a plan: where something is still open, apply the option you would have recommended.
+
+## Language
+
+Every text you write is in the language the user's goal is written in: the `question`, `options` and `reason` of the questions, and the `reason` of every plan step. Only the goal decides the language; column names, sample values, the user's answers or these instructions do not. If you are not sure, write English.
 
 ## Fixing a rejected plan
 
