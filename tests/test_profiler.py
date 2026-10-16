@@ -652,6 +652,74 @@ def test_turkish_pii_column_names_are_flagged_with_or_without_turkish_letters(na
 
 @pytest.mark.parametrize(
     "name",
+    [
+        "soyad",
+        "soyadı",
+        "Soyadı",
+        "adsoyad",
+        "ad_soyad",
+        "Adı Soyadı",
+        "firstname",
+        "first_name",
+        "firstName",
+        "lastname",
+        "last_name",
+        "surname",
+        "fullname",
+        "full_name",
+        "FullName",
+        "musteri_soyadi",
+    ],
+)
+def test_person_name_columns_are_flagged_whatever_their_unique_ratio(name):
+    # 10% distinct, like the names of a synthetic file with many repeated names.
+    col = profile_column([f"Person {i % 2}" for i in range(N)], name=name)
+
+    assert col.n_unique == 2
+    assert "possible_pii" in col.warnings
+    assert col.sample_values == []
+    assert col.top_values == []
+
+
+def test_a_person_name_column_with_ten_percent_distinct_values_is_flagged():
+    values = [f"Person {i % 256}" for i in range(2448)]
+
+    col = profile_column(values, name="ad_soyad")
+
+    assert col.unique_ratio < 0.11
+    assert "possible_pii" in col.warnings
+    assert col.sample_values == []
+
+
+@pytest.mark.parametrize(
+    "name", ["name", "ad", "adi", "adı", "isim", "department_name", "il_adi", "urun_adi"]
+)
+def test_a_general_name_part_still_needs_mostly_distinct_values(name):
+    col = profile_column([f"value {i % 2}" for i in range(N)], name=name)
+
+    assert "possible_pii" not in col.warnings
+    assert col.sample_values != []
+
+
+@pytest.mark.parametrize(
+    "name", ["department_name", "il_adi", "urun_adi", "sehir_adi", "product_name"]
+)
+def test_a_category_named_after_a_thing_is_not_flagged_even_with_many_values(name):
+    col = profile_column([f"value {i % 3}" for i in range(N * 5)], name=name)
+
+    assert "possible_pii" not in col.warnings
+    assert col.sample_values != []
+
+
+@pytest.mark.parametrize("name", ["soyad", "ad_soyad", "fullname"])
+def test_a_numeric_person_name_column_is_not_flagged_by_name(name):
+    col = profile_column([i * 2.5 for i in range(N)], name=name)
+
+    assert "possible_pii" not in col.warnings
+
+
+@pytest.mark.parametrize(
+    "name",
     ["adet", "adedi", "kadin", "posta_kodu", "kimlik", "no", "dogum_yili", "sube_adedi", "cepheli"],
 )
 def test_turkish_names_that_only_contain_a_pii_part_are_not_flagged(name):

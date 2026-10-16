@@ -46,6 +46,9 @@ addresses or phone numbers, or if a part of its name (split on `_`, spaces and c
 `ProfilerConfig.pii_name_parts` and more than `pii_name_min_unique_ratio` of its values are
 distinct. The second condition keeps out columns that merely have such a name, such as a yes/no
 `PhoneService` or a `department_name` with a handful of categories, which hold no identities.
+A non-numeric column named for a person (`ProfilerConfig.pii_person_name_parts`: soyad, ad_soyad,
+firstname, lastname, surname, fullname, ...) is flagged whatever its unique ratio, since repeated
+surnames are still identities.
 For a numeric column only the parts in `ProfilerConfig.pii_numeric_name_parts` count (phone,
 telefon, gsm, tckn, iban, ssn: numbers that identify a person, like a phone number stored as an
 integer), under the same uniqueness condition. Short parts such as "ad" or "tel" are everyday
@@ -135,6 +138,14 @@ class ProfilerConfig:
         "surname", "ad", "soyad", "isim", "address", "adres", "tckn", "iban", "ssn",
         "username", "fullname", "adi", "soyadi", "adsoyad", "eposta", "e_posta", "cep", "tc",
         "tc_kimlik", "kimlik_no", "dogum_tarihi",
+    )  # fmt: skip
+    # Names of people. A non-numeric column with one of these is flagged however few distinct
+    # values it has: a surname column holds identities even when the names repeat. The general
+    # parts above ("name", "ad", "isim") also name things (`department_name`, `il_adi`), so they
+    # need the unique ratio.
+    pii_person_name_parts: tuple[str, ...] = (
+        "soyad", "soyadi", "adsoyad", "ad_soyad", "firstname", "first_name", "lastname",
+        "last_name", "surname", "fullname", "full_name",
     )  # fmt: skip
     # The parts of `pii_name_parts` that can name a number. A numeric column is only flagged for
     # one of these.
@@ -560,6 +571,8 @@ def _looks_like_pii(
     listed = config.pii_numeric_name_parts if is_numeric else config.pii_name_parts
     joined = f"_{'_'.join(_name_parts(name))}_"
     name_matches = any(f"_{entry}_" in joined for entry in listed)
+    if not is_numeric and any(f"_{entry}_" in joined for entry in config.pii_person_name_parts):
+        return True
     if name_matches and n_unique > config.pii_name_min_unique_ratio * len(non_null):
         return True
     if inferred == "datetime" or non_null.empty or is_numeric:
