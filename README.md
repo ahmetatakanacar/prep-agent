@@ -193,7 +193,7 @@ Out of scope: model selection or AutoML, a database, multi-user features.
 ## Development
 
 ```powershell
-uv sync
+uv sync --locked --extra web
 uv run pytest -q
 uv run ruff check .
 uv run ruff format --check .
@@ -205,7 +205,7 @@ Tests never call the real API; they use a fake LLM. The few tests that do are ma
 $env:PREP_AGENT_RUN_LLM_TESTS="1"; uv run pytest -m llm -v -s
 ```
 
-The tests that need the downloaded benchmark datasets (`uv run python benchmarks/download.py`) are skipped when the files are missing. CI runs ruff and pytest on Ubuntu and Windows.
+The tests that need the downloaded benchmark datasets (`uv run python benchmarks/download.py`) are skipped when the files are missing. CI runs ruff and pytest on Ubuntu and Windows, with the `web` extra installed so that the web UI tests run (without it they are skipped).
 
 ## License
 
