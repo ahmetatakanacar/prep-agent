@@ -108,6 +108,10 @@ The dummy model ignores the features and always predicts the {{ "most frequent c
 {% for row in baseline_table.rows %}
 | {{ row.name }} | {{ row.cells | join(" | ") }} |
 {% endfor %}
+{% if not_converged %}
+
+A model marked "did not converge" reached its iteration limit in at least one fold, so its scores come from a fit that stopped early.
+{% endif %}
 {% endif %}
 {% set skipped = baseline.models | selectattr("skipped_reason") | list %}
 {% if skipped %}

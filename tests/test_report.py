@@ -5,7 +5,13 @@ from pathlib import Path
 import pytest
 
 from prep_agent.agent import AgentTrace, LLMCallRecord
-from prep_agent.baseline import SMALL_TRAIN_ROWS, BaselineResult, BaselineScore, ModelBaseline
+from prep_agent.baseline import (
+    NOT_CONVERGED_NOTE,
+    SMALL_TRAIN_ROWS,
+    BaselineResult,
+    BaselineScore,
+    ModelBaseline,
+)
 from prep_agent.executor import execute
 from prep_agent.llm.base import TokenUsage
 from prep_agent.plan import Plan
@@ -311,6 +317,23 @@ def test_the_baseline_table_shows_mean_and_std_per_model_and_metric(executed):
     assert "| logistic_regression | 0.8125 ± 0.0500 | 0.7000 ± 0.0123 |" in text
     assert "4-fold" in text
     assert "16 rows" in text
+
+
+def test_a_model_that_did_not_converge_says_so_next_to_its_score(executed):
+    baseline = make_baseline()
+    baseline.models[1] = baseline.models[1].model_copy(update={"note": NOT_CONVERGED_NOTE})
+
+    text = section(render(executed, baseline=baseline), "Baseline")
+
+    assert "| logistic_regression (did not converge) | 0.8125 ± 0.0500 | 0.7000 ± 0.0123 |" in text
+    assert "| dummy_most_frequent | 0.6875" in text
+    assert "iteration limit" in text
+
+
+def test_a_baseline_without_notes_has_no_convergence_remark(executed):
+    text = section(render(executed, baseline=make_baseline()), "Baseline")
+
+    assert "converge" not in text
 
 
 def test_skipped_models_are_listed_with_their_reason(executed):

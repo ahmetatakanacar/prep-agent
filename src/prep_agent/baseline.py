@@ -15,8 +15,14 @@ executor avoids at the split. The test set is never an input: the signature take
 A model that cannot run (the pipeline output still has missing values or text columns, say) is
 recorded as skipped with the reason and the others carry on. When the target cannot be
 cross-validated at all, the whole baseline is skipped with a reason.
+
+A model that hits its iteration limit in some fold raises sklearn's ConvergenceWarning. The
+warning is caught so that it does not reach the terminal, and the model's result carries a
+note instead: the scores are kept, but they come from a fit that stopped early.
 """
 
+import warnings
+from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
@@ -26,6 +32,7 @@ from pydantic import BaseModel
 from sklearn.base import BaseEstimator, clone
 from sklearn.dummy import DummyClassifier, DummyRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.metrics import f1_score, make_scorer
 from sklearn.model_selection import KFold, StratifiedKFold, cross_validate
@@ -35,6 +42,8 @@ DEFAULT_FOLDS = 5
 # Below this many train rows the report warns that the scores are noisy.
 SMALL_TRAIN_ROWS = 100
 RANDOM_STATE = 42
+# Short because the report puts it next to the model name.
+NOT_CONVERGED_NOTE = "did not converge"
 _MIN_FOLDS = 2
 # sklearn reports these as negated scores so that higher is always better.
 _NEGATED = {"rmse", "mae"}
@@ -58,11 +67,15 @@ class BaselineScore(BaseModel):
 
 
 class ModelBaseline(BaseModel):
-    """One model's scores, or why it was skipped (then `scores` is empty)."""
+    """One model's scores, or why it was skipped (then `scores` is empty).
+
+    `note` is set when the scores come with a caveat, such as a fit that did not converge.
+    """
 
     name: str
     scores: dict[str, BaselineScore] = {}
     skipped_reason: str | None = None
+    note: str | None = None
 
 
 class BaselineResult(BaseModel):
@@ -130,15 +143,19 @@ def evaluate_baselines(
     outcomes = {
         name: _cross_validate(model, pipeline, x, y, cv, scoring) for name, model in models.items()
     }
-    failures = [outcome for outcome in outcomes.values() if isinstance(outcome, Exception)]
+    failures = [o for o in outcomes.values() if isinstance(o.result, Exception)]
     problems = _feature_problems(pipeline, x) if failures else None
 
     results = []
     for name, outcome in outcomes.items():
-        if isinstance(outcome, Exception):
-            results.append(ModelBaseline(name=name, skipped_reason=_explain(outcome, problems)))
+        if isinstance(outcome.result, Exception):
+            reason = _explain(outcome.result, problems)
+            results.append(ModelBaseline(name=name, skipped_reason=reason))
         else:
-            results.append(ModelBaseline(name=name, scores=_summarise(outcome, scoring)))
+            note = NOT_CONVERGED_NOTE if outcome.not_converged else None
+            results.append(
+                ModelBaseline(name=name, scores=_summarise(outcome.result, scoring), note=note)
+            )
     return BaselineResult(
         task_type=task_type,
         n_rows=len(train),
@@ -210,6 +227,15 @@ _REGRESSION_SCORING = {
 }
 
 
+@dataclass(frozen=True)
+class _Outcome:
+    """The scores of `cross_validate` or the exception it raised, and whether a fit warned that
+    it did not converge."""
+
+    result: dict | Exception
+    not_converged: bool
+
+
 def _cross_validate(
     model: BaseEstimator,
     pipeline: Pipeline,
@@ -217,13 +243,27 @@ def _cross_validate(
     y: pd.Series,
     cv: StratifiedKFold | KFold,
     scoring: dict,
-) -> dict | Exception:
+) -> _Outcome:
     estimator = Pipeline([("prepare", clone(pipeline)), ("model", model)])
-    try:
-        return cross_validate(estimator, x, y, cv=cv, scoring=scoring, error_score="raise")
-    # Whatever a model raises must end up in the report, not crash the run.
-    except Exception as exc:
-        return exc
+    result: dict | Exception
+    with warnings.catch_warnings(record=True) as caught:
+        # Recording also overrides an "error" filter for this one category, so the fit goes on.
+        warnings.simplefilter("always", ConvergenceWarning)
+        try:
+            result = cross_validate(estimator, x, y, cv=cv, scoring=scoring, error_score="raise")
+        # Whatever a model raises must end up in the report, not crash the run.
+        except Exception as exc:
+            result = exc
+    not_converged = False
+    for warning in caught:
+        if issubclass(warning.category, ConvergenceWarning):
+            not_converged = True
+        else:
+            # Recording took every warning that passed the filters; give the others back.
+            warnings.warn_explicit(
+                warning.message, warning.category, warning.filename, warning.lineno
+            )
+    return _Outcome(result, not_converged)
 
 
 def _summarise(raw: dict, scoring: dict) -> dict[str, BaselineScore]:

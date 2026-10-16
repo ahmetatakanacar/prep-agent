@@ -1,11 +1,15 @@
 import inspect
+import warnings
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.dummy import DummyClassifier
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer
 
@@ -336,6 +340,99 @@ def test_a_failing_model_does_not_stop_the_others(monkeypatch):
     assert "RuntimeError" in models["random_forest"].skipped_reason
     assert models["logistic_regression"].scores
     assert models["dummy_most_frequent"].scores
+
+
+# --- convergence warnings ---
+
+
+@pytest.fixture
+def slow_logistic_regression(monkeypatch):
+    """Make the logistic regression stop after one iteration, which always raises a
+    ConvergenceWarning; real data that fails to converge is hard to build on purpose."""
+    import prep_agent.baseline as baseline
+
+    original = baseline._classification_models
+
+    def with_one_iteration(random_state):
+        models = original(random_state)
+        models["logistic_regression"] = LogisticRegression(max_iter=1, random_state=random_state)
+        return models
+
+    monkeypatch.setattr(baseline, "_classification_models", with_one_iteration)
+
+
+def test_a_model_that_does_not_converge_keeps_its_scores_and_gets_a_note(slow_logistic_regression):
+    models = by_name(evaluate(classification_frame()))
+
+    slow = models["logistic_regression"]
+    assert slow.skipped_reason is None
+    assert set(slow.scores) == {"accuracy", "f1_macro", "roc_auc"}
+    assert slow.note is not None
+    assert "did not converge" in slow.note
+    assert models["random_forest"].note is None
+    assert models["dummy_most_frequent"].note is None
+
+
+def test_convergence_warnings_do_not_reach_the_terminal(slow_logistic_regression):
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter("always")
+        evaluate(classification_frame())
+
+    assert [w for w in seen if issubclass(w.category, ConvergenceWarning)] == []
+
+
+def test_other_warnings_of_a_model_are_not_swallowed(monkeypatch):
+    class Chatty(DummyClassifier):
+        def fit(self, X, y, sample_weight=None):
+            warnings.warn("something else", UserWarning, stacklevel=2)
+            return super().fit(X, y, sample_weight)
+
+    import prep_agent.baseline as baseline
+
+    original = baseline._classification_models
+
+    def with_chatty_dummy(random_state):
+        models = original(random_state)
+        models["dummy_most_frequent"] = Chatty(strategy="most_frequent")
+        return models
+
+    monkeypatch.setattr(baseline, "_classification_models", with_chatty_dummy)
+
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter("always")
+        models = by_name(evaluate(classification_frame()))
+
+    assert any("something else" in str(w.message) for w in seen)
+    assert models["dummy_most_frequent"].note is None
+
+
+def test_a_regression_that_does_not_converge_gets_a_note_too(monkeypatch):
+    import prep_agent.baseline as baseline
+
+    original = baseline._regression_models
+
+    def with_one_iteration(random_state):
+        models = original(random_state)
+        models["ridge"] = Ridge(solver="sag", max_iter=1, tol=1e-12, random_state=random_state)
+        return models
+
+    monkeypatch.setattr(baseline, "_regression_models", with_one_iteration)
+
+    models = by_name(evaluate(regression_frame(), task_type="regression"))
+
+    assert models["ridge"].note is not None
+    assert models["ridge"].scores
+
+
+def test_the_note_round_trips_through_json(slow_logistic_regression):
+    result = evaluate(classification_frame())
+
+    assert BaselineResult.model_validate_json(result.model_dump_json()) == result
+    assert by_name(result)["logistic_regression"].note is not None
+
+
+def test_a_model_without_a_note_has_none():
+    assert all(model.note is None for model in evaluate(classification_frame()).models)
 
 
 # --- determinism ---

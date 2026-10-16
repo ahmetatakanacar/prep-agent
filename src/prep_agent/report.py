@@ -11,7 +11,12 @@ from typing import TYPE_CHECKING
 from jinja2 import Environment, PackageLoader, StrictUndefined
 
 from prep_agent.agent import AgentTrace
-from prep_agent.baseline import SMALL_TRAIN_ROWS, BaselineResult, metric_label
+from prep_agent.baseline import (
+    NOT_CONVERGED_NOTE,
+    SMALL_TRAIN_ROWS,
+    BaselineResult,
+    metric_label,
+)
 from prep_agent.executor import ExecutionResult
 from prep_agent.llm.base import format_usage
 from prep_agent.plan import (
@@ -98,6 +103,8 @@ def render_report(
         result_issues=result_issues,
         baseline=None if failed else baseline,
         baseline_table=_baseline_table(baseline) if baseline is not None else None,
+        not_converged=baseline is not None
+        and any(model.note == NOT_CONVERGED_NOTE for model in baseline.models),
         small_data=baseline is not None
         and baseline.skipped_reason is None
         and baseline.n_rows < small_train_rows,
@@ -165,7 +172,7 @@ def _baseline_table(baseline: BaselineResult) -> dict | None:
         return None
     rows = [
         {
-            "name": model.name,
+            "name": f"{model.name} ({model.note})" if model.note else model.name,
             "cells": [
                 f"{model.scores[metric].mean:.4f} ± {model.scores[metric].std:.4f}"
                 for metric in baseline.metrics
