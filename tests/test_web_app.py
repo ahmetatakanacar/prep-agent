@@ -121,7 +121,45 @@ def test_plan_request_is_validated(demo):
 
 def test_demo_mode_refuses_a_target_its_script_does_not_cover(demo):
     session_id = open_sample(demo)
-    assert start(demo, session_id, target="plan").status_code == 422
+
+    response = start(demo, session_id, target="plan")
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "demo_unsupported"
+    assert response.json()["params"] == {"target": "plan", "demo_target": "churned"}
+    assert "churned" in response.json()["detail"]
+
+
+def test_demo_mode_refuses_a_file_its_script_does_not_cover(demo):
+    csv = "a,b\n" + "".join(f"{i},{i % 2}\n" for i in range(30))
+    session_id = demo.post("/api/sessions", files={"file": ("other.csv", csv.encode())}).json()[
+        "id"
+    ]
+
+    response = start(demo, session_id)
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "demo_unsupported_file"
+    assert "customer_id" in response.json()["params"]["columns"]
+
+
+def test_config_names_the_only_target_of_the_demo_script(demo):
+    assert demo.get("/api/config").json()["demo_target"] == "churned"
+    with make_client() as live:
+        assert live.get("/api/config").json()["demo_target"] is None
+
+
+@pytest.mark.parametrize(
+    "key", ["api.demo_unsupported", "api.demo_unsupported_file", "brief.demo_target_note"]
+)
+def test_the_demo_texts_are_translated_and_used_by_the_page(key):
+    texts = (STATIC / "i18n.js").read_text(encoding="utf-8")
+    page = (STATIC / "app.js").read_text(encoding="utf-8")
+
+    assert texts.count(f'"{key}":') == 2, "one entry for English and one for Turkish"
+    if key.startswith("brief"):
+        assert f't("{key}"' in page
+        assert "demo_target" in page
 
 
 def test_question_answer_flow_ends_in_a_corrected_plan(demo):

@@ -116,6 +116,7 @@ window.I18N = {
     "brief.target": "Target column (optional)",
     "brief.target_auto": "Let the agent decide (it may ask)",
     "brief.target_hint": "Leave it open and the agent will pick one, or ask you.",
+    "brief.demo_target_note": "Demo mode: the scripted planner only covers the target “{target}”, so no other column is offered.",
     "brief.family": "Model family (optional)",
     "fam.undecided": "Not decided",
     "fam.tree": "Tree",
@@ -201,6 +202,10 @@ window.I18N = {
     "api.no_run": "This session has no finished run.",
     "api.no_file": "There is no such file in the run folder.",
     "api.cross_origin": "The server refused a request from another origin.",
+    "api.demo_unsupported":
+      "The demo script is written for the target “{demo_target}” only, not “{target}”. Choose “{demo_target}” or leave the target open.",
+    "api.demo_unsupported_file":
+      "The demo script is written for tests/fixtures/customers.csv; this file lacks the columns {columns}.",
     "loaded.announce": "{file} loaded: {rows}, {columns}.",
     "plan_ready.announce": "The preparation is ready.",
     "failed.announce": "The run failed.",
@@ -482,6 +487,7 @@ window.I18N = {
     "brief.target": "Hedef sütun (isteğe bağlı)",
     "brief.target_auto": "Agent karar versin (sorabilir)",
     "brief.target_hint": "Boş bırakırsan agent birini seçer ya da sana sorar.",
+    "brief.demo_target_note": "Demo modu: betikli planner yalnızca “{target}” hedefini kapsıyor, bu yüzden başka sütun sunulmuyor.",
     "brief.family": "Model ailesi (isteğe bağlı)",
     "fam.undecided": "Belirsiz",
     "fam.tree": "Ağaç",
@@ -569,6 +575,10 @@ window.I18N = {
     "api.no_run": "Bu oturumda tamamlanmış bir run yok.",
     "api.no_file": "Run klasöründe böyle bir dosya yok.",
     "api.cross_origin": "Sunucu başka bir kaynaktan gelen isteği reddetti.",
+    "api.demo_unsupported":
+      "Demo betiği yalnızca “{demo_target}” hedefi için yazıldı, “{target}” için değil. “{demo_target}” seç ya da hedefi açık bırak.",
+    "api.demo_unsupported_file":
+      "Demo betiği tests/fixtures/customers.csv için yazıldı; bu dosyada {columns} sütunları yok.",
     "loaded.announce": "{file} yüklendi: {rows}, {columns}.",
     "plan_ready.announce": "Hazırlık tamam.",
     "failed.announce": "Run başarısız oldu.",

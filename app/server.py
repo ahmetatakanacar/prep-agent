@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.config import DEFAULT_MAX_UPLOAD_MB, DEFAULT_PORT, HOST, Settings
-from app.demo import DemoError, DemoLLM
+from app.demo import TARGET, DemoError, DemoLLM
 from app.results import DOWNLOADABLE_SUFFIXES, build_result
 from app.samples import find_sample, list_samples
 from app.sessions import (
@@ -157,6 +157,7 @@ def create_app(settings: Settings | None = None, llm_factory: LLMFactory | None 
     def config() -> dict:
         return {
             "fake": settings.fake,
+            "demo_target": TARGET if settings.fake else None,
             "max_upload_bytes": settings.max_upload_bytes,
             "samples": [sample.to_json() for sample in list_samples(settings.fake)],
         }
@@ -226,7 +227,7 @@ def create_app(settings: Settings | None = None, llm_factory: LLMFactory | None 
         try:
             llm = make_llm(session, request)
         except DemoError as exc:
-            raise ApiError(422, "demo_unsupported", str(exc)) from None
+            raise ApiError(422, exc.code, str(exc), **exc.params) from None
         except LLMError as exc:
             raise ApiError(400, "llm_unavailable", str(exc)) from None
         try:

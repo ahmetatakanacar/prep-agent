@@ -112,7 +112,15 @@ TEXTS = {
 
 
 class DemoError(ValueError):
-    """The demo script cannot serve this dataset or this form."""
+    """The demo script cannot serve this dataset or this form.
+
+    `code` and `params` let the interface word the error in its own language.
+    """
+
+    def __init__(self, message: str, code: str, **params: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.params = params
 
 
 class DemoScriptLimit(LLMError):
@@ -134,10 +142,17 @@ class DemoLLM:
         if missing:
             raise DemoError(
                 "the demo script is written for tests/fixtures/customers.csv; this file lacks "
-                f"the columns {', '.join(sorted(missing))}"
+                f"the columns {', '.join(sorted(missing))}",
+                "demo_unsupported_file",
+                columns=", ".join(sorted(missing)),
             )
         if target not in (None, TARGET):
-            raise DemoError(f"the demo script is written for the target {TARGET!r}, not {target!r}")
+            raise DemoError(
+                f"the demo script is written for the target {TARGET!r}, not {target!r}",
+                "demo_unsupported",
+                target=target,
+                demo_target=TARGET,
+            )
         self._text = TEXTS.get(lang, TEXTS["en"])
         self._profile = profile
         self._target_given = target is not None

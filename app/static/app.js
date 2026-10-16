@@ -626,11 +626,13 @@ function renderBriefSheet(snap) {
   goal.value = b.goal;
   const goalError = h("p", { class: "hint field-error", id: "goal-error", role: "alert" });
 
+  const demoTarget = state.config.demo_target;
   const target = h(
     "select",
     { class: "select", id: "target", name: "target", onchange: (event) => markTarget(event.target.value) },
     h("option", { value: "" }, t("brief.target_auto")),
-    snap.profile.columns.map((c) => h("option", { value: c.name }, c.name)),
+    // The demo script covers one target, so the others are not offered.
+    snap.profile.columns.filter((c) => !demoTarget || c.name === demoTarget).map((c) => h("option", { value: c.name }, c.name)),
   );
   target.value = snap.profile.columns.some((c) => c.name === b.target) ? b.target : "";
 
@@ -664,7 +666,7 @@ function renderBriefSheet(snap) {
       "div",
       {},
       h("div", { class: "field" }, h("label", { class: "label", for: "goal" }, t("brief.goal")), goal, h("p", { class: "hint", id: "goal-hint" }, t("brief.goal_hint")), goalError),
-      h("div", { class: "field" }, h("label", { class: "label", for: "target" }, t("brief.target")), target, h("p", { class: "hint" }, t("brief.target_hint"))),
+      h("div", { class: "field" }, h("label", { class: "label", for: "target" }, t("brief.target")), target, h("p", { class: "hint" }, t("brief.target_hint")), demoTarget ? h("p", { class: "hint" }, t("brief.demo_target_note", { target: demoTarget })) : null),
       h("fieldset", { class: "field" }, h("legend", { class: "label" }, t("brief.family")), h("div", { class: "seg", role: "presentation" }, familyInputs), familyHint),
       lang === "tr" && hasText("brief.langnote") ? h("p", { class: "hint note-line" }, t("brief.langnote")) : null,
       h("div", { class: "actions" }, h("button", { type: "submit", class: "btn primary", id: "plan-button" }, t("brief.plan")), h("span", { class: "keyhints" }, h("kbd", {}, "Ctrl"), " + ", h("kbd", {}, "Enter"))),
