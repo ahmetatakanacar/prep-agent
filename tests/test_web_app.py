@@ -315,6 +315,22 @@ def test_the_result_has_token_counts_and_no_cost():
     assert llm["calls"][0]["usage"]["cached_input_tokens"] == 400
 
 
+@pytest.mark.parametrize("lang", ["en", "tr"])
+def test_the_demo_ends_with_a_plan_that_has_no_issues_at_all(demo, lang):
+    session_id = open_sample(demo)
+    assert start(demo, session_id, lang=lang).status_code == 202
+    wait_for(demo, session_id, {"waiting"})
+    answers = {"target": "churned", "signup_date": "Drop it" if lang == "en" else "Düşür"}
+    assert answer(demo, session_id, answers).status_code == 200
+    assert wait_for(demo, session_id, FINISHED)["status"] == "done"
+
+    result = demo.get(f"/api/sessions/{session_id}/result").json()
+
+    assert result["issues"] == []
+    # The corrected plan follows the rule the agent follows: no step the data does not need.
+    assert "drop_missing_target" not in [step["op"] for step in result["plan"]["steps"]]
+
+
 def baseline_with_a_note() -> BaselineResult:
     score = {"accuracy": BaselineScore(mean=0.8, std=0.1)}
     return BaselineResult(

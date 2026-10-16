@@ -276,7 +276,6 @@ def _corrected_steps(text: dict, *, drop_date: bool, scale: bool) -> list[dict]:
     steps = [
         _drop_step(text, drop_date=drop_date, ghost=False),
         fixed["dedupe"],
-        fixed["missing"],
         fixed["split"],
         _impute_step(text, early=False),
         fixed["encode"],
