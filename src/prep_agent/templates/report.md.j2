@@ -16,6 +16,8 @@
 - **Target:** {{ plan.target | cell }} ({{ plan.task_type }}, model family {{ plan.model_family }})
 {% endif %}
 - **Status:** {{ info.status }}
+
+Text the user wrote (the goal and answers) and the planner's questions and reasons are kept in the language they were written in; everything else in this report is in English.
 {% if failed %}
 
 ## Failure

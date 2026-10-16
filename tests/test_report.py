@@ -591,3 +591,21 @@ def test_a_run_without_a_plan_has_no_reproduce_section(executed):
     report = render(executed, info=make_info(status="failed", error="boom"), plan=None, result=None)
 
     assert "## Reproduce" not in report
+
+
+LANGUAGE_NOTE = (
+    "Text the user wrote (the goal and answers) and the planner's questions and reasons are kept "
+    "in the language they were written in; everything else in this report is in English."
+)
+
+
+def test_the_report_says_which_texts_keep_their_language_right_under_the_header_list(executed):
+    with_trace = render(executed, trace=make_trace(), baseline=make_baseline())
+    without_llm = render(executed, baseline=make_baseline())
+    failed = render(executed, info=make_info(status="failed"), result=None, plan=None)
+
+    for report in (with_trace, without_llm, failed):
+        assert report.count(LANGUAGE_NOTE) == 1
+        status_line = next(line for line in report.splitlines() if line.startswith("- **Status:**"))
+        lines = report.splitlines()
+        assert lines[lines.index(status_line) + 1 :][:2] == ["", LANGUAGE_NOTE]

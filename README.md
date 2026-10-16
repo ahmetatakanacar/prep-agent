@@ -185,6 +185,7 @@ Possible next steps, roughly in the order they would change the results:
 - Ops for the gaps above: special values to missing, ordinal encoding in a given order, text to number, and a few text features.
 - Date parsing, so that a date column can become year, month and weekday instead of being dropped.
 - Detection of duplicated columns in the profile.
+- A localised report (EN/TR) following the interface language.
 - More LLM adapters behind the existing `LLMClient` interface.
 - More benchmark datasets and repeats of the second model.
 
