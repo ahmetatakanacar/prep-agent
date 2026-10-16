@@ -194,6 +194,16 @@ def test_unknown_target_is_reported_before_any_llm_call(df):
     assert llm.calls == []
 
 
+def test_a_target_without_any_value_is_reported_before_any_llm_call(df):
+    df = df.assign(empty=None)
+    llm = FakeLLM([])
+
+    with pytest.raises(ProfilerError, match="no values"):
+        run_agent(df, GOAL, llm, Asker(), target="empty")
+
+    assert llm.calls == []
+
+
 def test_the_csv_options_are_kept_on_the_profile_of_the_result(df):
     options = CsvOptions(sep=";", decimal=",", encoding="cp1254")
 

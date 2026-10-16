@@ -201,18 +201,28 @@ class DatasetProfile(BaseModel):
     csv: CsvOptions | None = None
 
 
-TARGET_CONSTANT_MESSAGE = "the target has only one value, so there is nothing to predict"
+def constant_target_message(column: ColumnProfile) -> str | None:
+    """Why a target column cannot be predicted, or None if it has two or more distinct values.
+
+    Missing values do not count as a value.
+    """
+    if column.n_unique == 0:
+        return "the target has no values, so there is nothing to predict"
+    if column.n_unique == 1:
+        return "the target has only one value, so there is nothing to predict"
+    return None
 
 
 def require_varying_target(profile: DatasetProfile) -> None:
-    """Raise `ProfilerError` if the target the user named has a single distinct value.
+    """Raise `ProfilerError` if the target the user named has at most one distinct value.
 
-    Missing values do not count as a value. Callers use this on a target that came from the user,
-    so that no planner call is spent on a task that cannot work.
+    Callers use this on a target that came from the user, so that no planner call is spent on a
+    task that cannot work.
     """
     target = next((c for c in profile.columns if c.name == profile.target), None)
-    if target is not None and target.n_unique == 1:
-        raise ProfilerError(f"{TARGET_CONSTANT_MESSAGE}: column {target.name!r}")
+    message = constant_target_message(target) if target is not None else None
+    if message is not None:
+        raise ProfilerError(f"{message}: column {target.name!r}")
 
 
 @dataclass(frozen=True)

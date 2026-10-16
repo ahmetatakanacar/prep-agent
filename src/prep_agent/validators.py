@@ -52,10 +52,10 @@ from prep_agent.plan import (
 )
 from prep_agent.profiler import (
     DEFAULT_CONFIG,
-    TARGET_CONSTANT_MESSAGE,
     ColumnProfile,
     DatasetProfile,
     InferredType,
+    constant_target_message,
 )
 
 Severity = Literal["error", "warning"]
@@ -303,10 +303,11 @@ class _Validation:
 
     def _check_target_constant(self) -> None:
         target = next((c for c in self.profile.columns if c.name == self.plan.target), None)
-        if target is not None and target.n_unique == 1:
+        message = constant_target_message(target) if target is not None else None
+        if message is not None:
             self._add(
                 "target_constant",
-                f"{TARGET_CONSTANT_MESSAGE}; set 'target' to a column that varies.",
+                f"{message}; set 'target' to a column that varies.",
                 column=target.name,
             )
 

@@ -211,6 +211,19 @@ def test_missing_values_do_not_count_as_a_second_target_value():
     assert issue.column == "churn"
 
 
+def test_a_target_without_any_value_is_an_error_with_its_own_message():
+    frame = make_frame()
+    frame["churn"] = None
+    profile = profile_dataframe(frame, target="churn")
+
+    [issue] = find(validate(*VALID_STEPS, profile=profile), "target_constant")
+
+    assert issue.severity == "error"
+    assert issue.column == "churn"
+    assert "the target has no values, so there is nothing to predict" in issue.message
+    assert "only one value" not in issue.message
+
+
 def test_a_target_with_two_values_is_not_constant():
     profile = profile_dataframe(make_frame(), target="flag")
 
