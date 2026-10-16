@@ -151,7 +151,7 @@ It listens on 127.0.0.1 only, at http://127.0.0.1:8000 (`--port` changes it) and
 
 ## Benchmark
 
-`benchmarks/` runs the agent on nine OpenML datasets and compares it with a hand-reviewed reference plan and a rule-based naive plan, all scored by the same baseline. In two runs (gpt-6-luna with 3 repeats, gpt-6.1-sol with 1) the agent ended with a valid executed plan in 35 of 36 runs and never kept a column that gives the target away, a kind of leakage the validator's rules cannot see and that makes the naive plan look far better than it is. On titanic the agent dropped `boat` and `body` by itself; on employee-salaries it asked the user about the 2016 pay columns in every run and recommended dropping them, and the benchmark used that recommended answer, so asking instead of guessing when a case is unclear is designed behaviour and what is measured there is whether the recommendation is right. Its scores were within noise of the reference plans on 8 of 9 datasets for both models; careful preparation changed the score little compared with sensible defaults, and the main difference was leakage. A run costs about $0.002 with gpt-6-luna and $0.02 with gpt-6.1-sol. There is one repeat of gpt-6.1-sol, nine datasets, and the two runs used different versions of the code; see [docs/benchmark.md](docs/benchmark.md) for the method, tables, limitations and how to repeat it.
+`benchmarks/` runs the agent on nine OpenML datasets and compares it with a hand-reviewed reference plan and a rule-based naive plan, all scored by the same baseline. In the final run (gpt-6-luna, 3 repeats per dataset) all 27 agent runs ended with a valid executed plan and none kept a column that gives the target away, which the validator's rules cannot see and which makes the naive plan look far better than it is. The agent's scores were within noise of the reference plans on 8 of 9 datasets and slightly lower on bike-sharing-demand, and careful preparation changed the score little compared with sensible defaults; the main difference was leakage. A run costs about $0.0017 with gpt-6-luna (prices from `benchmarks/prices.yaml`, which can change); the results come from one model and cross-validation on the train split, and [docs/benchmark.md](docs/benchmark.md) has the method, tables, limitations and how to repeat it.
 
 ## Validation rules
 
@@ -176,7 +176,7 @@ The checks that decide what a plan or a result may do live in [src/prep_agent/va
 - Tabular data only: CSV files that fit in memory, classification and regression. No text or NLP data sets.
 - A very long column name (about 80 characters or more) can make a line of the generated `pipeline.py` longer than the lint limit, so `ruff check` may report E501 for it. The script still runs.
 - PII detection relies on a list of column-name parts and on email and phone value patterns. Email addresses or phone numbers inside free text are not detected.
-- The benchmark covers nine datasets and one repeat of the more expensive model; see its limitations.
+- The benchmark covers nine datasets and one model (gpt-6-luna, 3 repeats); see its limitations.
 
 ## Roadmap
 
@@ -187,7 +187,7 @@ Possible next steps, roughly in the order they would change the results:
 - Detection of duplicated columns in the profile.
 - A localised report (EN/TR) following the interface language.
 - More LLM adapters behind the existing `LLMClient` interface.
-- More benchmark datasets and repeats of the second model.
+- More benchmark datasets and models.
 
 Out of scope: model selection or AutoML, a database, multi-user features.
 

@@ -1,10 +1,10 @@
 # Benchmark summary
 
-- Started: 2026-10-15 05:11 UTC, finished: 2026-10-15 05:35 UTC
+- Started: 2026-10-16 11:52 UTC, finished: 2026-10-16 12:17 UTC
 - Datasets: titanic, credit-g, diabetes, telco-customer-churn, adult, bank-marketing, house-prices, employee-salaries, bike-sharing-demand
 - Models: gpt-6-luna
 - Repeats: 3 per agent run; the reference and naive plans are deterministic and run once
-- Estimated maximum cost approved (USD): gpt-6-luna 0.33
+- Estimated maximum cost approved (USD): gpt-6-luna 0.76
 
 ## Scores
 
@@ -14,30 +14,30 @@ Each cell is the linear model / the random forest, as the mean over the cross-va
 
 | dataset | reference | naive | agent: gpt-6-luna |
 | --- | --- | --- | --- |
-| titanic | 0.758 / 0.781 | 0.955 / 0.945 † | 0.776 / 0.779 |
-| credit-g | 0.694 / 0.663 | 0.686 / 0.677 | 0.706 / 0.661 |
+| titanic | 0.758 / 0.781 | 0.955 / 0.945 † | 0.769 / 0.779 |
+| credit-g | 0.694 / 0.663 | 0.686 / 0.677 | 0.706 / 0.667 |
 | diabetes | 0.752 / 0.727 | 0.753 / 0.728 | 0.752 / 0.727 |
-| telco-customer-churn | 0.729 / 0.700 | 0.730 / 0.691 | 0.732 / 0.701 (2/3 ok) |
+| telco-customer-churn | 0.729 / 0.700 | 0.730 / 0.691 | 0.731 / 0.698 |
 | adult | 0.785 / 0.780 | 0.766 / 0.785 | 0.782 / 0.785 |
-| bank-marketing | 0.601 / 0.614 | 0.601 / 0.614 | 0.605 / 0.616 |
+| bank-marketing | 0.601 / 0.614 | 0.601 / 0.614 | 0.605 / 0.614 |
 
 ### roc_auc ↑
 
 | dataset | reference | naive | agent: gpt-6-luna |
 | --- | --- | --- | --- |
-| titanic | 0.834 / 0.836 | 0.981 / 0.974 † | 0.847 / 0.845 |
-| credit-g | 0.788 / 0.780 | 0.790 / 0.790 | 0.794 / 0.776 |
+| titanic | 0.834 / 0.836 | 0.981 / 0.974 † | 0.835 / 0.840 |
+| credit-g | 0.788 / 0.780 | 0.790 / 0.790 | 0.794 / 0.778 |
 | diabetes | 0.834 / 0.812 | 0.832 / 0.811 | 0.834 / 0.812 |
-| telco-customer-churn | 0.845 / 0.812 | 0.846 / 0.812 | 0.844 / 0.815 (2/3 ok) |
+| telco-customer-churn | 0.845 / 0.812 | 0.846 / 0.812 | 0.844 / 0.814 |
 | adult | 0.907 / 0.894 | 0.885 / 0.900 | 0.905 / 0.902 |
-| bank-marketing | 0.742 / 0.711 | 0.742 / 0.713 | 0.749 / 0.721 |
+| bank-marketing | 0.742 / 0.711 | 0.742 / 0.713 | 0.749 / 0.720 |
 
 ### r2 ↑
 
 | dataset | reference | naive | agent: gpt-6-luna |
 | --- | --- | --- | --- |
-| house-prices | 0.812 / 0.841 | 0.813 / 0.842 | 0.812 / 0.841 |
-| employee-salaries | 0.812 / 0.792 | 0.937 / 0.972 † | 0.836 / 0.788 |
+| house-prices | 0.812 / 0.841 | 0.813 / 0.842 | 0.815 / 0.843 |
+| employee-salaries | 0.812 / 0.792 | 0.937 / 0.972 † | 0.859 / 0.812 |
 | bike-sharing-demand | 0.683 / 0.919 | 0.396 / 0.941 | 0.686 / 0.915 |
 
 † the plan kept a column that gives the target away (`leaky_columns` in datasets.yaml). Its score is inflated by leakage and cannot be compared with the others.
@@ -57,14 +57,14 @@ Difference in the random forest's score on the main metric (macro F1 for classif
 
 | dataset | metric | agent: gpt-6-luna |
 | --- | --- | --- |
-| titanic | f1_macro | -0.167 † |
-| credit-g | f1_macro | -0.016 ≈ |
+| titanic | f1_macro | -0.166 † |
+| credit-g | f1_macro | -0.010 ≈ |
 | diabetes | f1_macro | -0.001 ≈ |
-| telco-customer-churn | f1_macro | +0.010 ≈ |
+| telco-customer-churn | f1_macro | +0.007 ≈ |
 | adult | f1_macro | -0.000 ≈ |
-| bank-marketing | f1_macro | +0.002 ≈ |
-| house-prices | r2 | -0.001 ≈ |
-| employee-salaries | r2 | -0.184 † |
+| bank-marketing | f1_macro | +0.001 ≈ |
+| house-prices | r2 | +0.001 ≈ |
+| employee-salaries | r2 | -0.159 † |
 | bike-sharing-demand | r2 | -0.026 |
 | better / worse / within noise |  | 0 / 1 / 6 (2 excluded †) |
 
@@ -75,13 +75,13 @@ Difference in the random forest's score on the main metric (macro F1 for classif
 | dataset | metric | agent: gpt-6-luna |
 | --- | --- | --- |
 | titanic | f1_macro | -0.002 ≈ |
-| credit-g | f1_macro | -0.002 ≈ |
+| credit-g | f1_macro | +0.004 ≈ |
 | diabetes | f1_macro | +0.000 ≈ |
-| telco-customer-churn | f1_macro | +0.001 ≈ |
+| telco-customer-churn | f1_macro | -0.002 ≈ |
 | adult | f1_macro | +0.004 ≈ |
-| bank-marketing | f1_macro | +0.002 ≈ |
-| house-prices | r2 | +0.001 ≈ |
-| employee-salaries | r2 | -0.005 ≈ |
+| bank-marketing | f1_macro | -0.000 ≈ |
+| house-prices | r2 | +0.002 ≈ |
+| employee-salaries | r2 | +0.020 ≈ |
 | bike-sharing-demand | r2 | -0.004 |
 | better / worse / within noise |  | 0 / 1 / 8 |
 
@@ -92,30 +92,31 @@ Columns the final plan of each successful agent run treats differently from the 
 | dataset | agent run | dropped by the reference only | dropped by the agent only | encoded or cast differently (reference vs agent) |
 | --- | --- | --- | --- | --- |
 | titanic | gpt-6-luna #1 | – | – | pclass (none vs cast + onehot) |
-| titanic | gpt-6-luna #2 | cabin, ticket | – | pclass (none vs cast + onehot) |
-| titanic | gpt-6-luna #3 | cabin, home.dest, ticket | – | embarked (onehot vs onehot(30)), pclass (none vs cast + onehot(30)), sex (onehot vs onehot(30)) |
+| titanic | gpt-6-luna #2 | – | – | pclass (none vs cast + onehot) |
+| titanic | gpt-6-luna #3 | – | – | pclass (none vs cast + onehot) |
 | credit-g | gpt-6-luna #1 | – | – | installment_commitment (none vs cast + onehot), residence_since (none vs cast + onehot) |
-| credit-g | gpt-6-luna #2 | – | – | – |
-| credit-g | gpt-6-luna #3 | – | – | installment_commitment (none vs cast + onehot), residence_since (none vs cast + onehot) |
+| credit-g | gpt-6-luna #2 | – | – | installment_commitment (none vs cast + onehot), residence_since (none vs cast + onehot) |
+| credit-g | gpt-6-luna #3 | – | – | – |
 | diabetes | gpt-6-luna #1 | – | – | – |
 | diabetes | gpt-6-luna #2 | – | – | – |
 | diabetes | gpt-6-luna #3 | – | – | – |
-| telco-customer-churn | gpt-6-luna #1 | – | – | SeniorCitizen (none vs cast + onehot) |
-| telco-customer-churn | gpt-6-luna #3 | – | – | – |
+| telco-customer-churn | gpt-6-luna #1 | TotalCharges | – | Contract (onehot vs onehot(50)), Dependents (onehot vs onehot(50)), DeviceProtection (onehot vs onehot(50)), InternetService (onehot vs onehot(50)), MultipleLines (onehot vs onehot(50)), OnlineBackup (onehot vs onehot(50)), OnlineSecurity (onehot vs onehot(50)), PaperlessBilling (onehot vs onehot(50)), Partner (onehot vs onehot(50)), PaymentMethod (onehot vs onehot(50)), PhoneService (onehot vs onehot(50)), SeniorCitizen (none vs cast + onehot(50)), StreamingMovies (onehot vs onehot(50)), StreamingTV (onehot vs onehot(50)), TechSupport (onehot vs onehot(50)), gender (onehot vs onehot(50)) |
+| telco-customer-churn | gpt-6-luna #2 | – | – | SeniorCitizen (none vs cast + onehot) |
+| telco-customer-churn | gpt-6-luna #3 | – | – | SeniorCitizen (none vs cast + onehot) |
 | adult | gpt-6-luna #1 | education, fnlwgt | – | native-country (onehot(10) vs onehot) |
 | adult | gpt-6-luna #2 | education, fnlwgt | – | native-country (onehot(10) vs onehot) |
 | adult | gpt-6-luna #3 | education, fnlwgt | – | native-country (onehot(10) vs onehot) |
 | bank-marketing | gpt-6-luna #1 | – | – | – |
 | bank-marketing | gpt-6-luna #2 | – | – | – |
 | bank-marketing | gpt-6-luna #3 | – | – | – |
-| house-prices | gpt-6-luna #1 | Alley, GarageYrBlt, MiscFeature, PoolQC, Utilities | – | MoSold (none vs cast + onehot) |
-| house-prices | gpt-6-luna #2 | Alley, GarageYrBlt, MiscFeature, PoolQC, Utilities | – | MoSold (none vs cast + onehot) |
-| house-prices | gpt-6-luna #3 | Alley, GarageYrBlt, MiscFeature, PoolQC, Utilities | – | MoSold (none vs cast + onehot) |
+| house-prices | gpt-6-luna #1 | Alley, GarageYrBlt, MiscFeature, PoolQC, Utilities | MoSold, SaleCondition, SaleType, YrSold | – |
+| house-prices | gpt-6-luna #2 | Alley, GarageYrBlt, MiscFeature, PoolQC, Utilities | MoSold, SaleCondition, SaleType, YrSold | OverallCond (none vs cast + onehot), OverallQual (none vs cast + onehot) |
+| house-prices | gpt-6-luna #3 | Alley, GarageYrBlt, MiscFeature, PoolQC, Utilities | MoSold, SaleCondition, SaleType, YrSold | OverallCond (none vs cast + onehot), OverallQual (none vs cast + onehot) |
 | employee-salaries | gpt-6-luna #1 | department_name | 2016_overtime_pay | division (onehot(50) vs onehot), employee_position_title (onehot(100) vs onehot), underfilled_job_title (onehot(10) vs onehot) |
-| employee-salaries | gpt-6-luna #2 | – | 2016_overtime_pay | assignment_category (onehot vs onehot(50)), department (onehot vs onehot(50)), employee_position_title (onehot(100) vs onehot(50)), gender (onehot vs onehot(50)), underfilled_job_title (onehot(10) vs onehot(50)) |
-| employee-salaries | gpt-6-luna #3 | – | 2016_overtime_pay, underfilled_job_title | division (onehot(50) vs onehot), employee_position_title (onehot(100) vs onehot) |
+| employee-salaries | gpt-6-luna #2 | – | 2016_overtime_pay, gender, underfilled_job_title | assignment_category (onehot vs onehot(100)), department (onehot vs onehot(100)), division (onehot(50) vs onehot(100)) |
+| employee-salaries | gpt-6-luna #3 | – | 2016_overtime_pay | division (onehot(50) vs onehot), employee_position_title (onehot(100) vs onehot), underfilled_job_title (onehot(10) vs onehot) |
 | bike-sharing-demand | gpt-6-luna #1 | feel_temp | – | – |
-| bike-sharing-demand | gpt-6-luna #2 | feel_temp | – | year (none vs cast + onehot) |
+| bike-sharing-demand | gpt-6-luna #2 | feel_temp | – | – |
 | bike-sharing-demand | gpt-6-luna #3 | feel_temp | – | – |
 
 ## Agent repeats
@@ -124,21 +125,21 @@ Per dataset and model, over the repeats of the agent: how many runs succeeded, h
 
 | dataset | model | successful runs | leaky columns caught | score std across runs |
 | --- | --- | --- | --- | --- |
-| titanic | gpt-6-luna | 3 of 3 (100%) | 6 of 6 (100%) | 0.011 |
-| credit-g | gpt-6-luna | 3 of 3 (100%) | – | 0.002 |
+| titanic | gpt-6-luna | 3 of 3 (100%) | 6 of 6 (100%) | 0.005 |
+| credit-g | gpt-6-luna | 3 of 3 (100%) | – | 0.009 |
 | diabetes | gpt-6-luna | 3 of 3 (100%) | – | 0.000 |
-| telco-customer-churn | gpt-6-luna | 2 of 3 (67%) | – | 0.001 |
+| telco-customer-churn | gpt-6-luna | 3 of 3 (100%) | – | 0.002 |
 | adult | gpt-6-luna | 3 of 3 (100%) | – | 0.000 |
-| bank-marketing | gpt-6-luna | 3 of 3 (100%) | – | 0.001 |
-| house-prices | gpt-6-luna | 3 of 3 (100%) | – | 0.002 |
-| employee-salaries | gpt-6-luna | 3 of 3 (100%) | 3 of 3 (100%) | 0.055 |
+| bank-marketing | gpt-6-luna | 3 of 3 (100%) | – | 0.000 |
+| house-prices | gpt-6-luna | 3 of 3 (100%) | – | 0.000 |
+| employee-salaries | gpt-6-luna | 3 of 3 (100%) | 3 of 3 (100%) | 0.024 |
 | bike-sharing-demand | gpt-6-luna | 3 of 3 (100%) | – | 0.000 |
 
 ## Agent runs
 
-| model | runs | ok | revisions | questions | input tokens | output tokens | cost (USD) | plan seconds |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| gpt-6-luna | 27 | 26 (96%) | 0.2 | 0.5 | 9462 | 1617 | 0.0456+ (1 unknown) | 24.6 |
+| model | runs | ok | revisions | schema retries | questions | input tokens | output tokens | cost (USD) | plan seconds |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| gpt-6-luna | 27 | 27 (100%) | 0.1 | 0.0 | 1.2 | 13632 | 1921 | 0.0449 | 25.5 |
 
 ## Most frequent issue codes
 
@@ -147,34 +148,29 @@ Per dataset and model, over the repeats of the agent: how many runs succeeded, h
 | code | runs | share of runs |
 | --- | --- | --- |
 | encode_numeric | 3 | 11% |
-| stateful_before_split | 2 | 7% |
+| unencoded_column_remains | 1 | 4% |
 
 ### Final-plan warnings of agent runs
 
-| code | runs | share of runs |
-| --- | --- | --- |
-| non_numeric_output | 1 | 4% |
-| onehot_before_impute | 1 | 4% |
+No final-plan warnings.
 
 ### Warnings of reference and naive plans
 
 | dataset | reference | naive |
 | --- | --- | --- |
-| titanic | – | – |
+| titanic | – | personal_data_kept |
 | credit-g | – | – |
 | diabetes | – | – |
 | telco-customer-churn | train_test_overlap | train_test_overlap |
 | adult | – | train_test_overlap |
 | bank-marketing | train_test_overlap | train_test_overlap |
 | house-prices | – | – |
-| employee-salaries | – | – |
+| employee-salaries | – | personal_data_kept |
 | bike-sharing-demand | train_test_overlap | train_test_overlap |
 
 ## Failures
 
-| dataset | method | run | status | reason |
-| --- | --- | --- | --- | --- |
-| telco-customer-churn | agent: gpt-6-luna | 2 | failed | the LLM call failed: model output does not match PlannerResponse: 1 validation error for PlannerResponse questions.0 Value error, recommended must be one of options [type=value_error, input_value={'i… |
+No failures.
 
 ## Notes
 
@@ -183,3 +179,4 @@ Per dataset and model, over the repeats of the agent: how many runs succeeded, h
 - The reference plans are hand-written and were reviewed by a human; see reference/README.md for the decisions behind them.
 - The naive plan is rule-based: drop identifier and constant columns, split, median and most-frequent imputation, one-hot encoding of every non-numeric column.
 - Cost is the token use the provider reported times the prices in prices.yaml; n/a means the provider reported no usage.
+- Cost of gpt-6-luna: cached input and cache writes are priced separately.

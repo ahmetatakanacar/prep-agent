@@ -1,8 +1,8 @@
 # Benchmark
 
-The benchmark measures the agent on nine real datasets against two other plans for the same data. This page describes the method, the results of the two runs kept in the repository, what they do and do not show, and how to repeat them.
+The benchmark measures the agent on nine real datasets against two other plans for the same data. This page describes the method, the result of the run kept in the repository, what it does and does not show, and how to repeat it.
 
-Short version: the agent ended with a valid, executed plan in 35 of 36 runs, never kept a column that gives the target away (including ones the validator's rules cannot see; finding (a) says how), and scored within noise of the hand-reviewed reference plan on 8 of 9 datasets for both models. It does not prepare the data much better than a sensible rule-based plan; what it adds is that it avoids leakage and still ends with a validated plan, without a person writing one.
+Short version: in the final run (gpt-6-luna, 9 datasets × 3 repeats) all 27 agent runs ended with a valid, executed plan, none needed a schema retry, and no final plan had a warning. The agent never kept a column that gives the target away, including ones the validator's rules cannot see. Its random forest scored within noise of the hand-reviewed reference plan on 8 of 9 datasets and was slightly worse on bike-sharing-demand (R² 0.004 lower). It does not prepare the data much better than a sensible rule-based plan; what it adds is that it avoids leakage and still ends with a validated plan, without a person writing one.
 
 ## Method
 
@@ -36,7 +36,7 @@ Every dataset is prepared by three kinds of plan. All three are validated and ex
 
 Each plan is scored with the baseline of this project: a logistic regression and a random forest for classification (ridge and a random forest for regression), 5-fold cross-validation on the plan's own train split, with the stateful steps fitted again inside every fold. The test set is never used. The main metric is macro F1 for classification and R² for regression, and the tables below give it for the linear model and the random forest as `linear / forest`.
 
-The comparisons in the summaries use the random forest's main metric. A difference is marked **≈** when it is smaller than the larger of the two plans' fold standard deviations (for an agent with repeats, the mean over its runs). A ≈ difference is not counted as better or worse: it is not evidence of a difference.
+The comparisons in the summary use the random forest's main metric. A difference is marked **≈** when it is smaller than the larger of the two plans' fold standard deviations (for an agent with repeats, the mean over its runs). A ≈ difference is not counted as better or worse: it is not evidence of a difference.
 
 ### Reference plans
 
@@ -47,93 +47,116 @@ The reference plans are the yardstick, so a wrong decision in one of them become
 
 The review also produced a list of things a good plan needs that the op registry cannot express (turning special values into missing, ordinal encoding in a given order, converting text to numbers, extracting features from text). They are listed in the README as known limitations and affect the reference, naive and agent plans alike.
 
-**What the review did to employee-salaries.** The AI draft dropped `underfilled_job_title` because it is 88% missing. The review found that a missing value means the employee holds the title they were hired for, and that median pay differs strongly between the two groups (53,788 when set, 73,296 when missing). The reviewed plan keeps the column, fills it with `None` and one-hot encodes it with at most 10 categories. The same commit added a missing-value indicator to `2016_overtime_pay` and let `employee_position_title` keep its 100 most frequent values instead of 50. The reference score went from 0.738 / 0.738 (linear / forest) before the review to 0.812 / 0.792 after it. These two earlier runs are not part of the committed results (they are in the git-ignored `benchmarks/results/20261014-112934` and `20261014-215647` on the author's machine), and because the commit changed three things at once, the gain cannot be credited to `underfilled_job_title` alone.
-
-The agent still did better than the reviewed reference here: Sol's forest R² is 0.825 against 0.792, a difference larger than the fold spread. Its plan does not group rare categories, while the reference does (`max_categories` 10, 50 and 100, chosen during the review): `division`, `employee_position_title` and `underfilled_job_title` are one-hot encoded with every category, which gives 1,197 columns instead of 204. The three Luna runs point the same way (see the scores in [Results](#results)): the two plans that one-hot encode every category scored 0.825 and 0.814 and have about 1,100 and 1,200 columns, and the plan that grouped every column to 50 values scored 0.724 with 192 columns. Three runs do not prove the cause, but the reference is a careful plan, not an upper bound, and its grouping was worse than the simple alternative on this dataset.
+**What the review did to employee-salaries.** The AI draft dropped `underfilled_job_title` because it is 88% missing. The review found that a missing value means the employee holds the title they were hired for, and that median pay differs strongly between the two groups (53,788 when set, 73,296 when missing). The reviewed plan keeps the column, fills it with `None` and one-hot encodes it with at most 10 categories. The same commit added a missing-value indicator to `2016_overtime_pay` and let `employee_position_title` keep its 100 most frequent values instead of 50. The reference score went from 0.738 / 0.738 (linear / forest) before the review to 0.812 / 0.792 after it. The run before the review is not part of the committed results (it is in the git-ignored `benchmarks/results/20261014-112934` on the author's machine), and because the commit changed three things at once, the gain cannot be credited to `underfilled_job_title` alone.
 
 ## Results
 
-Two runs are kept in `docs/benchmark/results/`. Each folder has the `summary.md` the benchmark wrote and the `results.json` it was made from (the plans, the scores per fold and the token use of every job; the data itself is not in it).
-
-| run | model | repeats | code |
-| --- | --- | --- | --- |
-| `20261015-051059-gpt-6-luna` | gpt-6-luna | 3 | before the robustness fixes |
-| `20261015-090719-gpt-6.1-sol` | gpt-6.1-sol | 1 | after the robustness fixes |
-
-The fixes between the two runs were: a planner call whose answer does not match the schema is retried once, the validator warns about `dedupe` and `drop_missing_target` steps that the profile shows to be pointless, the prompt says that `recommended` must repeat one of the options word for word, and the cost of cached input is priced separately. A difference between the two columns below is therefore a difference of model and of code, and the benchmark cannot separate them.
+One run is kept in `docs/benchmark/results/20261016-115230-gpt-6-luna/`: the `summary.md` the benchmark wrote and the `results.json` it was made from (the plans, the scores per fold and the token use of every job; the data itself is not in it). It started on 2026-10-16 at 11:52 UTC and finished at 12:17 UTC, with gpt-6-luna, 3 repeats per dataset, and the agent's goal given in English. The reference and naive plans are deterministic and ran once. Earlier runs, made on earlier versions of the code, are no longer in the working tree; the two that were kept before are in the git history (commit `0815ab9`).
 
 ### Agent runs
 
-| | gpt-6-luna | gpt-6.1-sol |
-| --- | --- | --- |
-| runs | 27 (9 datasets × 3) | 9 |
-| runs that ended with a valid, executed plan | 26 (96%) | 9 (100%) |
-| first plan had validator errors | 5 runs (19%) | 0 |
-| revisions per run (mean) | 0.2 | 0.0 |
-| schema retries per run (mean) | not recorded | 0.0 |
-| questions per run (mean) | 0.5 | 0.8 |
-| leaky columns dropped | 9 of 9 | 3 of 3 |
-| against the reference plan: better / worse / within noise | 0 / 1 / 8 | 1 / 0 / 8 |
-| against the naive plan: better / worse / within noise | 0 / 1 / 6 (2 excluded †) | 0 / 1 / 6 (2 excluded †) |
-| tokens per run, input / output (mean) | 9,462 / 1,617 | 9,099 / 910 |
-| cost per run (USD, approximate) | 0.0018 | 0.0207 |
-| plan time per run (seconds, mean) | 24.6 | 26.8 |
+| | gpt-6-luna |
+| --- | --- |
+| runs | 27 (9 datasets × 3) |
+| runs that ended with a valid, executed plan | 27 (100%) |
+| first plan had validator errors | 4 runs (15%) |
+| revisions per run (mean) | 0.15 |
+| schema retries per run (mean) | 0.0 |
+| warnings on the final plan | 0 |
+| questions per run (mean) | 1.2 |
+| leaky columns dropped | 9 of 9 |
+| against the reference plan: better / worse / within noise | 0 / 1 / 8 |
+| against the naive plan: better / worse / within noise | 0 / 1 / 6 (2 excluded †) |
+| tokens per run, input / output (mean) | 13,632 / 1,921 |
+| cost per run (USD, mean) | 0.0017 |
+| plan time per run (seconds, mean) | 25.5 |
 
-- The five Luna runs with a first-plan error were adult #2 and employee-salaries #1 (`stateful_before_split`) and all three bike-sharing-demand runs (`encode_numeric`). All five were sent back once and ended valid.
-- The one Luna failure was telco-customer-churn #2: the model answered with a `recommended` value that is not one of its options, the answer failed schema validation, and the run ended without a plan. This is what the schema retry was added for.
-- Luna's cost is the total of the 26 runs that reported usage, divided by 26 ($0.0456 / 26); the failed run's usage is unknown. Luna has no cache prices in `benchmarks/prices.yaml`, so every input token is charged the full input price and its cost is an upper bound. Sol's cost uses separate prices for cached input and cache writes. Sol costs about 12 times as much per run.
-- "Against the reference/naive plan" counts the nine datasets for the reference, and the seven without a dagger for the naive plan. For Luna it compares the mean over its three runs.
+"Against the reference/naive plan" counts the nine datasets for the reference and the seven without a dagger for the naive plan, and compares the mean over the three runs.
 
 ### Scores
 
-Macro F1 for classification, R² for regression; `linear / forest`, mean over folds (and over the successful runs for Luna). † marks a plan that kept a leaky column.
+Macro F1 for classification, R² for regression; `linear / forest`, mean over folds (and over the three runs for the agent). † marks a plan that kept a leaky column.
 
-| dataset | reference | naive | agent: gpt-6-luna | agent: gpt-6.1-sol |
-| --- | --- | --- | --- | --- |
-| titanic | 0.758 / 0.781 | 0.955 / 0.945 † | 0.776 / 0.779 | 0.762 / 0.769 |
-| credit-g | 0.694 / 0.663 | 0.686 / 0.677 | 0.706 / 0.661 | 0.694 / 0.677 |
-| diabetes | 0.752 / 0.727 | 0.753 / 0.728 | 0.752 / 0.727 | 0.752 / 0.727 |
-| telco-customer-churn | 0.729 / 0.700 | 0.730 / 0.691 | 0.732 / 0.701 (2/3 ok) | 0.732 / 0.699 |
-| adult | 0.785 / 0.780 | 0.766 / 0.785 | 0.782 / 0.785 | 0.782 / 0.784 |
-| bank-marketing | 0.601 / 0.614 | 0.601 / 0.614 | 0.605 / 0.616 | 0.605 / 0.617 |
-| house-prices | 0.812 / 0.841 | 0.813 / 0.842 | 0.812 / 0.841 | 0.811 / 0.842 |
-| employee-salaries | 0.812 / 0.792 | 0.937 / 0.972 † | 0.836 / 0.788 | 0.883 / 0.825 |
-| bike-sharing-demand | 0.683 / 0.919 | 0.396 / 0.941 | 0.686 / 0.915 | 0.686 / 0.915 |
+| dataset | reference | naive | agent: gpt-6-luna |
+| --- | --- | --- | --- |
+| titanic | 0.758 / 0.781 | 0.955 / 0.945 † | 0.769 / 0.779 |
+| credit-g | 0.694 / 0.663 | 0.686 / 0.677 | 0.706 / 0.667 |
+| diabetes | 0.752 / 0.727 | 0.753 / 0.728 | 0.752 / 0.727 |
+| telco-customer-churn | 0.729 / 0.700 | 0.730 / 0.691 | 0.731 / 0.698 |
+| adult | 0.785 / 0.780 | 0.766 / 0.785 | 0.782 / 0.785 |
+| bank-marketing | 0.601 / 0.614 | 0.601 / 0.614 | 0.605 / 0.614 |
+| house-prices | 0.812 / 0.841 | 0.813 / 0.842 | 0.815 / 0.843 |
+| employee-salaries | 0.812 / 0.792 | 0.937 / 0.972 † | 0.859 / 0.812 |
+| bike-sharing-demand | 0.683 / 0.919 | 0.396 / 0.941 | 0.686 / 0.915 |
 
-The three Luna runs on employee-salaries, scored separately (`linear / forest`): 0.883 / 0.825, 0.755 / 0.724 and 0.871 / 0.814. Sol's single run scored 0.883 / 0.825, the same as Luna's first run (1,197 columns against 1,198).
+Differences in the forest's main metric, agent minus the other plan (≈ means within noise):
+
+| dataset | against the reference | against the naive plan |
+| --- | --- | --- |
+| titanic | -0.002 ≈ | -0.166 † |
+| credit-g | +0.004 ≈ | -0.010 ≈ |
+| diabetes | +0.000 ≈ | -0.001 ≈ |
+| telco-customer-churn | -0.002 ≈ | +0.007 ≈ |
+| adult | +0.004 ≈ | -0.000 ≈ |
+| bank-marketing | -0.000 ≈ | +0.001 ≈ |
+| house-prices | +0.002 ≈ | +0.001 ≈ |
+| employee-salaries | +0.020 ≈ | -0.159 † |
+| bike-sharing-demand | -0.004 | -0.026 |
 
 ### Leakage
 
 How many of the columns that give the target away the plan still has at its end. An agent cell adds up its runs.
 
-| dataset | leaky columns | reference | naive | agent: gpt-6-luna | agent: gpt-6.1-sol |
-| --- | --- | --- | --- | --- | --- |
-| titanic | `boat`, `body` | 0 of 2 | 2 of 2 | 0 of 6 (3 runs) | 0 of 2 |
-| employee-salaries | `2016_gross_pay_received` | 0 of 1 | 1 of 1 | 0 of 3 (3 runs) | 0 of 1 |
+| dataset | leaky columns | reference | naive | agent: gpt-6-luna |
+| --- | --- | --- | --- | --- |
+| titanic | `boat`, `body` | 0 of 2 | 2 of 2 | 0 of 6 (3 runs) |
+| employee-salaries | `2016_gross_pay_received` | 0 of 1 | 1 of 1 | 0 of 3 (3 runs) |
 
 The naive plan's inflated scores are the cost of keeping them: titanic 0.945 against 0.781, employee-salaries 0.972 against 0.792 (random forest).
 
+### Cost and speed
+
+Cost is the token use the provider reported times the prices in `benchmarks/prices.yaml`, with cached input and cache writes priced separately. The 27 agent runs cost $0.0449 in total, $0.0017 per run, against a maximum of $0.76 that the benchmark estimated and asked approval for before it started. A run used on average 13,632 input tokens (8,711 of them read from the cache and 4,915 written to it) and 1,921 output tokens, in 1.8 model calls. Planning took 25.5 seconds per run on average (shortest 4.6, longest 95.8), and the whole run, including the reference and naive plans and all the baseline scoring, took about 24.5 minutes. The prices are entered by hand in `prices.yaml` and can change; check them against the provider's price list before relying on these costs.
+
 ## Findings
 
-**(a) The agent notices leakage that the rules cannot.** The validator's leakage rules are mechanical. The only one that looks at values, `possible_target_leakage`, runs on the result, warns instead of blocking, and needs a numeric target and an absolute correlation above 0.98. It cannot fire on `boat` and `body` in titanic, which are categorical, and not on `2016_gross_pay_received` in employee-salaries either, which correlates 0.89 with the target (the naive plan keeps it and gets no warning). The agent dropped the leaky columns in all eight runs on these two datasets (12 of 12 columns, both models). On titanic the agent dropped `boat` and `body` by itself; on employee-salaries it asked the user about the 2016 pay columns in every run and recommended dropping them, and the benchmark used that recommended answer, so asking instead of guessing when a case is unclear is designed behaviour and what is measured there is whether the recommendation is right. In an interactive run a person decides, and could decide differently. The agent also dropped `2016_overtime_pay` every time, a stricter reading than the reference's, which keeps it as a weaker, partial signal (review question employee-salaries-4).
+**(a) The agent notices leakage that the rules cannot.** The validator's leakage rules are mechanical. The only one that looks at values, `possible_target_leakage`, runs on the result, warns instead of blocking, and needs a numeric target and an absolute correlation above 0.98. It cannot fire on `boat` and `body` in titanic, which are categorical, and not on `2016_gross_pay_received` in employee-salaries either, which correlates 0.89 with the target (the naive plan keeps it and gets no warning). The agent dropped all 9 leaky columns in its 6 runs on these two datasets. In all three titanic runs it asked whether `boat` and `body` should be used to predict survival, and in all three employee-salaries runs it asked about the 2016 pay columns; the benchmark answers with the recommended option, and the prompt now says that for a column that may give the target away the recommended option is always the one that drops it. So what the table measures is that the agent raised the question for the right columns, not that it decided without a rule. In an interactive run a person decides, and could decide differently.
 
-**(b) For the score, careful preprocessing hardly beats sensible defaults; the difference is leakage.** Against the naive plan, the agent's random forest score is within noise on six of the seven comparable datasets for both models, worse on bike-sharing-demand, and better on none. The two large differences in the score are the leaky ones: the naive plan scores 0.945 on titanic and 0.972 on employee-salaries because it kept columns that give the answer away. Two caveats: the linear model does react to preparation (adult 0.766 naive against 0.782 agent, bike-sharing-demand 0.396 against 0.686, because the naive plan neither scales nor casts hour and month to categories), and on bike-sharing-demand the random forest does slightly better on the raw ordered numbers of the naive plan (0.941) than on the cast ones (0.915).
+**(b) For the score, careful preprocessing hardly beats sensible defaults; the difference is leakage.** Against the naive plan, the agent's random forest score is within noise on six of the seven comparable datasets, worse on bike-sharing-demand, and better on none. The two large differences in the score are the leaky ones: the naive plan scores 0.945 on titanic and 0.972 on employee-salaries because it kept columns that give the answer away. The linear model does react to preparation (adult 0.766 naive against 0.782 agent, bike-sharing-demand 0.396 against 0.686, because the naive plan neither scales nor casts hour and month to categories).
 
-**(c) The validation layer catches the cheaper model's mistakes and the revision fixes them.** Five of Luna's 27 first plans had validator errors, none was shipped, and all five ended valid after one revision. Its final plans score within noise of the reference on 8 of 9 datasets (the exception is bike-sharing-demand, 0.004 lower), and their forest score is within 0.016 of Sol's on every dataset but employee-salaries. This is the point of the design: a plan that breaks an order rule or encodes a numeric column is rejected by code, and the model is told why. Two limits to the claim. Sol ran on later code, so its zero first-plan errors cannot be credited to the model alone. And Sol has one run per dataset.
+**(c) bike-sharing-demand is the one dataset where the agent scores lower.** Its forest R² is 0.915 (runs: 0.9149, 0.9151, 0.9151) against 0.9186 for the reference and 0.9414 for the naive plan. The difference to the reference is 0.0036, and the larger fold standard deviation is 0.0035 (the reference's). The folds on this dataset vary very little, so a gap this small is just outside the noise limit and is counted as worse; it is not a large gap. The reference README says why the reference differs: "Drops `feel_temp` (correlation 0.99 with `temp`); casts `hour`, `month` and `weekday` to categories". The agent's three plans cast `month`, `hour` and `weekday` too, but they keep `feel_temp` and scale it. They also deduplicate, which removes 2 rows (13,901 train rows against the reference's 13,903), where the reference keeps them because two hours can have identical weather and demand. The results cannot say which of the two differences costs the 0.004; the benchmark did not run either one alone. Against the naive plan the gap is 0.026, and `feel_temp` cannot explain it, because the naive plan keeps `feel_temp` as well. The naive plan keeps hour, month and weekday as ordered numbers, and the random forest does better on those (0.941) than on one-hot columns (0.915); the linear model does the opposite (0.396 naive, 0.686 agent).
 
-**(d) On judgement calls Luna is not consistent from run to run.** The standard deviation of Luna's forest score across its three runs is 0.055 on employee-salaries, 0.011 on titanic and 0.002 or less on every other dataset. The employee-salaries runs differ in whether they keep `underfilled_job_title` and in how rare categories are grouped: two runs one-hot encode every category and score 0.825 and 0.814, one groups every column to 50 values and scores 0.724. Where the choices are less open (diabetes, adult, bike-sharing-demand) the three runs score the same to three decimals. Sol has no repeats, so there is no way to say whether it is more consistent.
+**(d) The validation layer catches mistakes and one revision fixes them.** In 4 of 27 runs the first plan had validator errors; none was shipped, and all four ended valid after exactly one revision. Three were `encode_numeric` (all three bike-sharing-demand runs) and one was `unencoded_column_remains` (telco-customer-churn run 1). The bike-sharing-demand case shows what the validator does. In each of the three runs the first plan put numeric columns in an `encode` step, which the validator reports twice per plan as `encode_numeric`: the column is already numeric and cannot be one-hot encoded. For a column with few distinct values its message adds that, if the values are categories (an hour, a month, a code), the plan should cast the column with `cast_to_category` before the split and keep it in the encode step. This message goes back to the planner, and in all three runs the revised plan casts `month`, `hour` and `weekday` and then encodes them. The results do not record which two columns the first plans listed or what the first telco plan left unencoded; only the error codes are kept.
 
-**(e) The only Luna failure was a schema error, and it led to a fix.** In telco-customer-churn run 2 the model returned a question whose `recommended` value was not one of its options, so the answer did not match the plan schema and the run stopped. The planner now retries such a call once, telling the model what was wrong with its answer, and the prompt says that `recommended` must repeat an option word for word. Sol's run needed no schema retry.
+**(e) Where the agent decides differently from the reference.** The summary's plan-difference table lists the columns the final plan treats differently. The ones that matter:
+
+- *employee-salaries:* in all three runs the agent asks about `2016_overtime_pay` in the same question as `2016_gross_pay_received` and drops both. The reference keeps the overtime pay as a weaker, partial signal (review question employee-salaries-4), so this is a more cautious reading. It did not lower the score: the forest R² of the three runs is 0.826, 0.784 and 0.827 against the reference's 0.792, and the difference of the mean is within noise. Runs 1 and 3 one-hot encode `division`, `employee_position_title` and `underfilled_job_title` with every category (1,197 and 1,160 columns, against the reference's 204) and score higher than the reference. Run 2 groups rare categories at 100 values, drops `underfilled_job_title` and `gender` as well, ends with 240 columns and scores lower. Three runs that differ in several choices at once do not show which choice matters.
+- *house-prices:* in all three runs the agent asks whether `MoSold`, `YrSold`, `SaleType` and `SaleCondition` will be known when the price is predicted, and drops them because they may be recorded only at or after the sale. The reference keeps them. The score is the same within noise (forest +0.002).
+- *titanic:* in all three runs the agent casts `pclass` to a category and one-hot encodes it; the reference leaves it numeric. The score is the same within noise (forest -0.002).
+
+**(f) On judgement calls the agent is not fully consistent from run to run.** The standard deviation of the forest score across the three runs is 0.024 on employee-salaries, 0.009 on credit-g, 0.005 on titanic, 0.002 on telco-customer-churn, and 0.000 on the other five datasets. The runs on employee-salaries differ in which columns they drop and how they group categories (see above).
+
+## What changed
+
+This run was made after a series of fixes, which were prompted by earlier runs on these same nine datasets and which this run does not test on new data:
+
+- **Leakage rule.** When a question is about a column that may give the target away or may not be known at prediction time, the recommended option is always the one that drops it. The user can still choose otherwise.
+- **Dates and text.** Datetime and free-text columns are dropped without asking, because no op can use them; the reason of the drop step says why.
+- **`unencoded_column_remains` is an error.** A feature column that is still not numeric at the end of the plan used to be a warning. Now the plan is rejected and the planner revises it.
+- **Language.** In earlier runs some questions came out in Spanish although the goal was in English. The planner's answer now starts with a `language` field naming the language of the goal, and the prompt says every question, option and reason is written in that language. All 33 questions asked in this run are in English. Three earlier runs had Spanish questions (a keyword search finds 3 of 16 questions in one, 11 of 25 in another and 1 of 28 in a third); they are not kept in the repository.
+- **Missing-value indicators** of imputed columns are 0/1 integers.
+- **Benchmark.** The cache prices of gpt-6-luna are in `prices.yaml`, and the warnings of an agent run are counted once in the summary.
 
 ## Limitations
 
-- **One repeat of Sol.** Nothing in the Sol column says how much its runs vary. Its agreement with Luna's best run on employee-salaries may be luck.
+- **One model, three repeats.** Only gpt-6-luna is in the results. Nothing here says how another model would do, and three repeats per dataset show how much a plan varies only roughly.
+- **The scores are on the train split.** They are 5-fold cross-validation on each plan's own train data. The test set is not used, so the benchmark does not say how a model trained on a plan's output does on the held-out data.
+- **The reference plans are an AI draft that one person reviewed.** The review is documented, but it is one reviewer, and the employee-salaries result shows that a reviewed choice can do worse than a simpler one.
 - **Few datasets.** Nine, all tabular and small or medium, and none with usable dates or text features. They cover the problems listed in the table, not tabular data in general.
 - **Most score differences are inside the noise.** The comparison is a single random forest on a single split, scored with 5-fold cross-validation, and most differences are below the fold spread (that is what ≈ means). The benchmark can show that the agent is not worse, and where plans have a real difference (leakage), but it cannot rank two reasonable plans.
-- **The runs differ in more than the model.** Luna and Sol ran on different versions of the code (see above), so the two columns are not a clean model comparison.
-- **The reference plans are one person's judgement.** The review is documented, but it is one reviewer, and the employee-salaries result shows that a reviewed choice can lose to a simpler one.
+- **The fixes were made on these datasets.** The changes listed above followed from earlier runs on the same nine datasets, so this run is not a test on unseen data.
 - **Non-interactive answers.** Questions are answered with the agent's own recommendation, so the benchmark does not measure what happens when a person answers differently.
-- **Costs are approximate.** They are the token use the provider reported times the prices in `benchmarks/prices.yaml`, which are filled in by hand. Luna's cost ignores the cache and is an upper bound; the failed Luna run has no usage and is missing from its total.
+- **Costs are approximate.** They are the token use the provider reported times the prices in `benchmarks/prices.yaml`, which are filled in by hand and can change.
 
 ## Reproduce
 
@@ -146,6 +169,6 @@ uv run python benchmarks/run_benchmark.py --models gpt-6-luna --repeats 3 --out-
 
 - `download.py` writes `benchmarks/datasets/<name>.csv` and compares each file with `benchmarks/manifest.json`. A hash that differs from the manifest is reported as a warning.
 - `run_benchmark.py` without `--models` runs only the reference and naive plans, which calls no model. With `--models` it needs an API key (see the README) and a price for every model in `benchmarks/prices.yaml`. It lists the jobs and the most they can cost, and asks before it spends anything (`--yes` skips the question, `--dry-run` stops after the listing).
-- `prices.yaml` ships with the two models above. Each entry has `input_per_million` and `output_per_million`; `cached_input_per_million` and `cache_write_per_million` are optional. These are the numbers the cost tables use, so check them against your provider's price list before you rely on a cost.
+- `prices.yaml` ships with prices for gpt-6-luna and gpt-6.1-sol. Each entry has `input_per_million` and `output_per_million`; `cached_input_per_million` and `cache_write_per_million` are optional. These are the numbers the cost figures use, so check them against your provider's price list before you rely on a cost.
 - `--datasets a,b` runs a subset. `--summarize benchmarks/results/<id>/results.json` writes `summary.md` again from an existing `results.json` without running anything.
 - Results go to `benchmarks/results/<timestamp>/` (git-ignored) as `results.json` and `summary.md`. Model answers are not deterministic, so a new run will not reproduce these numbers exactly; the reference and naive plans do.
