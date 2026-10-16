@@ -120,6 +120,17 @@ def unlabelled() -> pd.DataFrame:
     )
 
 
+# A class with a single row: a stratified split fails on it, which no validator rule foresees.
+@pytest.fixture
+def lonely_class() -> pd.DataFrame:
+    return pd.DataFrame({"x": [float(i % 5) for i in range(40)], "t": [0] * 20 + [1] * 19 + [2]})
+
+
+def lonely_class_plan(*, stratify: bool) -> dict:
+    split = {"op": "split", "stratify": stratify, "reason": "r"}
+    return {"target": "t", "task_type": "classification", "model_family": "any", "steps": [split]}
+
+
 def unlabelled_plan(*, drop_missing: bool, stratify: bool = True) -> dict:
     steps = [{"op": "drop_missing_target", "reason": "r"}] if drop_missing else []
     steps.append({"op": "split", "stratify": stratify, "reason": "r"})
@@ -478,6 +489,45 @@ def test_a_plan_that_keeps_rows_without_a_target_is_revised(unlabelled, stratify
     assert not result.execution.train["t"].isna().any()
     assert not result.execution.test["t"].isna().any()
     assert len(result.execution.train) + len(result.execution.test) == 38
+
+
+def test_a_step_that_fails_on_the_data_is_revised_with_the_error_message(lonely_class):
+    responses = [
+        plan_reply(lonely_class_plan(stratify=True)),
+        plan_reply(lonely_class_plan(stratify=False)),
+    ]
+
+    result, llm, _ = run(lonely_class, responses, target="t")
+
+    assert "code=execution_failed" in llm.calls[1].user
+    assert "least populated class" in llm.calls[1].user
+    assert [c.purpose for c in result.calls] == ["plan", "revise"]
+    assert result.calls[1].issue_codes == ["execution_failed"]
+    assert len(result.execution.train) + len(result.execution.test) == 40
+
+
+def test_a_failed_execution_draws_on_the_revision_budget(lonely_class):
+    bad = plan_reply(lonely_class_plan(stratify=True))
+
+    with pytest.raises(AgentError) as caught:
+        run(lonely_class, [bad, bad, bad], target="t", max_revisions=2)
+
+    assert not isinstance(caught.value, RevisionBudgetError)
+    assert len(caught.value.trace.calls) == 3
+    assert str(caught.value).startswith("executing the plan failed: ")
+    assert caught.value.plan == Plan.model_validate(lonely_class_plan(stratify=True))
+    assert caught.value.issues == []
+    assert caught.value.execution is None
+
+
+def test_a_failed_execution_without_revision_budget_is_final(lonely_class):
+    with pytest.raises(AgentError, match="executing the plan failed"):
+        run(
+            lonely_class,
+            [plan_reply(lonely_class_plan(stratify=True))],
+            target="t",
+            max_revisions=0,
+        )
 
 
 def test_a_revision_budget_that_runs_out_raises_with_plan_and_issues(df):

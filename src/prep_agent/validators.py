@@ -78,6 +78,8 @@ IssueCode = Literal[
     "missing_values_remain",
     "unencoded_column_remains",
     "stratify_disabled",
+    # raised by the agent when a valid plan fails on the data, not by validate_plan
+    "execution_failed",
     # result errors (raised by result_validator, not by validate_plan)
     "empty_split",
     "column_mismatch",
@@ -122,6 +124,7 @@ SEVERITY: dict[IssueCode, Severity] = {
     "missing_values_remain": "warning",
     "unencoded_column_remains": "warning",
     "stratify_disabled": "warning",
+    "execution_failed": "error",
     "empty_split": "error",
     "column_mismatch": "error",
     "target_altered": "error",

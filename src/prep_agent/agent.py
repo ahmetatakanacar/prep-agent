@@ -8,9 +8,11 @@ revision.
 Two limits keep the loop finite. `max_question_rounds` caps how often the user is asked; once it
 is reached the planner is told to answer with a plan. If it asks anyway, it gets one more call
 with a plan-only instruction, and that call is charged to the revision budget. `max_revisions`
-caps how often a plan is sent back, and plan errors, result errors and that retry draw on the
-same budget. When the budget is used up
-and errors remain, `RevisionBudgetError` carries the last plan and its issues.
+caps how often a plan is sent back, and plan errors, result errors, a step that fails on the
+data although the plan validated (reported to the planner as `execution_failed`) and that retry
+draw on the same budget. When the budget is used up and errors remain, `RevisionBudgetError`
+carries the last plan and its issues; a failed step is then an `AgentError` with the message of
+the failure.
 
 An answer that does not match the response schema is not a plan to revise: the call is repeated,
 with the validation error added to the prompt, up to `max_schema_retries` times (a limit of its
@@ -39,7 +41,7 @@ from prep_agent.planner import (
     build_user_prompt,
 )
 from prep_agent.profiler import DatasetProfile, profile_dataframe
-from prep_agent.validators import ValidationIssue, partition_issues
+from prep_agent.validators import SEVERITY, ValidationIssue, partition_issues
 
 MAX_SCHEMA_RETRIES = 1
 """How often one planner call is repeated after an answer that does not match the schema."""
@@ -168,6 +170,8 @@ class _Attempt:
     profile: DatasetProfile
     issues: list[ValidationIssue]
     execution: ExecutionResult | None
+    # Set when a step failed on the data; `issues` is empty then, the failure is the one error.
+    execution_error: ExecutionError | None = None
 
 
 def run_agent(
@@ -251,12 +255,19 @@ class _Agent:
             assert plan is not None  # guaranteed by PlannerResponse for kind "plan"
             attempt = self._try(plan)
             errors, warnings = partition_issues(attempt.issues)
+            if attempt.execution_error is not None:
+                errors = [_execution_issue(attempt.execution_error)]
             if not errors:
                 assert attempt.execution is not None
                 return AgentResult(
                     plan, attempt.profile, attempt.execution, attempt.issues, self._trace()
                 )
             if self.revisions >= self.max_revisions:
+                if attempt.execution_error is not None:
+                    raise AgentError(
+                        f"executing the plan failed: {attempt.execution_error}",
+                        **self._failure(attempt),
+                    ) from attempt.execution_error
                 raise RevisionBudgetError(
                     f"the plan still has {len(errors)} error(s) after {self.revisions} "
                     f"revision(s): {_describe(errors)}",
@@ -364,8 +375,8 @@ class _Agent:
             self.attempt = _Attempt(plan, profile, exc.issues, None)
             return self.attempt
         except ExecutionError as exc:
-            self.attempt = _Attempt(plan, profile, [], None)
-            raise AgentError(f"executing the plan failed: {exc}", **self._failure()) from exc
+            self.attempt = _Attempt(plan, profile, [], None, exc)
+            return self.attempt
         issues = execution.plan_issues + execution.result_issues
         self.attempt = _Attempt(plan, profile, issues, execution)
         return self.attempt
@@ -406,6 +417,17 @@ def _shorten(text: str) -> str:
     if len(text) <= SCHEMA_ERROR_LIMIT:
         return text
     return text[: SCHEMA_ERROR_LIMIT - 3] + "..."
+
+
+def _execution_issue(error: ExecutionError) -> ValidationIssue:
+    return ValidationIssue(
+        code="execution_failed",
+        severity=SEVERITY["execution_failed"],
+        message=(
+            f"the plan passed validation but a step failed when it ran on the data: {error}. "
+            "Change the step that failed, or leave it out."
+        ),
+    )
 
 
 def _describe(issues: list[ValidationIssue]) -> str:
