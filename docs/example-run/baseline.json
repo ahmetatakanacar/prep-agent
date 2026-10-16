@@ -1,0 +1,71 @@
+{
+  "task_type": "classification",
+  "n_rows": 1047,
+  "random_state": 42,
+  "n_folds": 5,
+  "metrics": [
+    "accuracy",
+    "f1_macro",
+    "roc_auc"
+  ],
+  "models": [
+    {
+      "name": "dummy_most_frequent",
+      "scores": {
+        "accuracy": {
+          "mean": 0.6179539758487127,
+          "std": 0.0008929559326619111
+        },
+        "f1_macro": {
+          "mean": 0.38193525931082495,
+          "std": 0.00034103581521518475
+        },
+        "roc_auc": {
+          "mean": 0.5,
+          "std": 0.0
+        }
+      },
+      "skipped_reason": null,
+      "note": null
+    },
+    {
+      "name": "logistic_regression",
+      "scores": {
+        "accuracy": {
+          "mean": 0.7822465254044202,
+          "std": 0.012464232647352372
+        },
+        "f1_macro": {
+          "mean": 0.7657519005953685,
+          "std": 0.015494154204376153
+        },
+        "roc_auc": {
+          "mean": 0.8429473017292786,
+          "std": 0.01163539069393053
+        }
+      },
+      "skipped_reason": null,
+      "note": null
+    },
+    {
+      "name": "random_forest",
+      "scores": {
+        "accuracy": {
+          "mean": 0.7927363864205971,
+          "std": 0.01502025001438951
+        },
+        "f1_macro": {
+          "mean": 0.7789965378086356,
+          "std": 0.017811014159883596
+        },
+        "roc_auc": {
+          "mean": 0.8377112403100775,
+          "std": 0.020332029381644096
+        }
+      },
+      "skipped_reason": null,
+      "note": null
+    }
+  ],
+  "skipped_reason": null
+}
