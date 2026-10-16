@@ -84,6 +84,21 @@ def test_prepare_records_the_csv_settings_of_a_semicolon_cp1254_file(
     assert read_json(run_dir / "profile.json")["csv"] == expected
 
 
+def test_prepare_takes_the_csv_options_from_the_command_line(invoke_cli, monkeypatch, tmp_path):
+    use_llm(monkeypatch, [plan_reply(VALID_PLAN)])
+    csv = str(FIXTURES / "customers_tr.csv")
+    extra = ("--sep", ";", "--decimal", ",", "--encoding", "cp1254")
+
+    result = invoke_cli(
+        prepare_args(tmp_path, "--target", "churned", "--non-interactive", *extra, csv=csv)
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Warning" not in result.output
+    expected = {"sep": ";", "decimal": ",", "encoding": "cp1254"}
+    assert read_json(only_run(tmp_path) / "run.json")["csv"] == expected
+
+
 def test_prepare_runs_the_plan_and_writes_the_run(invoke_cli, monkeypatch, tmp_path):
     llm = use_llm(monkeypatch, [plan_reply(VALID_PLAN)], usage=TokenUsage(1200, 340))
 

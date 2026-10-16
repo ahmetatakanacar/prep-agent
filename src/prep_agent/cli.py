@@ -85,6 +85,20 @@ def main(
     load_dotenv_file()
 
 
+SepOption = Annotated[
+    str | None,
+    typer.Option("--sep", help="Column separator; found automatically if not given."),
+]
+DecimalOption = Annotated[
+    str | None,
+    typer.Option("--decimal", help="Decimal mark; ',' for a ';' file, else '.', if not given."),
+]
+EncodingOption = Annotated[
+    str | None,
+    typer.Option("--encoding", help="File encoding; UTF-8, else cp1254, if not given."),
+]
+
+
 @app.command("profile")
 def profile_command(
     csv_path: Annotated[Path, typer.Argument(help="CSV file to profile.")],
@@ -94,10 +108,13 @@ def profile_command(
         bool,
         typer.Option("--no-samples", help="Leave sample values and top values out of the profile."),
     ] = False,
+    sep: SepOption = None,
+    decimal: DecimalOption = None,
+    encoding: EncodingOption = None,
 ) -> None:
     """Profile a CSV file and print a summary table."""
     try:
-        loaded = load_csv(csv_path)
+        loaded = load_csv(csv_path, sep=sep, decimal=decimal, encoding=encoding)
         profile = profile_dataframe(
             loaded.df, target=target, include_samples=not no_samples, csv_options=loaded.options
         )
@@ -131,12 +148,15 @@ def run_command(
     no_baseline: Annotated[
         bool, typer.Option("--no-baseline", help="Skip the baseline scores (cross-validation).")
     ] = False,
+    sep: SepOption = None,
+    decimal: DecimalOption = None,
+    encoding: EncodingOption = None,
 ) -> None:
     """Run a hand-written plan on a CSV file and save the run artifacts."""
     console = Console()
     try:
         plan = _load_plan(plan_path)
-        loaded = load_csv(csv_path)
+        loaded = load_csv(csv_path, sep=sep, decimal=decimal, encoding=encoding)
         df = loaded.df
         profile = profile_dataframe(df, target=plan.target, csv_options=loaded.options)
     except (ProfilerError, PlanFileError) as exc:
@@ -217,13 +237,16 @@ def prepare_command(
     no_baseline: Annotated[
         bool, typer.Option("--no-baseline", help="Skip the baseline scores (cross-validation).")
     ] = False,
+    sep: SepOption = None,
+    decimal: DecimalOption = None,
+    encoding: EncodingOption = None,
 ) -> None:
     """Have the LLM plan the preparation of a CSV file, then validate, run and save it."""
     console = Console()
     if not goal.strip():
         _fail("the goal must not be empty")
     try:
-        loaded = load_csv(csv_path)
+        loaded = load_csv(csv_path, sep=sep, decimal=decimal, encoding=encoding)
         _print_csv_warnings(loaded)
         llm = create_llm_client()
         console.print(Text("Profiling the data and planning..."))

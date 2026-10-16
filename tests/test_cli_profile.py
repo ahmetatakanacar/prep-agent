@@ -104,3 +104,43 @@ def test_profile_of_a_utf8_file_has_no_warning(invoke_cli):
     result = invoke_cli(["profile", str(FIXTURE)])
 
     assert "Warning" not in result.output
+
+
+def test_profile_reads_with_the_given_options_and_does_not_warn(invoke_cli, tmp_path):
+    out = tmp_path / "profile.json"
+
+    result = invoke_cli(
+        ["profile", str(FIXTURE_TR), "--sep", ";", "--decimal", ",", "--encoding", "cp1254"]
+        + ["--out", str(out)]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Warning" not in result.output
+    profile = DatasetProfile.model_validate_json(out.read_text(encoding="utf-8"))
+    assert profile.csv == CsvOptions(sep=";", decimal=",", encoding="cp1254")
+
+
+def test_a_given_decimal_mark_replaces_the_found_one(invoke_cli, tmp_path):
+    out = tmp_path / "profile.json"
+
+    result = invoke_cli(["profile", str(FIXTURE_TR), "--decimal", ".", "--out", str(out)])
+
+    assert result.exit_code == 0, result.output
+    profile = DatasetProfile.model_validate_json(out.read_text(encoding="utf-8"))
+    assert profile.csv == CsvOptions(sep=";", decimal=".", encoding="cp1254")
+    spend = next(c for c in profile.columns if c.name == "monthly_spend")
+    assert spend.inferred_type != "numeric"
+
+
+def test_profile_refuses_an_encoding_python_does_not_know(invoke_cli):
+    result = invoke_cli(["profile", str(FIXTURE), "--encoding", "not-a-codec"])
+
+    assert result.exit_code == 1
+    assert "unknown encoding" in result.output
+
+
+def test_profile_refuses_a_separator_of_more_than_one_character(invoke_cli):
+    result = invoke_cli(["profile", str(FIXTURE), "--sep", ";;"])
+
+    assert result.exit_code == 1
+    assert "separator" in result.output

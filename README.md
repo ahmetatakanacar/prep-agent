@@ -85,6 +85,8 @@ uv run prep-agent profile tests/fixtures/customers.csv --target churned --out ru
 
 Prints a summary table; `--out` saves the full profile as JSON. Columns that look like personal data (email addresses, phone numbers, or names such as `email` whose values are mostly distinct; a numeric column only by an identifier name such as `phone`, `tckn` or `iban`, so `ad_spend` keeps its statistics) are flagged `possible_pii` and their sample values and statistics are left out. `--no-samples` leaves sample values out for every column. CSV files are read with pandas' usual missing-value strings, except the text `None`, which is kept as a category because in many datasets it means that a feature is absent.
 
+How a file is read is found, not assumed, and the result is written to `profile.json` and `run.json` (`csv`). The encoding is UTF-8 (a byte order mark is fine); a file that is not valid UTF-8 is read as cp1254, the Turkish Windows code page, and a warning says so. The separator is whichever of `,` `;` tab and `|` `csv.Sniffer` finds in the first few KB, and `,` if it finds none. The decimal mark is `,` for a `;` file and `.` otherwise. `profile`, `run` and `prepare` take `--sep`, `--decimal` and `--encoding` to replace what was found (`--sep "\t"` is a tab); give them when a guess is wrong, for example `--decimal .` for a `;` file with decimal points. The generated `pipeline.py` reads its input with the same settings.
+
 ### Run a plan you wrote
 
 ```powershell
@@ -115,12 +117,12 @@ Every run writes `runs/<run_id>/`:
 |---|---|
 | `report.md` | goal, input, row and column counts before and after, questions and answers, every step with its reason, validator issues, baseline scores, leakage notes, how to reproduce. Built from the run's data, not written by an LLM. Failed runs get one too. |
 | `plan.json` | the validated plan |
-| `profile.json` | the profile the planner saw |
+| `profile.json` | the profile the planner saw, and the CSV settings the file was read with |
 | `train.csv`, `test.csv` | the prepared data |
 | `pipeline.py` | the whole preparation as a standalone script (successful runs only) |
 | `pipeline.joblib` | the fitted impute, encode and scale steps only; not applicable to a raw file |
 | `baseline.json` | cross-validation scores of the baseline models |
-| `issues.json`, `run.json` | validator issues; status, goal, model, token use, the language the planner named, error |
+| `issues.json`, `run.json` | validator issues; status, CSV settings, goal, model, token use, the language the planner named, error |
 | `llm_trace.json`, `qa.json` | `prepare` only: every model call (purpose, model, token usage, issue codes, answer; no prompts, no data) and your answers |
 
 `pipeline.py` needs only pandas and scikit-learn; prep-agent does not have to be installed. It repeats every step on a raw CSV file and gives the same `train.csv` and `test.csv` as the run folder, when the pandas and scikit-learn versions match:

@@ -190,3 +190,27 @@ def test_a_semicolon_cp1254_file_is_run_and_its_pipeline_py_reads_it_the_same_wa
     assert done.returncode == 0, done.stderr
     for name in ("train.csv", "test.csv"):
         assert (elsewhere / "out" / name).read_bytes() == (run_dir / name).read_bytes()
+
+
+def test_run_takes_the_csv_options_from_the_command_line(invoke_cli, tmp_path):
+    csv = str(FIXTURES / "customers_tr.csv")
+    args = ["run", csv, "--plan", PLAN, "--out-dir", str(tmp_path / "runs"), "--no-baseline"]
+
+    result = invoke_cli([*args, "--sep", ";", "--decimal", ",", "--encoding", "cp1254"])
+
+    assert result.exit_code == 0, result.output
+    assert "Warning" not in result.output
+    [run_dir] = list((tmp_path / "runs").iterdir())
+    info = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info["csv"] == {"sep": ";", "decimal": ",", "encoding": "cp1254"}
+
+
+def test_run_with_a_wrong_encoding_fails_before_anything_is_written(invoke_cli, tmp_path):
+    csv = str(FIXTURES / "customers_tr.csv")
+    args = ["run", csv, "--plan", PLAN, "--out-dir", str(tmp_path / "runs"), "--no-baseline"]
+
+    result = invoke_cli([*args, "--encoding", "utf-8"])
+
+    assert result.exit_code == 1
+    assert "could not read" in result.output
+    assert not (tmp_path / "runs").exists()
