@@ -73,7 +73,16 @@ function t(key, vars) {
 const tn = (key, n, vars) => t(`${key}.${n === 1 ? "one" : "other"}`, { n: fmtInt(n), ...vars });
 
 const fmtInt = (n) => Number(n).toLocaleString(LOCALES[lang]);
-const pct = (r) => `${(r * 100).toFixed(r > 0 && r < 0.001 ? 2 : 1)}%`;
+// The sign and the decimal mark belong to the language: "10.0%" in English, "%10,0" in Turkish.
+const percentFormats = {};
+function fmtPct(ratio, digits) {
+  const key = `${lang}:${digits}`;
+  if (!percentFormats[key]) {
+    percentFormats[key] = new Intl.NumberFormat(LOCALES[lang], { style: "percent", minimumFractionDigits: digits, maximumFractionDigits: digits });
+  }
+  return percentFormats[key].format(ratio);
+}
+const pct = (r) => fmtPct(r, r > 0 && r < 0.001 ? 2 : 1);
 const fmtScore = (v) => (Math.abs(v) >= 100 ? v.toFixed(1) : v.toFixed(3));
 
 function fmtBytes(n) {
@@ -1316,7 +1325,7 @@ function splitLine(step, issues, order) {
   const p = step.parameters;
   const params = t("split.params", {
     step: pad2(step.index),
-    pct: Math.round(p.test_size * 100),
+    pct: fmtPct(p.test_size, 0),
     stratify: t(p.stratify ? "split.stratified" : "split.unstratified"),
     seed: p.random_state,
   });

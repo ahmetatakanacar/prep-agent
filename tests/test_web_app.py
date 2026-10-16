@@ -3,6 +3,7 @@ network is touched."""
 
 import io
 import json
+import re
 import time
 import zipfile
 from pathlib import Path
@@ -329,6 +330,25 @@ def test_the_demo_ends_with_a_plan_that_has_no_issues_at_all(demo, lang):
     assert result["issues"] == []
     # The corrected plan follows the rule the agent follows: no step the data does not need.
     assert "drop_missing_target" not in [step["op"] for step in result["plan"]["steps"]]
+
+
+STATIC = Path(__file__).parent.parent / "app" / "static"
+
+
+def test_every_percentage_of_the_page_comes_from_one_locale_aware_formatter():
+    # The page is plain JavaScript and no JS runner is available to the tests, so this checks the
+    # source: the formatter is built on Intl.NumberFormat with the locale of the chosen language,
+    # numbers and percentages share the locale table, and no text puts a % sign around a value
+    # by hand (Turkish writes the sign first, English last, and the formatter knows which).
+    page = (STATIC / "app.js").read_text(encoding="utf-8")
+    texts = (STATIC / "i18n.js").read_text(encoding="utf-8")
+
+    assert 'style: "percent"' in page
+    assert "Intl.NumberFormat(LOCALES[lang]" in page
+    assert "toLocaleString(LOCALES[lang])" in page
+    assert not re.search(r"%\{|\}%", texts)
+    assert "toFixed(1)}%" not in page
+    assert "Math.round(p.test_size * 100)" not in page
 
 
 def baseline_with_a_note() -> BaselineResult:
