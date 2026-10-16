@@ -191,6 +191,18 @@ def test_the_demo_mode_text_of_the_top_bar_is_short_enough_for_its_cell():
     assert '"tb.mode_demo": "demo (betikli)"' in texts
 
 
+def test_the_language_notes_of_the_brief_and_plan_exist_in_both_languages_and_are_shown_in_both():
+    texts = (STATIC / "i18n.js").read_text(encoding="utf-8")
+    page = (STATIC / "app.js").read_text(encoding="utf-8")
+
+    for key in ("brief.langnote", "plan.en_note"):
+        assert texts.count(f'"{key}":') == 2, "one entry for English and one for Turkish"
+        assert f't("{key}")' in page
+        assert f'lang === "tr" && hasText("{key}")' not in page
+    assert "Questions and reasons come in the language you write the goal in." in texts
+    assert "The agent's reasons are in the language of the goal, not of the interface." in texts
+
+
 def test_upload_over_the_limit_is_refused():
     with make_client(max_upload_bytes=100) as client:
         response = client.post("/api/sessions", files={"file": ("big.csv", CUSTOMERS.read_bytes())})

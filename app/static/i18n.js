@@ -141,6 +141,7 @@ window.I18N = {
     "brief.next_3":
       "Validators check every step. A plan that breaks a rule goes back to the agent together with the validators' notes.",
     "brief.next_4": "Our code runs the plan, then scores two quick baseline models on train.",
+    "brief.langnote": "Questions and reasons come in the language you write the goal in.",
     "sum.goal": "Goal",
     "sum.target": "Target",
     "sum.family": "Model family",
@@ -259,6 +260,7 @@ window.I18N = {
     "plan.meta": "target {target} · {task} · model family {family}",
     "plan.lede":
       "Read it top to bottom. The heavy line is the split: above it every step sees all rows and learns nothing; below it every step learns from train only.",
+    "plan.en_note": "The agent's reasons are in the language of the goal, not of the interface.",
     "plan.counts": "{errors}, {warnings}, all shown beside the step they belong to.",
     "plan.clean": "The validators found nothing to flag in the plan or in the result.",
     "findings.title": "Findings not tied to one step",

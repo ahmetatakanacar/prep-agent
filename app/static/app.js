@@ -687,7 +687,7 @@ function renderBriefSheet(snap) {
       h("div", { class: "field" }, h("label", { class: "label", for: "goal" }, t("brief.goal")), goal, h("p", { class: "hint", id: "goal-hint" }, t("brief.goal_hint")), goalError),
       h("div", { class: "field" }, h("label", { class: "label", for: "target" }, t("brief.target")), target, h("p", { class: "hint" }, t("brief.target_hint")), demoTarget ? h("p", { class: "hint" }, t("brief.demo_target_note", { target: demoTarget })) : null),
       h("fieldset", { class: "field" }, h("legend", { class: "label" }, t("brief.family")), h("div", { class: "seg", role: "presentation" }, familyInputs), familyHint),
-      lang === "tr" && hasText("brief.langnote") ? h("p", { class: "hint note-line" }, t("brief.langnote")) : null,
+      h("p", { class: "hint note-line" }, t("brief.langnote")),
       h("div", { class: "actions" }, h("button", { type: "submit", class: "btn primary", id: "plan-button" }, t("brief.plan")), h("span", { class: "keyhints" }, h("kbd", {}, "Ctrl"), " + ", h("kbd", {}, "Enter"))),
     ),
     h(
@@ -1223,7 +1223,7 @@ function planBlock(result, ok) {
   const parts = [
     blockHead(t(ok ? "plan.title" : "plan.title_failed"), meta, "b-plan-h"),
     h("p", { class: "lede" }, t("plan.lede")),
-    lang === "tr" && hasText("plan.en_note") ? h("p", { class: "hint note-line" }, t("plan.en_note")) : null,
+    h("p", { class: "hint note-line" }, t("plan.en_note")),
     planFlow(plan, issues),
   ];
   if (loose.length) parts.push(h("p", { class: "findings-title" }, t("findings.title")), findingsList(loose));
