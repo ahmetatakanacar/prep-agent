@@ -4,6 +4,7 @@ network is touched."""
 import io
 import json
 import re
+import threading
 import time
 import zipfile
 from pathlib import Path
@@ -24,7 +25,7 @@ from prep_agent.baseline import (  # noqa: E402
     BaselineScore,
     ModelBaseline,
 )
-from prep_agent.llm.base import LLMConfigError, TokenUsage  # noqa: E402
+from prep_agent.llm.base import LLMConfigError, LLMError, TokenUsage  # noqa: E402
 from prep_agent.llm.fake import FakeLLM  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -265,6 +266,24 @@ def test_plan_request_is_validated(demo):
     assert start(demo, session_id, goal="  ").status_code == 422
     assert start(demo, session_id, target="nope").status_code == 422
     assert start(demo, session_id, model_family="forest").status_code == 422
+
+
+def test_shutting_the_app_down_waits_for_the_run_threads():
+    # A run thread outliving its app races the next app's startup over the global warning filters.
+    calling = threading.Event()
+
+    class SlowLLM:
+        def generate(self, system, user, schema):
+            calling.set()
+            time.sleep(0.5)
+            raise LLMError("gave up")
+
+    with make_client(llm_factory=lambda session, request: SlowLLM()) as client:
+        session_id = open_sample(client)
+        assert start(client, session_id).status_code == 202
+        assert calling.wait(timeout=30)
+
+    assert [t.name for t in threading.enumerate() if t.name.startswith("run-")] == []
 
 
 def test_a_target_with_one_value_ends_the_run_before_any_llm_call():

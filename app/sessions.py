@@ -36,6 +36,9 @@ Phase = Literal["planning", "revising", "validating", "baseline", "saving"]
 ModelFamily = Literal["tree", "linear", "any"]
 
 
+JOIN_TIMEOUT_SECONDS = 30.0
+
+
 class SessionClosed(Exception):
     """The run was cancelled (reset or deleted session) while the agent was waiting."""
 
@@ -95,6 +98,7 @@ class Session:
         self.run_dir: Path | None = None
         self.outcome: Outcome | None = None
 
+        self._threads: list[threading.Thread] = []
         self._last_kind: str | None = None
         self._answers: dict[str, str] | None = None
         self._answered = threading.Event()
@@ -172,6 +176,8 @@ class Session:
             name=f"run-{self.id[:8]}",
         )
         thread.daemon = True
+        with self.lock:
+            self._threads = [t for t in self._threads if t.is_alive()] + [thread]
         thread.start()
 
     def answer(self, answers: dict[str, str]) -> None:
@@ -211,6 +217,14 @@ class Session:
             event = self._answered
         event.set()
         shutil.rmtree(self.directory, ignore_errors=True)
+
+    def join(self, timeout: float) -> None:
+        """Wait for the run threads to notice that the session is closed and return."""
+        deadline = time.monotonic() + timeout
+        with self.lock:
+            threads = list(self._threads)
+        for thread in threads:
+            thread.join(max(0.0, deadline - time.monotonic()))
 
     def _current(self, token: int) -> bool:
         with self.lock:
@@ -472,4 +486,7 @@ class SessionStore:
             sessions, self._sessions = list(self._sessions.values()), {}
         for session in sessions:
             session.close()
+        # A cross-validation cannot be interrupted, so wait for it only up to a limit.
+        for session in sessions:
+            session.join(JOIN_TIMEOUT_SECONDS)
         shutil.rmtree(self.root, ignore_errors=True)
