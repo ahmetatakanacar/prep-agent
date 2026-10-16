@@ -1125,15 +1125,15 @@ def test_a_plan_without_personal_data_has_no_such_warning():
     assert find(validate(split()), "personal_data_kept") == []
 
 
-def test_unencoded_categorical_text_and_datetime_columns_warn():
+def test_unencoded_categorical_text_and_datetime_columns_are_errors():
     issues = validate(split())
 
     flagged = {i.column: i for i in find(issues, "unencoded_column_remains")}
     assert {"city", "job", "notes", "signup"} <= set(flagged)
-    assert all(i.severity == "warning" and i.step_index is None for i in flagged.values())
+    assert all(i.severity == "error" and i.step_index is None for i in flagged.values())
 
 
-def test_unencoded_warning_skips_encoded_dropped_and_numeric_columns():
+def test_unencoded_error_skips_encoded_dropped_and_numeric_columns():
     issues = validate(
         drop("signup", "notes"),
         split(),
@@ -1145,11 +1145,12 @@ def test_unencoded_warning_skips_encoded_dropped_and_numeric_columns():
     assert flagged == {"segment"}
 
 
-def test_unencoded_binary_text_column_warns():
+def test_unencoded_binary_text_column_is_an_error():
     issues = validate(split())
 
     [issue] = [i for i in find(issues, "unencoded_column_remains") if i.column == "gender"]
-    assert issue.severity == "warning"
+    assert issue.severity == "error"
+    assert "encode" in issue.message and "drop" in issue.message
     assert issue.step_index is None
 
 

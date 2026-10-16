@@ -124,6 +124,7 @@ SEVERITY: dict[IssueCode, Severity] = {
     "stratify_regression": "error",
     "missing_target_at_split": "error",
     "task_type_mismatch": "error",
+    "unencoded_column_remains": "error",
     "cast_non_numeric": "warning",
     "onehot_before_impute": "warning",
     "ordinal_for_linear": "warning",
@@ -135,7 +136,6 @@ SEVERITY: dict[IssueCode, Severity] = {
     "uninformative_column_kept": "warning",
     "personal_data_kept": "warning",
     "missing_values_remain": "warning",
-    "unencoded_column_remains": "warning",
     "stratify_disabled": "warning",
     "execution_failed": "error",
     "empty_split": "error",
@@ -673,6 +673,7 @@ class _Validation:
                 self._add(
                     "unencoded_column_remains",
                     f"column {name!r} is {column.inferred_type} and is still not numeric at the "
-                    "end of the plan; encode it or drop it.",
+                    "end of the plan, so the data is not model-ready; add an encode step after "
+                    "the split or drop the column.",
                     column=name,
                 )

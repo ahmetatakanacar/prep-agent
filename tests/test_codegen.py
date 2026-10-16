@@ -103,7 +103,7 @@ PLANS = {
                 "strategy": "constant",
                 "fill_value": "unknown",
             },
-            {"op": "encode", "columns": ["cat_low", "cat_high"], "method": "onehot"},
+            {"op": "encode", "columns": ["cat_low", "cat_high", "cat_ord"], "method": "onehot"},
             {"op": "scale", "columns": ["num3"], "method": "minmax"},
         ],
     },
@@ -133,7 +133,10 @@ PLANS = {
         "task_type": "classification",
         "model_family": "tree",
         "steps": [
-            {"op": "drop_columns", "columns": ["id", "const"]},
+            {
+                "op": "drop_columns",
+                "columns": ["id", "const", "cat_low", "cat_high", "cat_ord"],
+            },
             {"op": "drop_missing_target"},
             split(stratify=True),
         ],
@@ -143,7 +146,15 @@ PLANS = {
         "target": "n_items",
         "task_type": "regression",
         "model_family": "any",
-        "steps": [split(test_size=0.1), {"op": "scale", "columns": ["num3"], "method": "standard"}],
+        "steps": [
+            split(test_size=0.1),
+            {
+                "op": "encode",
+                "columns": ["cat_low", "cat_high", "cat_ord", "label"],
+                "method": "onehot",
+            },
+            {"op": "scale", "columns": ["num3"], "method": "standard"},
+        ],
     },
     "indicator_then_ordinal": {
         "target": "price",

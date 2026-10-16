@@ -223,12 +223,12 @@ def test_the_demo_asks_in_the_language_of_the_interface(demo):
     date_question = waiting["questions"][1]
     assert date_question["options"] == ["Düşür", "Tut"]
     assert answer(demo, session_id, {"target": "churned", "signup_date": "Tut"}).status_code == 200
-    assert wait_for(demo, session_id, FINISHED)["status"] == "done"
+    # No op can use a date, so keeping it leaves a column that is not numeric: the run fails.
+    assert wait_for(demo, session_id, FINISHED)["status"] == "failed"
     result = demo.get(f"/api/sessions/{session_id}/result").json()
     drop = next(s for s in result["plan"]["steps"] if s["op"] == "drop_columns")
     assert "signup_date" not in drop["columns"]
     assert "düşürmeyi sen seçtin" not in drop["reason"]
-    # Keeping a date the ops cannot use is the user's call; the validators only warn.
     assert any(i["code"] == "unencoded_column_remains" for i in result["issues"])
 
 

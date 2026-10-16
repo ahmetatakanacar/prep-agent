@@ -27,6 +27,11 @@ def split(**extra):
     return {"op": "split", "stratify": True, "test_size": 0.25, **extra}
 
 
+# `cat` is never encoded in the tests that do not exercise encoding; the validator rejects a plan
+# that leaves it as text.
+DROP_CAT = {"op": "drop_columns", "columns": ["cat"]}
+
+
 def make_frame(n: int = 40) -> pd.DataFrame:
     i = np.arange(n)
     return pd.DataFrame(
@@ -70,6 +75,7 @@ def test_input_frame_is_not_modified():
 def test_imputer_and_scaler_learn_from_train_only(make_plan):
     df = make_frame()
     plan = make_plan(
+        DROP_CAT,
         split(),
         {"op": "impute", "columns": ["x"], "strategy": "median"},
         {"op": "scale", "columns": ["z"], "method": "standard"},
@@ -80,8 +86,8 @@ def test_imputer_and_scaler_learn_from_train_only(make_plan):
     train_ids = set(result.train["row"])
     raw_train = df[df["row"].isin(train_ids)]
     raw_test = df[~df["row"].isin(train_ids)]
-    imputer = result.pipeline.named_steps["1_impute"].named_transformers_["impute"]
-    scaler = result.pipeline.named_steps["2_scale"].named_transformers_["scale"]
+    imputer = result.pipeline.named_steps["2_impute"].named_transformers_["impute"]
+    scaler = result.pipeline.named_steps["3_scale"].named_transformers_["scale"]
 
     assert imputer.statistics_[0] == raw_train["x"].median()
     assert raw_train["x"].median() != df["x"].median()
@@ -134,7 +140,7 @@ def test_two_runs_give_identical_frames(make_plan):
 
 def test_pipeline_is_identity_without_stateful_steps(make_plan):
     df = make_frame().dropna()
-    plan = make_plan(split())
+    plan = make_plan(DROP_CAT, split())
 
     result = run_frame(df, plan)
 
@@ -145,7 +151,7 @@ def test_pipeline_is_identity_without_stateful_steps(make_plan):
 
 def test_target_never_enters_the_pipeline(make_plan):
     df = make_frame()
-    plan = make_plan(split(), {"op": "impute", "columns": ["x"], "strategy": "median"})
+    plan = make_plan(DROP_CAT, split(), {"op": "impute", "columns": ["x"], "strategy": "median"})
 
     result = run_frame(df, plan)
 
@@ -296,7 +302,7 @@ def test_plan_error_raises_before_anything_runs(monkeypatch):
 
 def test_data_that_does_not_match_the_profile_raises_execution_error(make_plan):
     df = make_frame()
-    plan = make_plan(split(), {"op": "impute", "columns": ["x"], "strategy": "median"})
+    plan = make_plan(DROP_CAT, split(), {"op": "impute", "columns": ["x"], "strategy": "median"})
     profile = profile_dataframe(df, target="t")
 
     with pytest.raises(executor.ExecutionError):
@@ -307,12 +313,12 @@ def test_data_that_does_not_match_the_profile_raises_execution_error(make_plan):
 def test_a_missing_target_is_not_carried_into_the_output(make_plan, stratify):
     df = make_frame()
     df["t"] = df["t"].astype(float).mask(df["row"].isin([3, 10]))
-    plan = make_plan(split(stratify=stratify))
+    plan = make_plan(DROP_CAT, split(stratify=stratify))
 
     with pytest.raises(PlanValidationError, match="missing_target_at_split"):
         run_frame(df, plan)
 
-    fixed = make_plan({"op": "drop_missing_target"}, split(stratify=stratify))
+    fixed = make_plan(DROP_CAT, {"op": "drop_missing_target"}, split(stratify=stratify))
     result = run_frame(df, fixed)
     assert not result.train["t"].isna().any()
     assert not result.test["t"].isna().any()

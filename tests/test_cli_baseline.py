@@ -180,7 +180,7 @@ def test_a_baseline_that_cannot_run_is_reported_not_fatal(invoke_cli, tmp_path):
     assert baseline["skipped_reason"] in (run_dir / "report.md").read_text(encoding="utf-8")
 
 
-def test_models_that_cannot_run_are_listed_as_skipped(invoke_cli, tmp_path):
+def test_a_plan_that_leaves_a_text_column_is_refused_before_the_baseline(invoke_cli, tmp_path):
     csv = tmp_path / "text.csv"
     rows = ["x,city,t"] + [f"{i},{'ab'[i % 2]},{i % 2}" for i in range(40)]
     csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
@@ -195,10 +195,9 @@ def test_models_that_cannot_run_are_listed_as_skipped(invoke_cli, tmp_path):
 
     result = invoke_cli(run_args(tmp_path, csv=str(csv), plan=str(plan)))
 
-    assert result.exit_code == 0, result.output
-    assert "dummy_most_frequent" in result.output
-    assert "logistic_regression: " in result.output
-    assert "non-numeric columns: city" in result.output
+    assert result.exit_code == 1, result.output
+    assert "unencoded_column_remains" in result.output
+    assert "dummy_most_frequent" not in result.output
 
 
 # --- prepare ---
