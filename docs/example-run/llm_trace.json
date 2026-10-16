@@ -1,0 +1,161 @@
+{
+  "model": "gpt-6-luna",
+  "total_usage": {
+    "input_tokens": 11810,
+    "output_tokens": 2984,
+    "cached_input_tokens": 3771,
+    "cache_write_tokens": 8033
+  },
+  "calls": [
+    {
+      "index": 0,
+      "purpose": "plan",
+      "model": "gpt-6-luna",
+      "usage": {
+        "input_tokens": 5853,
+        "output_tokens": 1252,
+        "cached_input_tokens": 0,
+        "cache_write_tokens": 5850
+      },
+      "issue_codes": [],
+      "warning_codes": [],
+      "response_kind": "questions",
+      "response": {
+        "language": "English",
+        "kind": "questions",
+        "plan": null,
+        "questions": [
+          {
+            "id": "model_family",
+            "question": "Which model family should the preparation support?",
+            "options": [
+              "tree",
+              "linear",
+              "any"
+            ],
+            "recommended": "any",
+            "reason": "The model family was not specified, and it affects how numeric features are scaled and categorical features are encoded.",
+            "allow_custom": false
+          },
+          {
+            "id": "cabin",
+            "question": "Should the cabin column be kept as a feature despite 77% of its values being missing?",
+            "options": [
+              "Keep it; fill missing values with an explicit 'Unknown' category",
+              "Drop it"
+            ],
+            "recommended": "Drop it",
+            "reason": "The profile shows that most cabin values are missing. Whether the remaining cabin information is worth retaining cannot be determined from the profile alone.",
+            "allow_custom": false
+          },
+          {
+            "id": "home_dest",
+            "question": "Should the home.dest column be kept as a feature despite 43% of its values being missing?",
+            "options": [
+              "Keep it; fill missing values with an explicit 'Unknown' category",
+              "Drop it"
+            ],
+            "recommended": "Drop it",
+            "reason": "The profile shows substantial missingness and many distinct destinations. Whether this information is useful enough to retain is a modeling choice that cannot be settled from the profile alone.",
+            "allow_custom": false
+          }
+        ]
+      }
+    },
+    {
+      "index": 1,
+      "purpose": "plan",
+      "model": "gpt-6-luna",
+      "usage": {
+        "input_tokens": 5957,
+        "output_tokens": 1732,
+        "cached_input_tokens": 3771,
+        "cache_write_tokens": 2183
+      },
+      "issue_codes": [],
+      "warning_codes": [],
+      "response_kind": "plan",
+      "response": {
+        "language": "English",
+        "kind": "plan",
+        "plan": {
+          "target": "survived",
+          "task_type": "classification",
+          "model_family": "any",
+          "steps": [
+            {
+              "reason": "These columns are unsuitable for predicting survival before the outcome: name is high-cardinality personal information, boat and body record post-outcome information, and cabin and home.dest are being dropped as requested.",
+              "op": "drop_columns",
+              "columns": [
+                "name",
+                "boat",
+                "body",
+                "cabin",
+                "home.dest"
+              ]
+            },
+            {
+              "reason": "pclass represents passenger class rather than a measured quantity, so treat its values as categories instead of implying numeric distances between classes.",
+              "op": "cast_to_category",
+              "columns": [
+                "pclass"
+              ]
+            },
+            {
+              "reason": "Create a held-out test set for evaluating classification performance while preserving the target's class proportions.",
+              "op": "split",
+              "test_size": 0.2,
+              "stratify": true,
+              "random_state": 42
+            },
+            {
+              "reason": "age and fare have missing values; their medians are suitable imputations, particularly given fare's strong skew and many outliers.",
+              "op": "impute",
+              "columns": [
+                "age",
+                "fare"
+              ],
+              "strategy": "median",
+              "fill_value": null,
+              "add_indicator": false
+            },
+            {
+              "reason": "embarked has two missing values, so fill them with the most frequent observed port before encoding.",
+              "op": "impute",
+              "columns": [
+                "embarked"
+              ],
+              "strategy": "most_frequent",
+              "fill_value": null,
+              "add_indicator": false
+            },
+            {
+              "reason": "fare has many outliers, so robust scaling is appropriate for the numeric predictors and also supports linear models.",
+              "op": "scale",
+              "columns": [
+                "age",
+                "sibsp",
+                "parch",
+                "fare"
+              ],
+              "method": "robust"
+            },
+            {
+              "reason": "Convert pclass, sex, ticket, and embarked into numeric features for modeling; cap ticket's one-hot expansion by grouping its rarest categories.",
+              "op": "encode",
+              "columns": [
+                "pclass",
+                "sex",
+                "ticket",
+                "embarked"
+              ],
+              "method": "onehot",
+              "max_categories": 20
+            }
+          ]
+        },
+        "questions": null
+      }
+    }
+  ]
+}

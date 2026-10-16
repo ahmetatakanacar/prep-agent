@@ -1,0 +1,45 @@
+[
+  {
+    "question": {
+      "id": "model_family",
+      "question": "Which model family should the preparation support?",
+      "options": [
+        "tree",
+        "linear",
+        "any"
+      ],
+      "recommended": "any",
+      "reason": "The model family was not specified, and it affects how numeric features are scaled and categorical features are encoded.",
+      "allow_custom": false
+    },
+    "answer": "any"
+  },
+  {
+    "question": {
+      "id": "cabin",
+      "question": "Should the cabin column be kept as a feature despite 77% of its values being missing?",
+      "options": [
+        "Keep it; fill missing values with an explicit 'Unknown' category",
+        "Drop it"
+      ],
+      "recommended": "Drop it",
+      "reason": "The profile shows that most cabin values are missing. Whether the remaining cabin information is worth retaining cannot be determined from the profile alone.",
+      "allow_custom": false
+    },
+    "answer": "Drop it"
+  },
+  {
+    "question": {
+      "id": "home_dest",
+      "question": "Should the home.dest column be kept as a feature despite 43% of its values being missing?",
+      "options": [
+        "Keep it; fill missing values with an explicit 'Unknown' category",
+        "Drop it"
+      ],
+      "recommended": "Drop it",
+      "reason": "The profile shows substantial missingness and many distinct destinations. Whether this information is useful enough to retain is a modeling choice that cannot be settled from the profile alone.",
+      "allow_custom": false
+    },
+    "answer": "Drop it"
+  }
+]

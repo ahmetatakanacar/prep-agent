@@ -1,0 +1,76 @@
+{
+  "target": "survived",
+  "task_type": "classification",
+  "model_family": "any",
+  "steps": [
+    {
+      "reason": "These columns are unsuitable for predicting survival before the outcome: name is high-cardinality personal information, boat and body record post-outcome information, and cabin and home.dest are being dropped as requested.",
+      "op": "drop_columns",
+      "columns": [
+        "name",
+        "boat",
+        "body",
+        "cabin",
+        "home.dest"
+      ]
+    },
+    {
+      "reason": "pclass represents passenger class rather than a measured quantity, so treat its values as categories instead of implying numeric distances between classes.",
+      "op": "cast_to_category",
+      "columns": [
+        "pclass"
+      ]
+    },
+    {
+      "reason": "Create a held-out test set for evaluating classification performance while preserving the target's class proportions.",
+      "op": "split",
+      "test_size": 0.2,
+      "stratify": true,
+      "random_state": 42
+    },
+    {
+      "reason": "age and fare have missing values; their medians are suitable imputations, particularly given fare's strong skew and many outliers.",
+      "op": "impute",
+      "columns": [
+        "age",
+        "fare"
+      ],
+      "strategy": "median",
+      "fill_value": null,
+      "add_indicator": false
+    },
+    {
+      "reason": "embarked has two missing values, so fill them with the most frequent observed port before encoding.",
+      "op": "impute",
+      "columns": [
+        "embarked"
+      ],
+      "strategy": "most_frequent",
+      "fill_value": null,
+      "add_indicator": false
+    },
+    {
+      "reason": "fare has many outliers, so robust scaling is appropriate for the numeric predictors and also supports linear models.",
+      "op": "scale",
+      "columns": [
+        "age",
+        "sibsp",
+        "parch",
+        "fare"
+      ],
+      "method": "robust"
+    },
+    {
+      "reason": "Convert pclass, sex, ticket, and embarked into numeric features for modeling; cap ticket's one-hot expansion by grouping its rarest categories.",
+      "op": "encode",
+      "columns": [
+        "pclass",
+        "sex",
+        "ticket",
+        "embarked"
+      ],
+      "method": "onehot",
+      "max_categories": 20
+    }
+  ]
+}

@@ -111,7 +111,7 @@ uv run prep-agent prepare tests/fixtures/customers.csv --goal "prepare for churn
 
 ### What a run leaves behind
 
-Every run writes `runs/<run_id>/`:
+Every run writes `runs/<run_id>/`. A real one, without the data files, is in [docs/example-run/](docs/example-run/):
 
 | File | Content |
 |---|---|
