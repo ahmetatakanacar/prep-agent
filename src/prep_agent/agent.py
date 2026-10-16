@@ -40,7 +40,7 @@ from prep_agent.planner import (
     build_system_prompt,
     build_user_prompt,
 )
-from prep_agent.profiler import DatasetProfile, profile_dataframe
+from prep_agent.profiler import DatasetProfile, profile_dataframe, require_varying_target
 from prep_agent.validators import SEVERITY, ValidationIssue, partition_issues
 
 MAX_SCHEMA_RETRIES = 1
@@ -192,8 +192,9 @@ def run_agent(
     max_revisions: int = 2,
     max_schema_retries: int = MAX_SCHEMA_RETRIES,
 ) -> AgentResult:
-    """Prepare `df` for `goal`. Raises `ProfilerError` for an unusable frame or target, and
-    `AgentError` if no valid result could be produced. `df` is not modified."""
+    """Prepare `df` for `goal`. Raises `ProfilerError` for an unusable frame or target (not a
+    column, or with a single value) and `AgentError` if no valid result could be produced. `df` is
+    not modified."""
     if max_question_rounds < 0 or max_revisions < 0 or max_schema_retries < 0:
         raise ValueError(
             "max_question_rounds, max_revisions and max_schema_retries must not be negative"
@@ -235,6 +236,7 @@ class _Agent:
         self.max_schema_retries = max_schema_retries
 
         self.profile = profile_dataframe(df, target=target)
+        require_varying_target(self.profile)
         self.system_prompt = build_system_prompt()
         self.calls: list[LLMCallRecord] = []
         self.qa_history: list[QARecord] = []

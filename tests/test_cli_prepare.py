@@ -492,6 +492,19 @@ def test_a_target_that_is_not_a_column_fails_before_any_llm_call(invoke_cli, mon
     assert not (tmp_path / "runs").exists()
 
 
+def test_a_target_with_one_value_fails_before_any_llm_call(invoke_cli, monkeypatch, tmp_path):
+    llm = use_llm(monkeypatch, [])
+    csv = tmp_path / "single.csv"
+    csv.write_text("a,t\n" + "".join(f"{i},yes\n" for i in range(30)), encoding="utf-8")
+
+    result = invoke_cli(prepare_args(tmp_path, "--target", "t", "--non-interactive", csv=str(csv)))
+
+    assert result.exit_code == 1
+    assert "only one value" in result.output
+    assert llm.calls == []
+    assert not (tmp_path / "runs").exists()
+
+
 def test_a_missing_csv_fails_cleanly(invoke_cli, monkeypatch, tmp_path):
     use_llm(monkeypatch, [])
 

@@ -50,13 +50,20 @@ from prep_agent.plan import (
     SplitStep,
     Step,
 )
-from prep_agent.profiler import DEFAULT_CONFIG, ColumnProfile, DatasetProfile, InferredType
+from prep_agent.profiler import (
+    DEFAULT_CONFIG,
+    TARGET_CONSTANT_MESSAGE,
+    ColumnProfile,
+    DatasetProfile,
+    InferredType,
+)
 
 Severity = Literal["error", "warning"]
 IssueCode = Literal[
     # errors
     "target_mismatch",
     "target_not_in_profile",
+    "target_constant",
     "model_family_mismatch",
     "invalid_split_count",
     "stateless_after_split",
@@ -110,6 +117,7 @@ IssueCode = Literal[
 SEVERITY: dict[IssueCode, Severity] = {
     "target_mismatch": "error",
     "target_not_in_profile": "error",
+    "target_constant": "error",
     "model_family_mismatch": "error",
     "invalid_split_count": "error",
     "stateless_after_split": "error",
@@ -242,6 +250,7 @@ class _Validation:
     def run(self) -> list[ValidationIssue]:
         self._check_target_matches_profile()
         self._check_target_exists()
+        self._check_target_constant()
         self._check_task_type()
         self._check_model_family()
         self._check_split_count()
@@ -290,6 +299,15 @@ class _Validation:
                 f"target {target!r} is not a column of the dataset; set 'target' to one of: "
                 f"{', '.join(self.columns)}.",
                 column=target,
+            )
+
+    def _check_target_constant(self) -> None:
+        target = next((c for c in self.profile.columns if c.name == self.plan.target), None)
+        if target is not None and target.n_unique == 1:
+            self._add(
+                "target_constant",
+                f"{TARGET_CONSTANT_MESSAGE}; set 'target' to a column that varies.",
+                column=target.name,
             )
 
     def _check_task_type(self) -> None:

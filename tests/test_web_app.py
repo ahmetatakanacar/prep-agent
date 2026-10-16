@@ -124,6 +124,27 @@ def test_plan_request_is_validated(demo):
     assert start(demo, session_id, model_family="forest").status_code == 422
 
 
+def test_a_target_with_one_value_ends_the_run_before_any_llm_call():
+    llms = []
+
+    def factory(session, request):
+        llms.append(FakeLLM([]))
+        return llms[-1]
+
+    csv = "a,t\n" + "".join(f"{i},yes\n" for i in range(30))
+    with make_client(llm_factory=factory) as client:
+        session_id = client.post("/api/sessions", files={"file": ("one.csv", csv.encode())}).json()[
+            "id"
+        ]
+
+        assert start(client, session_id, target="t").status_code == 202
+        snap = wait_for(client, session_id, FINISHED)
+
+    assert snap["status"] == "error"
+    assert "only one value" in snap["error"]
+    assert llms[0].calls == []
+
+
 def test_demo_mode_refuses_a_target_its_script_does_not_cover(demo):
     session_id = open_sample(demo)
 

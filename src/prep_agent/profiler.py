@@ -184,6 +184,20 @@ class DatasetProfile(BaseModel):
     target_task_hint: TaskHint | None = None
 
 
+TARGET_CONSTANT_MESSAGE = "the target has only one value, so there is nothing to predict"
+
+
+def require_varying_target(profile: DatasetProfile) -> None:
+    """Raise `ProfilerError` if the target the user named has a single distinct value.
+
+    Missing values do not count as a value. Callers use this on a target that came from the user,
+    so that no planner call is spent on a task that cannot work.
+    """
+    target = next((c for c in profile.columns if c.name == profile.target), None)
+    if target is not None and target.n_unique == 1:
+        raise ProfilerError(f"{TARGET_CONSTANT_MESSAGE}: column {target.name!r}")
+
+
 def load_csv(path: str | Path) -> pd.DataFrame:
     """Read a CSV file, raising `ProfilerError` with a readable message on failure.
 

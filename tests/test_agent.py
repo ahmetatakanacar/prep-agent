@@ -194,6 +194,16 @@ def test_unknown_target_is_reported_before_any_llm_call(df):
     assert llm.calls == []
 
 
+def test_a_target_with_one_value_is_reported_before_any_llm_call(df):
+    df = df.assign(single="yes")
+    llm = FakeLLM([])
+
+    with pytest.raises(ProfilerError, match="only one value"):
+        run_agent(df, GOAL, llm, Asker(), target="single")
+
+    assert llm.calls == []
+
+
 # --- questions ---
 
 

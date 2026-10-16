@@ -188,6 +188,35 @@ def test_target_missing_from_profile_is_an_error():
     assert find(validate(*VALID_STEPS), "target_not_in_profile") == []
 
 
+def test_a_target_with_one_value_is_an_error():
+    profile = profile_dataframe(make_frame(), target="country")
+
+    issues = validate(*VALID_STEPS, target="country", profile=profile)
+
+    [issue] = find(issues, "target_constant")
+    assert issue.severity == "error"
+    assert issue.step_index is None
+    assert issue.column == "country"
+    assert "the target has only one value, so there is nothing to predict" in issue.message
+    assert find(validate(*VALID_STEPS), "target_constant") == []
+
+
+def test_missing_values_do_not_count_as_a_second_target_value():
+    frame = make_frame()
+    frame["churn"] = [None if i % 3 == 0 else 1 for i in range(N_ROWS)]
+    profile = profile_dataframe(frame, target="churn")
+
+    [issue] = find(validate(*VALID_STEPS, profile=profile), "target_constant")
+
+    assert issue.column == "churn"
+
+
+def test_a_target_with_two_values_is_not_constant():
+    profile = profile_dataframe(make_frame(), target="flag")
+
+    assert find(validate(*VALID_STEPS, target="flag", profile=profile), "target_constant") == []
+
+
 def test_plan_target_different_from_the_profile_target_is_an_error():
     issues = validate(*VALID_STEPS, target="segment")
 
