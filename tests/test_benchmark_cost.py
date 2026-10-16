@@ -322,3 +322,27 @@ class TestEstimateAgentRun:
         price = ModelPrice(input_per_million=1.0, output_per_million=3.0)
         expected = (estimate.input_tokens * 1.0 + estimate.output_tokens * 3.0) / 1_000_000
         assert estimate.cost(price) == pytest.approx(expected)
+
+
+class TestShippedPrices:
+    """The prices.yaml of the repository itself, read by the code that costs a run."""
+
+    def test_luna_has_cache_prices_and_they_are_used_for_the_cache_tokens(self):
+        luna = load_prices(DEFAULT_PRICES).models["gpt-6-luna"]
+        assert luna.cached_input_per_million == 0.01
+        assert luna.cache_write_per_million == 0.125
+
+        usage = TokenUsage(
+            input_tokens=1_000_000,
+            output_tokens=100_000,
+            cached_input_tokens=600_000,
+            cache_write_tokens=200_000,
+        )
+        # 200k ordinary at 0.10, 600k cached at 0.01, 200k written at 0.125, 100k output at 0.50.
+        expected = 0.02 + 0.006 + 0.025 + 0.05
+        assert price_of_usage(usage, luna) == pytest.approx(expected)
+
+    def test_every_listed_model_gets_a_cache_price_in_the_same_form(self):
+        for name, entry in load_prices(DEFAULT_PRICES).models.items():
+            assert entry.cached_input_per_million is not None, name
+            assert entry.cache_write_per_million is not None, name
