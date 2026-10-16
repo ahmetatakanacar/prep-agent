@@ -30,9 +30,11 @@ threshold lives in `ProfilerConfig`.
 
 Warning `low_cardinality_numeric`: a `numeric` column (so not binary, not id_like and not
 constant) whose finite values are all whole numbers and which has at most
-`ProfilerConfig.low_cardinality_unique` distinct values. It is only a hint: the numbers may be
-categories stored as numbers (hour, month, a type code) or a real count (rooms, children), and
-the profile cannot tell which.
+`ProfilerConfig.low_cardinality_unique` distinct values, fewer than
+`low_cardinality_max_unique_ratio` of its non-missing values. The second condition keeps out
+small tables, where every whole-number column such as an age has few distinct values only
+because it has few rows. It is only a hint: the numbers may be categories stored as numbers
+(hour, month, a type code) or a real count (rooms, children), and the profile cannot tell which.
 
 Privacy: a column is flagged `possible_pii` if most of its string values look like email
 addresses or phone numbers, or if a part of its name (split on `_`, spaces and camelCase) is in
@@ -105,6 +107,7 @@ class ProfilerConfig:
     high_missing_ratio: float = 0.4
     high_cardinality_unique: int = 50
     low_cardinality_unique: int = 25
+    low_cardinality_max_unique_ratio: float = 0.5
     high_skew_abs: float = 2.0
     many_outliers_ratio: float = 0.05
 
@@ -280,7 +283,11 @@ def _profile_column(
             warnings.append("many_outliers")
         if n_inf:
             warnings.append("infinite_values")
-        if n_unique <= config.low_cardinality_unique and _all_whole_numbers(non_null):
+        if (
+            n_unique <= config.low_cardinality_unique
+            and n_unique < config.low_cardinality_max_unique_ratio * n_non_null
+            and _all_whole_numbers(non_null)
+        ):
             warnings.append("low_cardinality_numeric")
     elif inferred in ("categorical", "binary"):
         fields["top_values"] = [] if hide_values else _top_values(non_null, config)

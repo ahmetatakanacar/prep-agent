@@ -386,6 +386,49 @@ def test_text_columns_of_digits_get_no_low_cardinality_warning():
     assert "low_cardinality_numeric" not in col.warnings
 
 
+def test_a_small_column_of_all_distinct_whole_numbers_gets_no_low_cardinality_warning():
+    col = profile_column([i * 3 for i in range(20)], name="age")
+
+    assert col.inferred_type == "numeric"
+    assert col.n_unique == 20
+    assert "low_cardinality_numeric" not in col.warnings
+
+
+def test_an_hour_column_in_a_large_table_still_gets_the_warning():
+    col = profile_column([i % 24 for i in range(1000)], name="hour")
+
+    assert col.n_unique == 24
+    assert "low_cardinality_numeric" in col.warnings
+
+
+def test_the_distinct_values_must_be_fewer_than_the_share_of_the_filled_values():
+    assert DEFAULT_CONFIG.low_cardinality_max_unique_ratio == 0.5
+
+    below = profile_column([i % 9 for i in range(20)])  # 9 of 20 distinct
+    at_share = profile_column([i % 10 for i in range(20)])  # 10 of 20 distinct
+
+    assert "low_cardinality_numeric" in below.warnings
+    assert "low_cardinality_numeric" not in at_share.warnings
+
+
+def test_the_share_is_taken_of_the_filled_values_not_of_all_rows():
+    # 12 rows, 6 filled, 4 distinct: 4 of 6 is above half, although 4 of 12 is below it.
+    col = profile_column([1.0, 2.0, 3.0, 4.0, 1.0, 2.0] + [None] * 6)
+
+    assert col.n_unique == 4
+    assert "low_cardinality_numeric" not in col.warnings
+
+
+def test_the_share_comes_from_the_config():
+    df = pd.DataFrame({"col": [i % 10 for i in range(20)]})
+
+    default = profile_dataframe(df)
+    lenient = profile_dataframe(df, config=ProfilerConfig(low_cardinality_max_unique_ratio=0.6))
+
+    assert "low_cardinality_numeric" not in default.columns[0].warnings
+    assert "low_cardinality_numeric" in lenient.columns[0].warnings
+
+
 def test_many_distinct_whole_numbers_get_no_low_cardinality_warning():
     col = profile_column([i * 3 % 997 for i in range(300)])
 
