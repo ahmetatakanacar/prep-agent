@@ -15,15 +15,20 @@ threshold lives in `ProfilerConfig`.
 4. Numeric dtypes are `id_like` or `numeric`. Only integer dtypes can be `id_like`: every value
    is distinct, there are at least `id_min_rows` of them, and the values either form an almost
    contiguous range (span <= `id_dense_span_ratio` x row count, like 1..n) or the column name
-   looks like an identifier ("id", "user_id", "orderId"). A unique integer column such as a price
-   is therefore kept as `numeric`. Float columns are never `id_like`.
+   looks like an identifier ("id", "user_id", "orderId"). A column whose name has an identifier
+   part (`ProfilerConfig.id_name_parts`: id, no, numara, numarasi, ...) is also `id_like` when
+   more than `id_name_min_unique_ratio` of its values are distinct, because a few repeated
+   records ("basvuru_no" in a file with duplicate rows) must not hide it. A unique integer column
+   such as a price is therefore kept as `numeric`, and so is a code with few values
+   ("sube_kodu"). Float columns are never `id_like`.
 5. Other columns are treated as strings:
    - `datetime` if at least `datetime_min_parse_ratio` of a sample (at most
      `datetime_sample_size` values) parse as dates. A value is only tried if it has at least
      two digits and one non-digit character, so month names ("May"), zip codes ("90210") and
      other bare numbers are not mistaken for dates.
-   - `id_like` if every value is distinct, there are at least `id_min_rows` of them and the mean
-     length is below `text_min_mean_length` (short unique strings).
+   - `id_like` if every value is distinct (or almost, for an identifier name as in rule 4),
+     there are at least `id_min_rows` of them and the mean length is below
+     `text_min_mean_length` (short unique strings).
    - `text` if the mean length is at least `text_min_mean_length` and at least
      `text_min_unique_ratio` of the values are distinct (long, mostly unique strings).
    - `categorical` otherwise.
@@ -99,6 +104,11 @@ class ProfilerConfig:
     # Type inference
     id_min_rows: int = 10
     id_dense_span_ratio: float = 1.1
+    # A column whose name has one of these parts (`id_name_parts`, same matching as the PII names)
+    # is `id_like` if more than this share of its values are distinct, so that a few repeated
+    # records do not hide an identifier.
+    id_name_min_unique_ratio: float = 0.95
+    id_name_parts: tuple[str, ...] = ("id", "uuid", "guid", "no", "numara", "numarasi")
     text_min_mean_length: float = 30.0
     text_min_unique_ratio: float = 0.5
     datetime_sample_size: int = 2000
@@ -491,7 +501,11 @@ def _infer_type(
     if _looks_like_datetime(strings, config):
         return "datetime"
     mean_length = float(strings.str.len().mean())
-    if n_unique == n and n >= config.id_min_rows and mean_length < config.text_min_mean_length:
+    if (
+        n >= config.id_min_rows
+        and mean_length < config.text_min_mean_length
+        and (n_unique == n or _is_nearly_unique_id(name, n, n_unique, config))
+    ):
         return "id_like"
     if mean_length >= config.text_min_mean_length and (
         n_unique / n >= config.text_min_unique_ratio
@@ -504,16 +518,24 @@ def _is_id_like_integer(
     name: str, non_null: pd.Series, n_unique: int, config: ProfilerConfig
 ) -> bool:
     n = len(non_null)
-    if n < config.id_min_rows or n_unique != n:
+    if n < config.id_min_rows:
         return False
-    if _looks_like_id_name(name):
+    if _is_nearly_unique_id(name, n, n_unique, config):
         return True
+    if n_unique != n:
+        return False
     span = int(non_null.max()) - int(non_null.min()) + 1
     return span <= config.id_dense_span_ratio * n
 
 
-def _looks_like_id_name(name: str) -> bool:
-    return bool(_SNAKE_ID_NAME.search(name) or _CAMEL_ID_NAME.search(name))
+def _is_nearly_unique_id(name: str, n: int, n_unique: int, config: ProfilerConfig) -> bool:
+    return n_unique > config.id_name_min_unique_ratio * n and _looks_like_id_name(name, config)
+
+
+def _looks_like_id_name(name: str, config: ProfilerConfig) -> bool:
+    if _SNAKE_ID_NAME.search(name) or _CAMEL_ID_NAME.search(name):
+        return True
+    return not set(_name_parts(name)).isdisjoint(config.id_name_parts)
 
 
 def _is_date_candidate(value: str) -> bool:

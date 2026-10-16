@@ -175,6 +175,59 @@ def test_unique_integers_with_id_name_are_id_like():
     assert col.inferred_type == "id_like"
 
 
+def _nearly_unique(values, n_repeated=3):
+    return list(values) + list(values[:n_repeated])
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["başvuru_no", "basvuru_no", "BasvuruNo", "sozlesme_numarasi", "musteri_numara", "kod_no"],
+)
+def test_integers_with_an_identifier_name_and_almost_all_distinct_values_are_id_like(name):
+    # 97 distinct values in 100 rows, sparse enough that the range rule does not apply.
+    col = profile_column(_nearly_unique([100001 + i * 7 for i in range(97)]), name=name)
+
+    assert col.n_unique == 97
+    assert col.inferred_type == "id_like"
+    assert "possible_id" in col.warnings
+
+
+def test_strings_with_an_identifier_name_and_almost_all_distinct_values_are_id_like():
+    col = profile_column(_nearly_unique([f"B{i:05d}" for i in range(97)]), name="basvuru_no")
+
+    assert col.inferred_type == "id_like"
+    assert "possible_id" in col.warnings
+
+
+@pytest.mark.parametrize("name", ["sube_kodu", "şube_kodu", "kod_no", "no", "id"])
+def test_a_code_with_few_distinct_values_is_not_id_like(name):
+    col = profile_column([100 + (i % 40) for i in range(100)], name=name)
+
+    assert col.inferred_type == "numeric"
+    assert "possible_id" not in col.warnings
+
+
+def test_the_unique_ratio_of_an_identifier_name_must_be_above_the_threshold():
+    ratio_95 = profile_column(_nearly_unique([100001 + i * 7 for i in range(95)], 5), name="no")
+    ratio_96 = profile_column(_nearly_unique([100001 + i * 7 for i in range(96)], 4), name="no")
+
+    assert ratio_95.inferred_type == "numeric"
+    assert ratio_96.inferred_type == "id_like"
+    assert DEFAULT_CONFIG.id_name_min_unique_ratio == 0.95
+
+
+def test_almost_unique_integers_without_an_identifier_name_are_numeric():
+    col = profile_column(_nearly_unique([100001 + i * 7 for i in range(97)]), name="gelir")
+
+    assert col.inferred_type == "numeric"
+
+
+def test_an_identifier_name_does_not_make_a_float_column_id_like():
+    col = profile_column(_nearly_unique([100001.5 + i * 7 for i in range(97)]), name="basvuru_no")
+
+    assert col.inferred_type == "numeric"
+
+
 def test_unique_sparse_integers_without_id_name_are_numeric():
     col = profile_column([101, 250, 377, 481, 599, 653, 720, 835, 902, 1011], name="price")
 
