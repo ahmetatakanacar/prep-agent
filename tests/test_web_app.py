@@ -99,6 +99,45 @@ def test_upload_rejects_unusable_files(demo, content):
     assert response.json()["detail"]
 
 
+def test_the_profile_names_the_csv_settings_that_were_found(demo):
+    csv = FIXTURES / "customers_tr.csv"
+
+    snap = demo.post("/api/sessions", files={"file": ("tr.csv", csv.read_bytes())}).json()
+
+    assert snap["profile"]["csv"] == {"sep": ";", "decimal": ",", "encoding": "cp1254"}
+    assert snap["profile"]["n_rows"] == 20
+    monthly = next(c for c in snap["profile"]["columns"] if c["name"] == "monthly_spend")
+    assert monthly["inferred_type"] == "numeric"
+    plain = demo.get(f"/api/sessions/{open_sample(demo)}").json()
+    assert plain["profile"]["csv"] == {"sep": ",", "decimal": ".", "encoding": "utf-8"}
+
+
+def test_a_run_on_a_semicolon_cp1254_file_keeps_the_settings_in_its_run_folder():
+    response = plan_response(FIXTURES / "customers_plan.json")
+    csv = FIXTURES / "customers_tr.csv"
+    with make_client(llm_factory=scripted(response)) as client:
+        session_id = client.post(
+            "/api/sessions", files={"file": ("tr.csv", csv.read_bytes())}
+        ).json()["id"]
+        assert start(client, session_id, target="churned", model_family="any").status_code == 202
+        snap = wait_for(client, session_id, FINISHED)
+        assert snap["status"] == "done", snap["error"]
+        info = client.get(f"/api/sessions/{session_id}/files/run.json").json()
+        script = client.get(f"/api/sessions/{session_id}/files/pipeline.py").text
+
+    assert info["csv"] == {"sep": ";", "decimal": ",", "encoding": "cp1254"}
+    assert 'CSV_OPTIONS = {"sep": ";", "decimal": ",", "encoding": "cp1254"}' in script
+
+
+@pytest.mark.parametrize("key", ["profile.sep", "profile.sep_tab", "profile.encoding"])
+def test_the_csv_settings_of_the_profile_are_translated_and_shown_by_the_page(key):
+    texts = (STATIC / "i18n.js").read_text(encoding="utf-8")
+    page = (STATIC / "app.js").read_text(encoding="utf-8")
+
+    assert texts.count(f'"{key}":') == 2, "one entry for English and one for Turkish"
+    assert f't("{key}"' in page
+
+
 def test_upload_over_the_limit_is_refused():
     with make_client(max_upload_bytes=100) as client:
         response = client.post("/api/sessions", files={"file": ("big.csv", CUSTOMERS.read_bytes())})

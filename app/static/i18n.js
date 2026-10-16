@@ -86,6 +86,9 @@ window.I18N = {
 
     "profile.title": "Profile",
     "profile.another": "Use another file",
+    "profile.sep": "separator {sep}",
+    "profile.sep_tab": "tab",
+    "profile.encoding": "encoding {encoding}",
     "profile.caption": "Columns of the data set",
     "col.column": "Column",
     "col.type": "Type",
@@ -457,6 +460,9 @@ window.I18N = {
 
     "profile.title": "Profil",
     "profile.another": "Başka dosya kullan",
+    "profile.sep": "ayraç {sep}",
+    "profile.sep_tab": "sekme",
+    "profile.encoding": "kodlama {encoding}",
     "profile.caption": "Veri kümesinin sütunları",
     "col.column": "Sütun",
     "col.type": "Tip",

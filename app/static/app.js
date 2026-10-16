@@ -548,8 +548,11 @@ function renderProfileSheet(snap) {
     );
   });
 
+  const readAs = p.csv
+    ? [t("profile.sep", { sep: p.csv.sep === "\t" ? t("profile.sep_tab") : p.csv.sep }), t("profile.encoding", { encoding: p.csv.encoding })]
+    : [];
   const meta = [
-    h("span", {}, [snap.filename, tn("rows", p.n_rows), tn("columns", p.n_columns), tn("dups", p.n_duplicate_rows)].join(" · ")),
+    h("span", {}, [snap.filename, tn("rows", p.n_rows), tn("columns", p.n_columns), tn("dups", p.n_duplicate_rows), ...readAs].join(" · ")),
     h("button", { type: "button", class: "btn quiet small", onclick: startOver }, t("profile.another")),
   ];
   put(

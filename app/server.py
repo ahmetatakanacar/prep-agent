@@ -141,8 +141,8 @@ def create_app(settings: Settings | None = None, llm_factory: LLMFactory | None 
 
     def open_session(path: Path, filename: str) -> dict:
         try:
-            df = load_csv(path).df
-            session = store.create(filename, df, path)
+            loaded = load_csv(path)
+            session = store.create(filename, loaded.df, path, loaded.options)
         except ProfilerError as exc:
             raise ApiError(422, "unreadable_file", str(exc)) from None
         return session.snapshot()

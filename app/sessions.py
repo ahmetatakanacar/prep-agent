@@ -26,7 +26,7 @@ from prep_agent.agent import AgentError, AgentResult, AgentTrace, run_agent
 from prep_agent.baseline import BaselineResult, evaluate_baselines
 from prep_agent.llm.base import LLMClient, LLMError, LLMResult
 from prep_agent.planner import QARecord, Question
-from prep_agent.profiler import DatasetProfile, ProfilerError, profile_dataframe
+from prep_agent.profiler import CsvOptions, DatasetProfile, ProfilerError, profile_dataframe
 from prep_agent.runs import RunExistsError, save_run
 
 log = logging.getLogger("app.sessions")
@@ -57,9 +57,16 @@ class RunRequest:
 
 
 class Session:
-    def __init__(self, root: Path, filename: str, df: pd.DataFrame, source: Path) -> None:
+    def __init__(
+        self,
+        root: Path,
+        filename: str,
+        df: pd.DataFrame,
+        source: Path,
+        csv_options: CsvOptions | None = None,
+    ) -> None:
         # Profiling comes first: it can refuse the frame, and then no directory may be left behind.
-        self.profile = profile_dataframe(df)
+        self.profile = profile_dataframe(df, csv_options=csv_options)
         self.id = uuid.uuid4().hex
         self.filename = filename
         self.directory = root / self.id
@@ -236,6 +243,7 @@ class Session:
                 lambda questions: self._ask(questions, token),
                 target=request.target,
                 model_family=request.model_family,
+                csv_options=self.profile.csv,
             )
             self._finish_ok(result, run_id, token)
         except SessionClosed:
@@ -430,8 +438,10 @@ class SessionStore:
         self._sessions: dict[str, Session] = {}
         self._lock = threading.Lock()
 
-    def create(self, filename: str, df: pd.DataFrame, source: Path) -> Session:
-        session = Session(self.root, filename, df, source)
+    def create(
+        self, filename: str, df: pd.DataFrame, source: Path, csv_options: CsvOptions | None = None
+    ) -> Session:
+        session = Session(self.root, filename, df, source, csv_options)
         with self._lock:
             self._sessions[session.id] = session
         return session

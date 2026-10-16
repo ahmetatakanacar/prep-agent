@@ -139,7 +139,7 @@ On a successful run the baseline scores a dummy model, a logistic regression and
 
 ## Web UI (local)
 
-`app/` is a small web interface for trying prep-agent on your own machine: upload a CSV or pick a sample, write the goal, answer the agent's questions on the page, and read the plan with the split line, the validators' notes, how a rejected plan was corrected, the baseline scores and report.md, then download the whole run folder as a zip. It shows the LLM calls and token counts of a run, not what they cost. The page is plain HTML, CSS and JavaScript (no build step), in English and Turkish.
+`app/` is a small web interface for trying prep-agent on your own machine: upload a CSV or pick a sample, write the goal, answer the agent's questions on the page, and read the plan with the split line, the validators' notes, how a rejected plan was corrected, the baseline scores and report.md, then download the whole run folder as a zip. An uploaded file is read with the settings found automatically (see "Profile a file"), and the profile heading names the separator and the encoding. It shows the LLM calls and token counts of a run, not what they cost. The page is plain HTML, CSS and JavaScript (no build step), in English and Turkish.
 
 ```powershell
 # demo: a scripted planner on tests/fixtures/customers.csv, no API calls
