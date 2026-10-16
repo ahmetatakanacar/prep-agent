@@ -112,6 +112,33 @@ def test_the_profile_names_the_csv_settings_that_were_found(demo):
     assert plain["profile"]["csv"] == {"sep": ",", "decimal": ".", "encoding": "utf-8"}
 
 
+def test_a_file_that_is_not_utf8_comes_with_a_warning_code_and_others_with_none(demo):
+    csv = FIXTURES / "customers_tr.csv"
+
+    snap = demo.post("/api/sessions", files={"file": ("tr.csv", csv.read_bytes())}).json()
+    plain = demo.get(f"/api/sessions/{open_sample(demo)}").json()
+
+    assert snap["csv_warnings"] == ["encoding_fallback"]
+    assert plain["csv_warnings"] == []
+
+
+def test_the_warning_about_the_encoding_is_translated_and_shown_above_the_profile():
+    texts = (STATIC / "i18n.js").read_text(encoding="utf-8")
+    page = (STATIC / "app.js").read_text(encoding="utf-8")
+
+    assert texts.count('"profile.encoding_fallback":') == 2
+    assert (
+        "This file is not UTF-8, so it was read as Turkish Windows-1254. If letters look wrong, "
+        "save the file as UTF-8 and upload it again."
+    ) in texts
+    assert (
+        "Bu dosya UTF-8 değil, bu yüzden Türkçe Windows-1254 olarak okundu. Harfler bozuk "
+        "görünürse dosyayı UTF-8 olarak kaydedip yeniden yükle."
+    ) in texts
+    assert 't("profile.encoding_fallback"' in page
+    assert "csv_warnings" in page
+
+
 def test_a_run_on_a_semicolon_cp1254_file_keeps_the_settings_in_its_run_folder():
     response = plan_response(FIXTURES / "customers_plan.json")
     csv = FIXTURES / "customers_tr.csv"

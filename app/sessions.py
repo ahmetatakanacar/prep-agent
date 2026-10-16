@@ -64,9 +64,12 @@ class Session:
         df: pd.DataFrame,
         source: Path,
         csv_options: CsvOptions | None = None,
+        csv_warnings: list[str] | None = None,
     ) -> None:
         # Profiling comes first: it can refuse the frame, and then no directory may be left behind.
         self.profile = profile_dataframe(df, csv_options=csv_options)
+        # Codes the page translates, one per thing that went wrong while reading the file.
+        self.csv_warnings = csv_warnings or []
         self.id = uuid.uuid4().hex
         self.filename = filename
         self.directory = root / self.id
@@ -112,6 +115,7 @@ class Session:
                 "status": self.status,
                 "phase": self.phase,
                 "profile": self.profile.model_dump(mode="json", exclude_none=True),
+                "csv_warnings": self.csv_warnings,
                 "request": None
                 if self.request is None
                 else {
@@ -439,9 +443,14 @@ class SessionStore:
         self._lock = threading.Lock()
 
     def create(
-        self, filename: str, df: pd.DataFrame, source: Path, csv_options: CsvOptions | None = None
+        self,
+        filename: str,
+        df: pd.DataFrame,
+        source: Path,
+        csv_options: CsvOptions | None = None,
+        csv_warnings: list[str] | None = None,
     ) -> Session:
-        session = Session(self.root, filename, df, source, csv_options)
+        session = Session(self.root, filename, df, source, csv_options, csv_warnings)
         with self._lock:
             self._sessions[session.id] = session
         return session

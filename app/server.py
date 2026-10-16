@@ -142,7 +142,8 @@ def create_app(settings: Settings | None = None, llm_factory: LLMFactory | None 
     def open_session(path: Path, filename: str) -> dict:
         try:
             loaded = load_csv(path)
-            session = store.create(filename, loaded.df, path, loaded.options)
+            warnings = ["encoding_fallback"] if loaded.encoding_fallback else []
+            session = store.create(filename, loaded.df, path, loaded.options, warnings)
         except ProfilerError as exc:
             raise ApiError(422, "unreadable_file", str(exc)) from None
         return session.snapshot()

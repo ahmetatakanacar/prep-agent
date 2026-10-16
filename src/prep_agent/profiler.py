@@ -232,6 +232,8 @@ class LoadedCsv:
     df: pd.DataFrame
     options: CsvOptions
     warnings: list[str] = field(default_factory=list)
+    # The file was not UTF-8 and was read as `FALLBACK_ENCODING`; `warnings` says so in words.
+    encoding_fallback: bool = False
 
 
 # The encoding tried when a file is not UTF-8: the Windows code page of Turkish text.
@@ -294,7 +296,7 @@ def load_csv(
         raise ProfilerError(f"could not read CSV file {path}: {exc}") from exc
     if df.empty:
         raise ProfilerError(f"CSV file has no data rows: {path}")
-    return LoadedCsv(df, options, warnings)
+    return LoadedCsv(df, options, warnings, encoding_fallback=bool(warnings))
 
 
 def _check_codec(encoding: str) -> None:

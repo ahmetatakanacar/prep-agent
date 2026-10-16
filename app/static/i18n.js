@@ -86,6 +86,8 @@ window.I18N = {
 
     "profile.title": "Profile",
     "profile.another": "Use another file",
+    "profile.encoding_fallback":
+      "This file is not UTF-8, so it was read as Turkish Windows-1254. If letters look wrong, save the file as UTF-8 and upload it again.",
     "profile.sep": "separator {sep}",
     "profile.sep_tab": "tab",
     "profile.encoding": "encoding {encoding}",
@@ -460,6 +462,8 @@ window.I18N = {
 
     "profile.title": "Profil",
     "profile.another": "Başka dosya kullan",
+    "profile.encoding_fallback":
+      "Bu dosya UTF-8 değil, bu yüzden Türkçe Windows-1254 olarak okundu. Harfler bozuk görünürse dosyayı UTF-8 olarak kaydedip yeniden yükle.",
     "profile.sep": "ayraç {sep}",
     "profile.sep_tab": "sekme",
     "profile.encoding": "kodlama {encoding}",

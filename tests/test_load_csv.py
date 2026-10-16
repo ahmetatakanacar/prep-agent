@@ -26,6 +26,7 @@ def test_a_plain_utf8_comma_file_gets_the_default_options(tmp_path):
     loaded = load_csv(write(tmp_path, rows(12, ",", ".")))
 
     assert loaded.options == CsvOptions(sep=",", decimal=".", encoding="utf-8")
+    assert loaded.encoding_fallback is False
     assert loaded.warnings == []
     assert loaded.df["price"].tolist()[:2] == [10.05, 11.30]
     assert loaded.df["city"].tolist()[:2] == ["çalışan", "öğretmen"]
@@ -81,6 +82,7 @@ def test_a_file_that_is_not_utf8_falls_back_to_cp1254_with_a_warning(tmp_path):
     loaded = load_csv(write(tmp_path, rows(12, ";", ","), encoding="cp1254"))
 
     assert loaded.options == CsvOptions(sep=";", decimal=",", encoding="cp1254")
+    assert loaded.encoding_fallback is True
     [warning] = loaded.warnings
     assert "cp1254" in warning
     assert "UTF-8" in warning
@@ -108,6 +110,7 @@ def test_the_given_options_replace_what_would_have_been_found(tmp_path):
     loaded = load_csv(path, sep=";", decimal=".", encoding="latin-1")
 
     assert loaded.options == CsvOptions(sep=";", decimal=".", encoding="latin-1")
+    assert loaded.encoding_fallback is False
     assert loaded.warnings == []
     # The comma is not a decimal mark any more, so the prices stay text.
     assert not pd.api.types.is_numeric_dtype(loaded.df["price"])

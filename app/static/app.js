@@ -555,8 +555,12 @@ function renderProfileSheet(snap) {
     h("span", {}, [snap.filename, tn("rows", p.n_rows), tn("columns", p.n_columns), tn("dups", p.n_duplicate_rows), ...readAs].join(" · ")),
     h("button", { type: "button", class: "btn quiet small", onclick: startOver }, t("profile.another")),
   ];
+  const readWarning = (snap.csv_warnings || []).includes("encoding_fallback")
+    ? h("div", { class: "banner", role: "status" }, h("p", {}, t("profile.encoding_fallback")))
+    : null;
   put(
     sheet,
+    readWarning,
     sheetHead("01", t("profile.title"), meta, "h-profile"),
     h(
       "div",
