@@ -189,7 +189,7 @@ def test_there_is_a_plan_file_for_every_dataset_and_for_nothing_else():
 class TestAgainstTheDownloadedData:
     @pytest.fixture
     def data(self, name):
-        df = load_csv(csv_path(BY_NAME[name], DEFAULT_DATASETS_DIR))
+        df = load_csv(csv_path(BY_NAME[name], DEFAULT_DATASETS_DIR)).df
         return df, profile_dataframe(df, target=BY_NAME[name].target)
 
     def test_the_leaky_columns_are_columns_of_the_data(self, name, data):

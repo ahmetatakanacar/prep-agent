@@ -116,7 +116,7 @@ def plan_run(
     not_downloaded = []
     for spec in specs:
         try:
-            df = load_csv(csv_path(spec, datasets_dir))
+            df = load_csv(csv_path(spec, datasets_dir)).df
             profile = profile_dataframe(df, target=spec.target)
         except ProfilerError:
             not_downloaded.append(spec.name)
@@ -208,7 +208,7 @@ def _load_frame(spec: DatasetSpec, datasets_dir: Path) -> pd.DataFrame | Excepti
     """The dataset's frame, or the error that made it unavailable (raised per job)."""
     # Raised again for every job of the dataset, where it is recorded.
     try:
-        return load_csv(csv_path(spec, datasets_dir))
+        return load_csv(csv_path(spec, datasets_dir)).df
     except Exception as exc:
         return exc
 

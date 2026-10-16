@@ -325,7 +325,7 @@ def build_plan(raw: dict) -> Plan:
 
 
 def reference(csv_path: Path, plan: Plan):
-    df = load_csv(csv_path)
+    df = load_csv(csv_path).df
     return execute(df, plan, profile_dataframe(df, target=plan.target))
 
 
@@ -912,7 +912,7 @@ def test_the_script_reads_none_and_missing_values_as_the_loader_does(tmp_path):
 
     produced = module.read_input(csv_path)
 
-    pd.testing.assert_frame_equal(produced, load_csv(csv_path))
+    pd.testing.assert_frame_equal(produced, load_csv(csv_path).df)
     assert (produced["veneer"] == "None").sum() == 12
     assert produced["veneer"].isna().sum() == 24
     assert module.NA_VALUES == list(NA_VALUES)

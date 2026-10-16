@@ -901,7 +901,7 @@ def test_load_csv_reads_file(tmp_path):
     path = tmp_path / "data.csv"
     path.write_text("a,b\n1,x\n2,y\n", encoding="utf-8")
 
-    df = load_csv(path)
+    df = load_csv(path).df
 
     assert list(df.columns) == ["a", "b"]
     assert len(df) == 2
@@ -935,7 +935,8 @@ def test_load_csv_header_only(tmp_path):
 
 def test_load_csv_unreadable_encoding(tmp_path):
     path = tmp_path / "bad.csv"
-    path.write_bytes(b"a,b\n\x80\xff,1\n")
+    # Neither UTF-8 nor cp1254 defines the byte 0x81.
+    path.write_bytes(b"a,b\n\x81\xff,1\n")
 
     with pytest.raises(ProfilerError, match="could not read"):
         load_csv(path)
@@ -954,7 +955,7 @@ def test_none_text_stays_a_category_and_is_not_missing(tmp_path):
     rows = ["BrkFace", "None", "Stone", "None", "None", "BrkFace"]
     path = write_csv(tmp_path, "veneer,price", *[f"{v},{i}" for i, v in enumerate(rows)])
 
-    df = load_csv(path)
+    df = load_csv(path).df
 
     assert df["veneer"].tolist() == rows
     column = profile_dataframe(df).columns[0]
@@ -969,7 +970,7 @@ def test_none_text_stays_a_category_and_is_not_missing(tmp_path):
 def test_the_other_missing_value_spellings_are_still_missing(tmp_path, spelling):
     path = write_csv(tmp_path, "kind,price", "a,1", f"{spelling},2", "b,3", "None,4")
 
-    df = load_csv(path)
+    df = load_csv(path).df
 
     assert df["kind"].isna().tolist() == [False, True, False, False]
     assert df["kind"].tolist()[3] == "None"
@@ -978,7 +979,7 @@ def test_the_other_missing_value_spellings_are_still_missing(tmp_path, spelling)
 def test_missing_cells_keep_a_numeric_column_numeric(tmp_path):
     path = write_csv(tmp_path, "a,b", "1,x", ",y", "NA,z", "4,w")
 
-    df = load_csv(path)
+    df = load_csv(path).df
 
     assert pd.api.types.is_float_dtype(df["a"])
     assert df["a"].isna().sum() == 2

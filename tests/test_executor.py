@@ -18,7 +18,7 @@ INVALID_PLAN = FIXTURES / "customers_plan_invalid.json"
 
 
 def run_customers(plan_path: Path = CUSTOMERS_PLAN):
-    df = load_csv(CUSTOMERS_CSV)
+    df = load_csv(CUSTOMERS_CSV).df
     plan = Plan.model_validate_json(plan_path.read_text(encoding="utf-8"))
     return df, plan, execute(df, plan, profile_dataframe(df, target=plan.target))
 
@@ -69,7 +69,7 @@ def test_fixture_plan_runs_end_to_end():
 def test_input_frame_is_not_modified():
     df, _, _ = run_customers()
 
-    pd.testing.assert_frame_equal(df, load_csv(CUSTOMERS_CSV))
+    pd.testing.assert_frame_equal(df, load_csv(CUSTOMERS_CSV).df)
 
 
 def test_imputer_and_scaler_learn_from_train_only(make_plan):
@@ -325,7 +325,7 @@ def test_a_missing_target_is_not_carried_into_the_output(make_plan, stratify):
 
 
 def test_a_regression_plan_for_a_text_target_is_rejected_before_it_runs():
-    df = load_csv(CUSTOMERS_CSV)
+    df = load_csv(CUSTOMERS_CSV).df
     plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
     plan = plan.model_copy(update={"task_type": "regression"})
 
@@ -334,7 +334,7 @@ def test_a_regression_plan_for_a_text_target_is_rejected_before_it_runs():
 
 
 def test_expected_model_family_is_checked_before_anything_runs():
-    df = load_csv(CUSTOMERS_CSV)
+    df = load_csv(CUSTOMERS_CSV).df
     plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
     profile = profile_dataframe(df, target=plan.target)
 

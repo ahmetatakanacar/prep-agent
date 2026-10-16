@@ -44,7 +44,7 @@ EXPECTED_FILES = {
 
 @pytest.fixture
 def executed():
-    df = load_csv(CUSTOMERS_CSV)
+    df = load_csv(CUSTOMERS_CSV).df
     plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
     profile = profile_dataframe(df, target=plan.target)
     return df, plan, profile, execute(df, plan, profile)

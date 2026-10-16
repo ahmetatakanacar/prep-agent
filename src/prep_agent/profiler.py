@@ -54,16 +54,18 @@ except `missing_ratio`, which uses all rows. Numeric statistics ignore missing a
 values. Outliers follow the IQR rule: values outside [q1 - k * IQR, q3 + k * IQR].
 """
 
+import codecs
+import csv
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 import numpy as np
 import pandas as pd
 from pandas.api import types as pdt
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 InferredType = Literal[
     "numeric", "categorical", "binary", "datetime", "text", "id_like", "constant"
@@ -198,8 +200,49 @@ def require_varying_target(profile: DatasetProfile) -> None:
         raise ProfilerError(f"{TARGET_CONSTANT_MESSAGE}: column {target.name!r}")
 
 
-def load_csv(path: str | Path) -> pd.DataFrame:
+class CsvOptions(BaseModel):
+    """How a CSV file is read. `load_csv` finds them; the generated pipeline.py reads with them."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sep: str = ","
+    decimal: str = "."
+    encoding: str = "utf-8"
+
+    def read_kwargs(self) -> dict[str, str]:
+        return {"sep": self.sep, "decimal": self.decimal, "encoding": self.encoding}
+
+
+@dataclass(frozen=True)
+class LoadedCsv:
+    """A frame with the options it was read with and notes the user should see."""
+
+    df: pd.DataFrame
+    options: CsvOptions
+    warnings: list[str] = field(default_factory=list)
+
+
+# The encoding tried when a file is not UTF-8: the Windows code page of Turkish text.
+FALLBACK_ENCODING = "cp1254"
+# What is looked at to find the separator. A few KB hold enough rows without reading a large file
+# twice.
+_SNIFF_BYTES = 8192
+_SEPARATORS = ",;\t|"
+_DECODE_CHUNK = 1 << 20
+
+
+def load_csv(
+    path: str | Path,
+    *,
+    sep: str | None = None,
+    decimal: str | None = None,
+    encoding: str | None = None,
+) -> LoadedCsv:
     """Read a CSV file, raising `ProfilerError` with a readable message on failure.
+
+    Whatever is not given is found. Encoding: UTF-8 (a byte order mark is fine), else cp1254 with
+    a warning. Separator: `csv.Sniffer` over the first few KB, among `,` `;` tab and `|`, else
+    `,`. Decimal mark: `,` for a `;` file, else `.`. The options used are in the result.
 
     Missing values are the strings in `NA_VALUES`; the text "None" is not one of them.
     """
@@ -208,15 +251,94 @@ def load_csv(path: str | Path) -> pd.DataFrame:
         raise ProfilerError(f"CSV file not found: {path}")
     if not path.is_file():
         raise ProfilerError(f"not a file: {path}")
+
+    warnings: list[str] = []
     try:
-        df = pd.read_csv(path, low_memory=False, keep_default_na=False, na_values=list(NA_VALUES))
+        if encoding is None:
+            encoding = _detect_encoding(path, warnings)
+        else:
+            _check_codec(encoding)
+        sep = _detect_separator(path, encoding) if sep is None else _check_mark(sep, "separator")
+        decimal = (
+            _check_mark(decimal, "decimal mark")
+            if decimal is not None
+            else ("," if sep == ";" else ".")
+        )
+    except OSError as exc:
+        raise ProfilerError(f"could not read CSV file {path}: {exc}") from exc
+
+    options = CsvOptions(sep=sep, decimal=decimal, encoding=encoding)
+    try:
+        df = pd.read_csv(
+            path,
+            low_memory=False,
+            keep_default_na=False,
+            na_values=list(NA_VALUES),
+            **options.read_kwargs(),
+        )
     except pd.errors.EmptyDataError:
         raise ProfilerError(f"CSV file is empty: {path}") from None
     except (pd.errors.ParserError, UnicodeDecodeError, OSError) as exc:
         raise ProfilerError(f"could not read CSV file {path}: {exc}") from exc
     if df.empty:
         raise ProfilerError(f"CSV file has no data rows: {path}")
-    return df
+    return LoadedCsv(df, options, warnings)
+
+
+def _check_codec(encoding: str) -> None:
+    try:
+        codecs.lookup(encoding)
+    except LookupError:
+        raise ProfilerError(f"unknown encoding {encoding!r}") from None
+
+
+def _check_mark(value: str, what: str) -> str:
+    # `--sep "\t"` is how a tab is typed in a shell.
+    if value == "\\t":
+        value = "\t"
+    if len(value) != 1:
+        raise ProfilerError(f"the {what} must be a single character, got {value!r}")
+    return value
+
+
+def _detect_encoding(path: Path, warnings: list[str]) -> str:
+    if _decodes(path, "utf-8"):
+        return "utf-8"
+    if _decodes(path, FALLBACK_ENCODING):
+        warnings.append(
+            f"the file is not valid UTF-8, so it was read as {FALLBACK_ENCODING} (Turkish "
+            "Windows); check that the accented letters look right, or give the encoding"
+        )
+        return FALLBACK_ENCODING
+    raise ProfilerError(
+        f"could not read CSV file {path}: it is neither UTF-8 nor {FALLBACK_ENCODING}; "
+        "give the encoding"
+    )
+
+
+def _decodes(path: Path, encoding: str) -> bool:
+    decoder = codecs.getincrementaldecoder(encoding)()
+    try:
+        with path.open("rb") as handle:
+            while chunk := handle.read(_DECODE_CHUNK):
+                decoder.decode(chunk)
+        decoder.decode(b"", final=True)
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+def _detect_separator(path: Path, encoding: str) -> str:
+    with path.open("rb") as handle:
+        head = handle.read(_SNIFF_BYTES)
+    sample = head.decode(encoding, errors="ignore").lstrip("﻿")
+    # A sample cut in the middle of a row would skew the count of the separators.
+    if len(head) == _SNIFF_BYTES and "\n" in sample:
+        sample = sample.rsplit("\n", 1)[0]
+    try:
+        return csv.Sniffer().sniff(sample, delimiters=_SEPARATORS).delimiter
+    except csv.Error:
+        return ","
 
 
 def profile_dataframe(

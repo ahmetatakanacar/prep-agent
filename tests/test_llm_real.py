@@ -30,7 +30,7 @@ def test_ping_schema_round_trip():
 def test_plan_schema_is_accepted_by_strict_structured_outputs():
     # Plan quality is not asserted here (that is the planner's job in a later stage). The issue
     # codes are printed so a run shows how far a bare, unprompted answer is from a valid plan.
-    profile = profile_dataframe(load_csv(CUSTOMERS), target="churned")
+    profile = profile_dataframe(load_csv(CUSTOMERS).df, target="churned")
     system = (
         "You prepare tabular data for machine learning. Return a preparation plan as JSON "
         "that matches the schema. Use only the columns listed in the profile."

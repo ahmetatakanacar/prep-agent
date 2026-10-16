@@ -29,7 +29,7 @@ SHA = "0123456789abcdef" * 4
 
 @pytest.fixture(scope="module")
 def executed():
-    df = load_csv(CUSTOMERS_CSV)
+    df = load_csv(CUSTOMERS_CSV).df
     plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
     return plan, execute(df, plan, profile_dataframe(df, target=plan.target))
 
@@ -272,7 +272,7 @@ def test_report_names_the_cache_counts_when_the_provider_reported_them(executed)
 def test_no_issues_is_stated_explicitly():
     # The customers target has no missing values, so the fixture plan's drop_missing_target
     # step would be reported as pointless.
-    df = load_csv(CUSTOMERS_CSV)
+    df = load_csv(CUSTOMERS_CSV).df
     plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
     plan = plan.model_copy(
         update={"steps": [s for s in plan.steps if s.op != "drop_missing_target"]}

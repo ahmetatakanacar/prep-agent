@@ -92,7 +92,7 @@ def profile_command(
     """Profile a CSV file and print a summary table."""
     try:
         profile = profile_dataframe(
-            load_csv(csv_path), target=target, include_samples=not no_samples
+            load_csv(csv_path).df, target=target, include_samples=not no_samples
         )
     except ProfilerError as exc:
         Console(stderr=True).print(Text.assemble(("Error: ", "red"), str(exc)))
@@ -128,7 +128,7 @@ def run_command(
     console = Console()
     try:
         plan = _load_plan(plan_path)
-        df = load_csv(csv_path)
+        df = load_csv(csv_path).df
         profile = profile_dataframe(df, target=plan.target)
     except (ProfilerError, PlanFileError) as exc:
         _fail(str(exc))
@@ -213,7 +213,7 @@ def prepare_command(
     if not goal.strip():
         _fail("the goal must not be empty")
     try:
-        df = load_csv(csv_path)
+        df = load_csv(csv_path).df
         llm = create_llm_client()
         console.print(Text("Profiling the data and planning..."))
         result = run_agent(

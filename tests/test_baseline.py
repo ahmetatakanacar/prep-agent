@@ -467,7 +467,7 @@ def test_the_result_round_trips_through_json():
 
 
 def test_baseline_on_the_executor_output_of_the_fixture():
-    df = load_csv(CUSTOMERS_CSV)
+    df = load_csv(CUSTOMERS_CSV).df
     plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
     execution = execute(df, plan, profile_dataframe(df, target=plan.target))
 

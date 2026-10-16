@@ -75,7 +75,7 @@ class Asker:
 
 @pytest.fixture
 def df() -> pd.DataFrame:
-    return load_csv(FIXTURES / "customers.csv")
+    return load_csv(FIXTURES / "customers.csv").df
 
 
 # A small table for the tests of result errors (see inject_result_error). A plan with a dedupe
@@ -85,7 +85,7 @@ def small(tmp_path) -> pd.DataFrame:
     rows = ["id,x,t"] + [f"{i},{(i // 2) % 2},{i % 2}" for i in range(40)]
     csv = tmp_path / "small.csv"
     csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
-    return load_csv(csv)
+    return load_csv(csv).df
 
 
 def small_plan(*ops: str) -> dict:

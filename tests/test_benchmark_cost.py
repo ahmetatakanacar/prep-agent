@@ -264,7 +264,7 @@ class TestEstimateAgentRun:
 
         with pytest.raises(AgentError) as caught:
             run_agent(
-                load_csv(FIXTURES / "customers.csv"),
+                load_csv(FIXTURES / "customers.csv").df,
                 "goal",
                 llm,
                 lambda questions: {q.id: q.recommended for q in questions},
