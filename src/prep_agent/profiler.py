@@ -39,6 +39,10 @@ addresses or phone numbers, or if a part of its name (split on `_`, spaces and c
 `ProfilerConfig.pii_name_parts` and more than `pii_name_min_unique_ratio` of its values are
 distinct. The second condition keeps out columns that merely have such a name, such as a yes/no
 `PhoneService` or a `department_name` with a handful of categories, which hold no identities.
+For a numeric column only the parts in `ProfilerConfig.pii_numeric_name_parts` count (phone,
+telefon, gsm, tckn, iban, ssn: numbers that identify a person, like a phone number stored as an
+integer), under the same uniqueness condition. Short parts such as "ad" or "tel" are everyday
+words in numeric names (`ad_spend`, `tel_count`) and would hide real statistics.
 Such columns get no `sample_values`, no `top_values` and no
 numeric statistics (min and max would expose real values); counts and ratios are kept. This
 applies whether or not samples are disabled.
@@ -114,6 +118,9 @@ class ProfilerConfig:
         "surname", "ad", "soyad", "isim", "address", "adres", "tckn", "iban", "ssn",
         "username", "fullname", "adi", "adı", "soyadi", "soyadı",
     )  # fmt: skip
+    # The parts of `pii_name_parts` that can name a number. A numeric column is only flagged for
+    # one of these.
+    pii_numeric_name_parts: tuple[str, ...] = ("phone", "telefon", "gsm", "tckn", "iban", "ssn")
 
     # Task hint: a numeric target with more distinct values than this looks like regression.
     regression_min_unique: int = 20
@@ -363,10 +370,12 @@ def _looks_like_datetime(strings: pd.Series, config: ProfilerConfig) -> bool:
 def _looks_like_pii(
     name: str, non_null: pd.Series, n_unique: int, inferred: InferredType, config: ProfilerConfig
 ) -> bool:
-    name_matches = not set(_name_parts(name)).isdisjoint(config.pii_name_parts)
+    is_numeric = pdt.is_numeric_dtype(non_null.dtype)
+    name_parts = config.pii_numeric_name_parts if is_numeric else config.pii_name_parts
+    name_matches = not set(_name_parts(name)).isdisjoint(name_parts)
     if name_matches and n_unique > config.pii_name_min_unique_ratio * len(non_null):
         return True
-    if inferred == "datetime" or non_null.empty or pdt.is_numeric_dtype(non_null.dtype):
+    if inferred == "datetime" or non_null.empty or is_numeric:
         return False
     strings = non_null.astype(str).str.strip()
     is_email = strings.str.fullmatch(_EMAIL)

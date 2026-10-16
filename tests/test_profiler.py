@@ -553,6 +553,43 @@ def test_a_pii_name_with_mostly_distinct_values_is_flagged():
     assert phones.min is None
 
 
+@pytest.mark.parametrize("name", ["ad_spend", "tel_count", "ad", "name_length", "AdClicks"])
+def test_a_numeric_column_is_not_flagged_for_a_name_part_that_is_not_an_identifier(name):
+    col = profile_column([i * 2.5 for i in range(N)], name=name)
+
+    assert col.inferred_type == "numeric"
+    assert "possible_pii" not in col.warnings
+    assert col.min == 0.0
+    assert col.max == 47.5
+    assert col.sample_values != []
+
+
+def test_a_text_column_named_ad_with_mostly_distinct_values_is_still_flagged():
+    col = profile_column([f"Person {i}" for i in range(N)], name="ad")
+
+    assert "possible_pii" in col.warnings
+    assert col.sample_values == []
+
+
+@pytest.mark.parametrize(
+    "name", ["phone", "telefon", "gsm", "tckn", "iban", "ssn", "PhoneNumber", "tc_ssn"]
+)
+def test_a_numeric_column_with_an_identifier_name_and_distinct_values_is_flagged(name):
+    col = profile_column([5321000000 + i * 7919 for i in range(N)], name=name)
+
+    assert col.pandas_dtype == "int64"
+    assert "possible_pii" in col.warnings
+    assert col.sample_values == []
+    assert col.min is None
+
+
+def test_a_numeric_column_with_an_identifier_name_needs_mostly_distinct_values_too():
+    col = profile_column([0, 0, 0, 144, 0, 0, 0, 180, 0, 0] * 2, name="phone")
+
+    assert "possible_pii" not in col.warnings
+    assert col.max == 180.0
+
+
 def test_the_unique_ratio_of_a_pii_name_must_be_above_the_threshold():
     half = [f"Person {i % 10}" for i in range(N)]
     just_over = [f"Person {i % 11}" for i in range(N)]

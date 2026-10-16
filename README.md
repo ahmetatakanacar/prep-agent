@@ -83,7 +83,7 @@ uv run prep-agent llm-check
 uv run prep-agent profile tests/fixtures/customers.csv --target churned --out runs/profile.json
 ```
 
-Prints a summary table; `--out` saves the full profile as JSON. Columns that look like personal data (email addresses, phone numbers, or names such as `email` whose values are mostly distinct) are flagged `possible_pii` and their sample values and statistics are left out. `--no-samples` leaves sample values out for every column. CSV files are read with pandas' usual missing-value strings, except the text `None`, which is kept as a category because in many datasets it means that a feature is absent.
+Prints a summary table; `--out` saves the full profile as JSON. Columns that look like personal data (email addresses, phone numbers, or names such as `email` whose values are mostly distinct; a numeric column only by an identifier name such as `phone`, `tckn` or `iban`, so `ad_spend` keeps its statistics) are flagged `possible_pii` and their sample values and statistics are left out. `--no-samples` leaves sample values out for every column. CSV files are read with pandas' usual missing-value strings, except the text `None`, which is kept as a category because in many datasets it means that a feature is absent.
 
 ### Run a plan you wrote
 
