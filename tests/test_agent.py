@@ -108,6 +108,24 @@ FIXED_PLAN = small_plan("drop_id", "split")
 PLAN_ERROR_PLAN = small_plan("impute", "split")
 
 
+# A table whose target has missing values, for the plans that forget to drop those rows.
+@pytest.fixture
+def unlabelled() -> pd.DataFrame:
+    target = pd.Series([float(i % 2) for i in range(40)])
+    return pd.DataFrame(
+        {
+            "x": [float((i // 2) % 5) for i in range(40)],
+            "t": target.mask(target.index.isin([3, 10])),
+        }
+    )
+
+
+def unlabelled_plan(*, drop_missing: bool, stratify: bool = True) -> dict:
+    steps = [{"op": "drop_missing_target", "reason": "r"}] if drop_missing else []
+    steps.append({"op": "split", "stratify": stratify, "reason": "r"})
+    return {"target": "t", "task_type": "classification", "model_family": "any", "steps": steps}
+
+
 def run(df, responses, *, usage=None, ask=None, **kwargs):
     llm = FakeLLM(responses, usage=usage)
     ask = ask or Asker()
@@ -444,6 +462,22 @@ def test_a_result_error_is_revised_too(small, inject_result_error):
     assert [c.purpose for c in result.calls] == ["plan", "revise"]
     assert result.calls[1].issue_codes == ["target_altered"]
     assert result.plan == Plan.model_validate(FIXED_PLAN)
+
+
+@pytest.mark.parametrize("stratify", [True, False])
+def test_a_plan_that_keeps_rows_without_a_target_is_revised(unlabelled, stratify):
+    responses = [
+        plan_reply(unlabelled_plan(drop_missing=False, stratify=stratify)),
+        plan_reply(unlabelled_plan(drop_missing=True, stratify=stratify)),
+    ]
+
+    result, llm, _ = run(unlabelled, responses, target="t")
+
+    assert "missing_target_at_split" in llm.calls[1].user
+    assert result.calls[1].issue_codes == ["missing_target_at_split"]
+    assert not result.execution.train["t"].isna().any()
+    assert not result.execution.test["t"].isna().any()
+    assert len(result.execution.train) + len(result.execution.test) == 38
 
 
 def test_a_revision_budget_that_runs_out_raises_with_plan_and_issues(df):

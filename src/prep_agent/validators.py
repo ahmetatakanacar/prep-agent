@@ -12,7 +12,9 @@ its type and whether it still contains missing values:
 - `encode` with `ordinal` keeps the column under the same name and makes it numeric.
 - `encode` with `onehot` consumes the column: the names of the output columns are only known
   after fitting, so later steps cannot refer to it.
-- `drop_missing_target` clears the missing values of the target.
+- `drop_missing_target` clears the missing values of the target. A split that still sees
+  missing target values is an error (`missing_target_at_split`): the rows would end up in
+  train and test without a label.
 - `scale` changes nothing. The extra columns of `impute` with `add_indicator` are not tracked.
 
 Leakage protection lives here and not in the planner: the kind of every step (stateless, split
@@ -62,6 +64,7 @@ IssueCode = Literal[
     "encode_numeric",
     "ordinal_with_missing",
     "stratify_regression",
+    "missing_target_at_split",
     # warnings
     "cast_non_numeric",
     "onehot_before_impute",
@@ -106,6 +109,7 @@ SEVERITY: dict[IssueCode, Severity] = {
     "encode_numeric": "error",
     "ordinal_with_missing": "error",
     "stratify_regression": "error",
+    "missing_target_at_split": "error",
     "cast_non_numeric": "warning",
     "onehot_before_impute": "warning",
     "ordinal_for_linear": "warning",
@@ -385,6 +389,16 @@ class _Validation:
         self.applied.add((step.op, name))
 
     def _check_split(self, index: int, step: SplitStep) -> None:
+        target = self.columns.get(self.plan.target)
+        if target is not None and target.has_missing and index == self.first_split:
+            self._add(
+                "missing_target_at_split",
+                f"the target {self.plan.target!r} still has missing values at the split, so "
+                "rows without a label would end up in train and test; add a "
+                "drop_missing_target step before the split.",
+                step_index=index,
+                column=self.plan.target,
+            )
         if self.plan.task_type == "regression" and step.stratify:
             self._add(
                 "stratify_regression",
@@ -585,18 +599,15 @@ class _Validation:
                     column=name,
                 )
 
+        # A target that still has missing values is `missing_target_at_split`, not this warning.
         for name, column in self.columns.items():
-            if not column.has_missing:
-                continue
-            if name == target:
-                fix = "add a drop_missing_target step before the split"
-            else:
-                fix = "add an impute step after the split"
-            self._add(
-                "missing_values_remain",
-                f"column {name!r} still has missing values at the end of the plan; {fix}.",
-                column=name,
-            )
+            if column.has_missing and name != target:
+                self._add(
+                    "missing_values_remain",
+                    f"column {name!r} still has missing values at the end of the plan; add an "
+                    "impute step after the split.",
+                    column=name,
+                )
 
         for name, column in self.columns.items():
             if name != target and _needs_encoding(column):

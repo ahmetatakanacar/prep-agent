@@ -951,18 +951,57 @@ def test_onehot_encoded_column_does_not_warn_about_missing_values_at_the_end():
     assert "job" not in [i.column for i in find(issues, "missing_values_remain")]
 
 
-def test_target_with_missing_values_warns_until_rows_are_dropped():
-    frame = make_frame().assign(churn=lambda df: df["churn"].astype("float").mask(df.index == 3))
-    profile = profile_dataframe(frame, target="churn")
+def test_a_target_with_missing_values_is_not_reported_as_missing_values_remaining():
+    for steps in ([split()], [split(), drop_missing_target()], [drop_missing_target(), split()]):
+        issues = validate(*steps, profile=with_missing_target())
 
-    kept = find(validate(split(), profile=profile), "missing_values_remain")
-    dropped = find(
-        validate(drop_missing_target(), split(), profile=profile), "missing_values_remain"
-    )
+        assert "churn" not in [i.column for i in find(issues, "missing_values_remain")]
 
-    assert "churn" in [i.column for i in kept]
-    assert "churn" not in [i.column for i in dropped]
-    assert "drop_missing_target" in next(i for i in kept if i.column == "churn").message
+
+def test_split_with_a_missing_target_is_an_error():
+    issues = validate(split(), profile=with_missing_target())
+
+    [issue] = find(issues, "missing_target_at_split")
+    assert issue.severity == "error"
+    assert issue.step_index == 0
+    assert issue.column == "churn"
+    assert "drop_missing_target" in issue.message
+    assert "before the split" in issue.message
+
+
+def test_split_with_a_missing_target_is_an_error_without_stratify_too():
+    issues = validate(split(stratify=False), profile=with_missing_target())
+
+    assert [i.step_index for i in find(issues, "missing_target_at_split")] == [0]
+
+
+def test_dropping_rows_with_a_missing_target_before_the_split_is_fine():
+    issues = validate(drop_missing_target(), split(), profile=with_missing_target())
+
+    assert find(issues, "missing_target_at_split") == []
+
+
+def test_dropping_rows_with_a_missing_target_after_the_split_is_too_late():
+    issues = validate(split(), drop_missing_target(), profile=with_missing_target())
+
+    assert [i.step_index for i in find(issues, "missing_target_at_split")] == [0]
+    assert [i.step_index for i in find(issues, "stateless_after_split")] == [1]
+
+
+def test_a_target_without_missing_values_is_not_flagged_at_the_split():
+    assert find(validate(split()), "missing_target_at_split") == []
+
+
+def test_a_plan_with_two_splits_reports_the_missing_target_once():
+    issues = validate(split(), split(), profile=with_missing_target())
+
+    assert [i.step_index for i in find(issues, "missing_target_at_split")] == [0]
+
+
+def test_a_missing_target_is_not_checked_when_the_target_is_not_a_column():
+    issues = validate(split(), target="nope", profile=with_missing_target())
+
+    assert find(issues, "missing_target_at_split") == []
 
 
 def test_unencoded_categorical_text_and_datetime_columns_warn():

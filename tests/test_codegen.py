@@ -139,7 +139,8 @@ PLANS = {
         ],
     },
     "no_stateless_steps": {
-        "target": "price",
+        # A target without missing values: dropping those rows would be a stateless step.
+        "target": "n_items",
         "task_type": "regression",
         "model_family": "any",
         "steps": [split(test_size=0.1), {"op": "scale", "columns": ["num3"], "method": "standard"}],

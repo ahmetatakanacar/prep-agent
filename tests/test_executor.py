@@ -247,9 +247,11 @@ def test_the_overlap_follows_input_records_through_row_removing_steps(
             "t": rng.integers(0, 2, 120).astype(float),
         }
     )
-    # Copies of earlier rows, id included, scattered over the frame, and some missing targets.
+    # Copies of earlier rows, id included, scattered over the frame. Missing targets only where
+    # the plan drops them: a split that sees one is a plan error.
     df.iloc[rng.choice(120, 40, replace=False)] = df.iloc[rng.choice(120, 40)].to_numpy()
-    df.loc[rng.choice(120, 15, replace=False), "t"] = np.nan
+    if drop_missing:
+        df.loc[rng.choice(120, 15, replace=False), "t"] = np.nan
     steps = []
     if drop_missing:
         steps.append({"op": "drop_missing_target"})
@@ -299,6 +301,21 @@ def test_data_that_does_not_match_the_profile_raises_execution_error(make_plan):
 
     with pytest.raises(executor.ExecutionError):
         execute(df.drop(columns="x"), plan, profile)
+
+
+@pytest.mark.parametrize("stratify", [True, False])
+def test_a_missing_target_is_not_carried_into_the_output(make_plan, stratify):
+    df = make_frame()
+    df["t"] = df["t"].astype(float).mask(df["row"].isin([3, 10]))
+    plan = make_plan(split(stratify=stratify))
+
+    with pytest.raises(PlanValidationError, match="missing_target_at_split"):
+        run_frame(df, plan)
+
+    fixed = make_plan({"op": "drop_missing_target"}, split(stratify=stratify))
+    result = run_frame(df, fixed)
+    assert not result.train["t"].isna().any()
+    assert not result.test["t"].isna().any()
 
 
 def test_expected_model_family_is_checked_before_anything_runs():
