@@ -286,7 +286,8 @@ def _agent_job(
             plan_seconds=time.perf_counter() - started,
         )
     seconds = time.perf_counter() - started
-    _, warnings = partition_issues(result.issues)
+    # `result.issues` also holds the result warnings, which `_scored` adds itself.
+    _, warnings = partition_issues(result.execution.plan_issues)
     return _scored(
         base,
         result.plan,

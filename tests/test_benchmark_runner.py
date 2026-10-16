@@ -343,6 +343,15 @@ class TestAgentMetrics:
         assert job.status == "ok"
         assert "uninformative_column_kept" in job.warning_codes
 
+    def test_a_warning_of_the_final_plan_is_counted_once(self, ws):
+        plan = classification_plan()
+        del plan["steps"][2]  # no impute: age keeps its gaps
+        llm = FakeLLM([answer(plan), answer(regression_plan())])
+        job = job_of(ws.run(llm), "cls", "agent")
+        assert job.status == "ok"
+        assert job.warning_codes.count("missing_values_remain") == 1
+        assert job.warning_codes.count("nan_in_output") == 1
+
     def test_the_agent_is_given_the_goal_and_the_any_model_family(self, ws):
         llm = good_llm()
         ws.run(llm)
