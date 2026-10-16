@@ -12,6 +12,7 @@ from jinja2 import Environment, PackageLoader, StrictUndefined
 
 from prep_agent.agent import AgentTrace
 from prep_agent.baseline import (
+    NOT_CONVERGED_EXPLANATION,
     NOT_CONVERGED_NOTE,
     SMALL_TRAIN_ROWS,
     BaselineResult,
@@ -103,8 +104,9 @@ def render_report(
         result_issues=result_issues,
         baseline=None if failed else baseline,
         baseline_table=_baseline_table(baseline) if baseline is not None else None,
-        not_converged=baseline is not None
-        and any(model.note == NOT_CONVERGED_NOTE for model in baseline.models),
+        not_converged_explanation=NOT_CONVERGED_EXPLANATION
+        if baseline is not None and any(m.note == NOT_CONVERGED_NOTE for m in baseline.models)
+        else None,
         small_data=baseline is not None
         and baseline.skipped_reason is None
         and baseline.n_rows < small_train_rows,

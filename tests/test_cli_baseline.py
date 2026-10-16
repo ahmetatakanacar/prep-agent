@@ -4,7 +4,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from prep_agent.baseline import BaselineResult
+from prep_agent import cli
+from prep_agent.baseline import NOT_CONVERGED_NOTE, BaselineResult
 from prep_agent.llm.base import TokenUsage
 from prep_agent.llm.fake import FakeLLM
 
@@ -80,6 +81,38 @@ def test_run_prints_the_baselines_as_a_table(invoke_cli, tmp_path):
         assert header in result.output
     assert "±" in result.output
     assert "fold" in result.output
+
+
+def mark_logistic_regression_not_converged(monkeypatch):
+    real = cli.evaluate_baselines
+
+    def evaluate(*args, **kwargs):
+        result = real(*args, **kwargs)
+        models = [
+            m.model_copy(update={"note": NOT_CONVERGED_NOTE})
+            if m.name == "logistic_regression"
+            else m
+            for m in result.models
+        ]
+        return result.model_copy(update={"models": models})
+
+    monkeypatch.setattr(cli, "evaluate_baselines", evaluate)
+
+
+def test_run_marks_a_model_that_did_not_converge_in_the_table(invoke_cli, tmp_path, monkeypatch):
+    mark_logistic_regression_not_converged(monkeypatch)
+
+    result = invoke_cli(run_args(tmp_path))
+
+    assert "logistic_regression (did not converge)" in result.output
+    assert "dummy_most_frequent (" not in result.output
+    assert "iteration limit" in result.output
+
+
+def test_run_prints_no_convergence_remark_when_every_model_converged(invoke_cli, tmp_path):
+    result = invoke_cli(run_args(tmp_path))
+
+    assert "did not converge" not in result.output
 
 
 def test_run_with_no_baseline_writes_no_baseline_json(invoke_cli, tmp_path):

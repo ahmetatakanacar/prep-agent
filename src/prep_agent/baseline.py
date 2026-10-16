@@ -44,6 +44,10 @@ SMALL_TRAIN_ROWS = 100
 RANDOM_STATE = 42
 # Short because the report puts it next to the model name.
 NOT_CONVERGED_NOTE = "did not converge"
+NOT_CONVERGED_EXPLANATION = (
+    f'A model marked "{NOT_CONVERGED_NOTE}" reached its iteration limit in at least one fold, '
+    "so its scores come from a fit that stopped early."
+)
 _MIN_FOLDS = 2
 # sklearn reports these as negated scores so that higher is always better.
 _NEGATED = {"rmse", "mae"}

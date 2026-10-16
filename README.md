@@ -133,7 +133,7 @@ It stops if the output files exist (`--force` overwrites) and warns if the input
 
 ### Baseline
 
-On a successful run the baseline scores a dummy model, a logistic regression and a random forest (classification: accuracy, macro F1, ROC AUC for a binary target) or a dummy model, ridge and a random forest (regression: R², RMSE, MAE) with 5-fold cross-validation on the train split. The stateful steps are fitted again inside every fold. The test set is not used. With fewer than 100 train rows the report warns that the scores are not reliable. A model that reaches its iteration limit in a fold keeps its scores and is marked "did not converge" in the report and in `baseline.json` (the `note` field), instead of printing a scikit-learn warning in the terminal.
+On a successful run the baseline scores a dummy model, a logistic regression and a random forest (classification: accuracy, macro F1, ROC AUC for a binary target) or a dummy model, ridge and a random forest (regression: R², RMSE, MAE) with 5-fold cross-validation on the train split. The stateful steps are fitted again inside every fold. The test set is not used. With fewer than 100 train rows the report warns that the scores are not reliable. A model that reaches its iteration limit in a fold keeps its scores and is marked "did not converge" in the terminal table, in the report and in `baseline.json` (the `note` field), instead of printing a scikit-learn warning in the terminal.
 
 ## Web UI (local)
 

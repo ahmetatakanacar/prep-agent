@@ -13,7 +13,13 @@ from rich.text import Text
 
 from prep_agent import __version__
 from prep_agent.agent import AgentError, AgentTrace, AskFn, run_agent
-from prep_agent.baseline import BaselineResult, evaluate_baselines, metric_label
+from prep_agent.baseline import (
+    NOT_CONVERGED_EXPLANATION,
+    NOT_CONVERGED_NOTE,
+    BaselineResult,
+    evaluate_baselines,
+    metric_label,
+)
 from prep_agent.env import load_dotenv_file
 from prep_agent.executor import ExecutionError, ExecutionResult, PlanValidationError, execute
 from prep_agent.llm.base import LLMError
@@ -401,13 +407,15 @@ def _print_baseline(console: Console, baseline: BaselineResult) -> None:
             table.add_column(metric_label(metric), justify="right")
         for model in scored:
             table.add_row(
-                Text(model.name),
+                Text(f"{model.name} ({model.note})" if model.note else model.name),
                 *(
                     Text(f"{model.scores[m].mean:.3f} ± {model.scores[m].std:.3f}")
                     for m in baseline.metrics
                 ),
             )
         console.print(table)
+    if any(model.note == NOT_CONVERGED_NOTE for model in baseline.models):
+        console.print(Text(NOT_CONVERGED_EXPLANATION))
     for model in baseline.models:
         if model.skipped_reason is not None:
             console.print(Text(f"Skipped {model.name}: {model.skipped_reason}"))
