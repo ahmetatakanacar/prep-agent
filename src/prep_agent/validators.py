@@ -24,6 +24,11 @@ judged relative to the first split; a plan without a split only gets `invalid_sp
 Issues come out in a fixed order: plan-level checks, then the steps in plan order (the order
 check of a step first, then its columns in the order the step lists them), then the end-of-plan
 checks, one rule at a time with columns in profile order.
+
+The task type is judged from the profile of the target: a regression plan needs a numeric dtype
+(error), and a classification plan with a numeric target of more distinct values than the
+profiler's `regression_min_unique` gets a warning, since that is where the profile itself would
+hint at regression.
 """
 
 from dataclasses import dataclass
@@ -45,7 +50,7 @@ from prep_agent.plan import (
     SplitStep,
     Step,
 )
-from prep_agent.profiler import ColumnProfile, DatasetProfile, InferredType
+from prep_agent.profiler import DEFAULT_CONFIG, ColumnProfile, DatasetProfile, InferredType
 
 Severity = Literal["error", "warning"]
 IssueCode = Literal[
@@ -65,6 +70,8 @@ IssueCode = Literal[
     "ordinal_with_missing",
     "stratify_regression",
     "missing_target_at_split",
+    # an error for a regression task with a non-numeric target, a warning in the other direction
+    "task_type_mismatch",
     # warnings
     "cast_non_numeric",
     "onehot_before_impute",
@@ -92,10 +99,13 @@ IssueCode = Literal[
     "class_distribution_shift",
 ]
 
-# The severity of an issue is a property of its code, defined once here. The one exception is
-# `fill_value_type_mismatch`: a string fill value for a numeric column makes the step fail, so
-# that case is an error, while a number in a text column only changes the values, so that case
-# is a warning. The entry below is the error severity; the warning case passes it explicitly.
+# The severity of an issue is a property of its code, defined once here. Two exceptions pass the
+# severity explicitly. `fill_value_type_mismatch`: a string fill value for a numeric column makes
+# the step fail, so that case is an error, while a number in a text column only changes the
+# values, so that case is a warning. `task_type_mismatch`: a regression task on a target that is
+# not numeric cannot work, so that case is an error, while a classification task on a numeric
+# target with many values may just be a regression task, so that case is a warning. The entries
+# below are the error severity.
 SEVERITY: dict[IssueCode, Severity] = {
     "target_mismatch": "error",
     "target_not_in_profile": "error",
@@ -112,6 +122,7 @@ SEVERITY: dict[IssueCode, Severity] = {
     "ordinal_with_missing": "error",
     "stratify_regression": "error",
     "missing_target_at_split": "error",
+    "task_type_mismatch": "error",
     "cast_non_numeric": "warning",
     "onehot_before_impute": "warning",
     "ordinal_for_linear": "warning",
@@ -228,6 +239,7 @@ class _Validation:
     def run(self) -> list[ValidationIssue]:
         self._check_target_matches_profile()
         self._check_target_exists()
+        self._check_task_type()
         self._check_model_family()
         self._check_split_count()
         for index, step in enumerate(self.plan.steps):
@@ -275,6 +287,33 @@ class _Validation:
                 f"target {target!r} is not a column of the dataset; set 'target' to one of: "
                 f"{', '.join(self.columns)}.",
                 column=target,
+            )
+
+    def _check_task_type(self) -> None:
+        target = next((c for c in self.profile.columns if c.name == self.plan.target), None)
+        if target is None:
+            return
+        numeric = bool(pdt.is_numeric_dtype(target.pandas_dtype))
+        if self.plan.task_type == "regression" and not numeric:
+            self._add(
+                "task_type_mismatch",
+                f"the task is regression but the target {target.name!r} is not numeric "
+                f"({target.inferred_type}); set 'task_type' to 'classification', or use a "
+                "numeric target.",
+                column=target.name,
+            )
+        elif (
+            self.plan.task_type == "classification"
+            and numeric
+            and target.n_unique > DEFAULT_CONFIG.regression_min_unique
+        ):
+            self._add(
+                "task_type_mismatch",
+                f"the task is classification but the target {target.name!r} is numeric with "
+                f"{target.n_unique} distinct values, which looks more like regression; set "
+                "'task_type' to 'regression' unless these values are class labels.",
+                column=target.name,
+                severity="warning",
             )
 
     def _check_model_family(self) -> None:

@@ -318,6 +318,15 @@ def test_a_missing_target_is_not_carried_into_the_output(make_plan, stratify):
     assert not result.test["t"].isna().any()
 
 
+def test_a_regression_plan_for_a_text_target_is_rejected_before_it_runs():
+    df = load_csv(CUSTOMERS_CSV)
+    plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
+    plan = plan.model_copy(update={"task_type": "regression"})
+
+    with pytest.raises(PlanValidationError, match="task_type_mismatch"):
+        execute(df, plan, profile_dataframe(df, target=plan.target))
+
+
 def test_expected_model_family_is_checked_before_anything_runs():
     df = load_csv(CUSTOMERS_CSV)
     plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))

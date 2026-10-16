@@ -160,7 +160,7 @@ The checks that decide what a plan or a result may do live in [src/prep_agent/va
 | Check | Errors | Warnings |
 |---|---|---|
 | Order and leakage | `stateless_after_split`, `stateful_before_split`, `invalid_split_count` (exactly one split) | `train_test_overlap` (the same raw record in train and test), `possible_target_leakage` (numeric feature with a correlation above 0.98 with a numeric target) |
-| Target and columns | `target_mismatch`, `target_not_in_profile`, `target_in_step`, `unknown_column`, `model_family_mismatch`, `missing_target_at_split` (the target still has missing values at the split: add `drop_missing_target` before it) | |
+| Target and columns | `target_mismatch`, `target_not_in_profile`, `target_in_step`, `unknown_column`, `model_family_mismatch`, `missing_target_at_split` (the target still has missing values at the split: add `drop_missing_target` before it), `task_type_mismatch` (a regression plan for a target that is not numeric) | `task_type_mismatch` (a classification plan for a numeric target with more distinct values than the profiler's `regression_min_unique`) |
 | Column types | `impute_non_numeric`, `fill_value_type_mismatch`, `scale_non_numeric`, `encode_numeric`, `ordinal_with_missing` | `cast_non_numeric`, `onehot_before_impute`, `ordinal_for_linear`, `scale_for_tree` |
 | Split | `stratify_regression` | `stratify_disabled`, `class_distribution_shift` |
 | Steps that do nothing | | `repeated_op`, `impute_without_missing`, `dedupe_without_duplicates`, `drop_missing_target_without_missing` |

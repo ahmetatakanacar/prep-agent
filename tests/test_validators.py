@@ -6,7 +6,7 @@ import pytest
 
 from prep_agent import validators
 from prep_agent.plan import Plan
-from prep_agent.profiler import DatasetProfile, profile_dataframe
+from prep_agent.profiler import DEFAULT_CONFIG, DatasetProfile, profile_dataframe
 from prep_agent.validators import (
     SEVERITY,
     IssueCode,
@@ -240,6 +240,77 @@ def test_model_family_is_not_checked_without_an_expected_one(family):
     plan = make_plan(*VALID_STEPS, model_family=family)
 
     assert find(validate_plan(plan, PROFILE), "model_family_mismatch") == []
+
+
+def many_value_target() -> DatasetProfile:
+    """A numeric target with 40 distinct values, more than the profiler's regression threshold."""
+    frame = pd.DataFrame({"x": range(40), "score": [i * 1.5 for i in range(40)]})
+    return profile_dataframe(frame, target="score")
+
+
+@pytest.mark.parametrize("target", ["city", "gender", "notes", "signup"])
+def test_regression_with_a_target_that_is_not_numeric_is_an_error(target):
+    profile = profile_dataframe(make_frame(), target=target)
+
+    issues = validate(split(stratify=False), target=target, task_type="regression", profile=profile)
+
+    [issue] = find(issues, "task_type_mismatch")
+    assert issue.severity == "error"
+    assert issue.column == target
+    assert issue.step_index is None
+    assert "not numeric" in issue.message
+    assert "classification" in issue.message
+
+
+@pytest.mark.parametrize("target", ["age", "churn", "flag"])
+def test_regression_with_a_numeric_target_is_fine(target):
+    profile = profile_dataframe(make_frame(), target=target)
+
+    issues = validate(split(stratify=False), target=target, task_type="regression", profile=profile)
+
+    assert find(issues, "task_type_mismatch") == []
+
+
+@pytest.mark.parametrize("target", ["city", "gender", "churn"])
+def test_classification_with_a_non_numeric_or_binary_target_is_fine(target):
+    profile = profile_dataframe(make_frame(), target=target)
+
+    issues = validate(split(), target=target, profile=profile)
+
+    assert find(issues, "task_type_mismatch") == []
+
+
+def test_classification_with_a_numeric_target_of_many_values_is_a_warning():
+    issues = validate(split(), target="score", profile=many_value_target())
+
+    [issue] = find(issues, "task_type_mismatch")
+    assert issue.severity == "warning"
+    assert issue.column == "score"
+    assert "40 distinct values" in issue.message
+    assert "regression" in issue.message
+
+
+def test_the_regression_threshold_of_the_profiler_decides_when_to_warn():
+    at_threshold = profile_dataframe(make_frame(), target="age")
+    assert at_threshold.columns[1].n_unique == DEFAULT_CONFIG.regression_min_unique
+
+    issues = validate(split(), target="age", profile=at_threshold)
+
+    assert find(issues, "task_type_mismatch") == []
+
+
+def test_regression_with_a_numeric_target_of_many_values_is_fine():
+    issues = validate(
+        split(stratify=False), target="score", task_type="regression", profile=many_value_target()
+    )
+
+    assert find(issues, "task_type_mismatch") == []
+
+
+def test_the_task_type_is_not_checked_when_the_target_is_not_a_column():
+    issues = validate(split(), target="nope", task_type="regression")
+
+    assert find(issues, "task_type_mismatch") == []
 
 
 def test_impute_on_a_column_without_missing_values_is_a_warning():
