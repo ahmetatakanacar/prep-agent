@@ -27,6 +27,7 @@ MAX_TARGET_OPTIONS = 4
 
 TEXTS = {
     "en": {
+        "language": "English",
         "target_q": "Which column should the model predict?",
         "target_why": (
             "The goal does not name a column and several could be predicted, so I do not guess. "
@@ -64,6 +65,7 @@ TEXTS = {
         ),
     },
     "tr": {
+        "language": "Turkish",
         "target_q": "Model hangi sütunu tahmin etsin?",
         "target_why": (
             "Hedef sütun belirtilmedi ve birden fazla sütun tahmin edilebilir, bu yüzden "
@@ -162,11 +164,18 @@ class DemoLLM:
         if not (self._target_given and self._family_given):
             story.insert(0, "questions")
         step = story[min(self._calls, len(story) - 1)]
+        text = self._text
         self._calls += 1
         if step == "questions":
-            response: dict = {"kind": "questions", "plan": None, "questions": self._questions()}
+            response: dict = {
+                "language": text["language"],
+                "kind": "questions",
+                "plan": None,
+                "questions": self._questions(),
+            }
         else:
             response = {
+                "language": text["language"],
                 "kind": "plan",
                 "plan": self._plan(rejected=step == "plan_rejected"),
                 "questions": None,

@@ -69,10 +69,20 @@ class Question(BaseModel):
 
 
 class PlannerResponse(BaseModel):
-    """Either a plan or questions. `kind` says which one is filled; the other stays null."""
+    """Either a plan or questions. `kind` says which one is filled; the other stays null.
+
+    `language` comes first so that the model decides the language before it writes any text. It
+    is not checked and not used: it is only kept in the trace and in run.json.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
+    language: Text = Field(
+        description=(
+            "The language the user's goal is written in, such as English or Turkish. "
+            "Write every question, option and reason in this language."
+        )
+    )
     kind: Literal["plan", "questions"]
     plan: Plan | None = Field(default=None, description="Set when kind is 'plan'.")
     questions: list[Question] | None = Field(

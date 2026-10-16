@@ -14,11 +14,11 @@ VALID_PLAN = json.loads((FIXTURES / "customers_plan.json").read_text(encoding="u
 
 
 def plan_reply(plan: dict) -> dict:
-    return {"kind": "plan", "plan": plan, "questions": None}
+    return {"language": "English", "kind": "plan", "plan": plan, "questions": None}
 
 
 def questions_reply(*questions: dict) -> dict:
-    return {"kind": "questions", "plan": None, "questions": list(questions)}
+    return {"language": "English", "kind": "questions", "plan": None, "questions": list(questions)}
 
 
 def family_question(qid: str = "family") -> dict:

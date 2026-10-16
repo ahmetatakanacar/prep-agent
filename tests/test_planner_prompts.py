@@ -447,3 +447,11 @@ def test_the_first_message_has_no_language_reminder_because_the_system_prompt_ha
     profile,
 ):
     assert "Keep writing in the language" not in user_prompt(profile)
+
+
+def test_the_language_section_points_to_the_language_field_of_the_answer():
+    prompt = build_system_prompt()
+
+    section = prompt.split("\n## Language\n", 1)[1].split("\n## ", 1)[0]
+    assert "`language` field" in section
+    assert "first" in section

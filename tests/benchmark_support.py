@@ -62,14 +62,14 @@ def regression_plan() -> dict:
 
 
 def answer(plan: dict) -> PlannerResponse:
-    return PlannerResponse(kind="plan", plan=Plan.model_validate(plan))
+    return PlannerResponse(language="English", kind="plan", plan=Plan.model_validate(plan))
 
 
 def questions_answer() -> PlannerResponse:
     question = Question(
         id="q1", question="Keep outliers?", options=["yes", "no"], recommended="no", reason="r"
     )
-    return PlannerResponse(kind="questions", questions=[question])
+    return PlannerResponse(language="English", kind="questions", questions=[question])
 
 
 def spec(name, target, task_type, n_rows, n_columns) -> DatasetSpec:

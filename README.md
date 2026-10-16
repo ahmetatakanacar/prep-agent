@@ -120,7 +120,7 @@ Every run writes `runs/<run_id>/`:
 | `pipeline.py` | the whole preparation as a standalone script (successful runs only) |
 | `pipeline.joblib` | the fitted impute, encode and scale steps only; not applicable to a raw file |
 | `baseline.json` | cross-validation scores of the baseline models |
-| `issues.json`, `run.json` | validator issues; status, goal, model, token use, error |
+| `issues.json`, `run.json` | validator issues; status, goal, model, token use, the language the planner named, error |
 | `llm_trace.json`, `qa.json` | `prepare` only: every model call (purpose, model, token usage, issue codes, answer; no prompts, no data) and your answers |
 
 `pipeline.py` needs only pandas and scikit-learn; prep-agent does not have to be installed. It repeats every step on a raw CSV file and gives the same `train.csv` and `test.csv` as the run folder, when the pandas and scikit-learn versions match:

@@ -250,12 +250,13 @@ class TestEstimateAgentRun:
             "reason": "r",
         }
         broken = {
+            "language": "English",
             "kind": "questions",
             "plan": None,
             "questions": [{**question, "recommended": "c"}],
         }
-        asking = {"kind": "questions", "plan": None, "questions": [question]}
-        bad_plan = {"kind": "plan", "plan": plan, "questions": None}
+        asking = {"language": "English", "kind": "questions", "plan": None, "questions": [question]}
+        bad_plan = {"language": "English", "kind": "plan", "plan": plan, "questions": None}
         script = []
         for reply in [asking] * MAX_QUESTION_ROUNDS + [bad_plan] * (MAX_REVISIONS + 1):
             script += [broken] * MAX_SCHEMA_RETRIES + [reply]

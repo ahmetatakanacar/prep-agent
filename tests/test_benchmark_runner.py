@@ -285,7 +285,7 @@ class TestAgentMetrics:
         assert job.agent.cost == pytest.approx(2 * CALL_COST)
 
     def test_a_schema_retry_is_counted_apart_from_revisions(self, ws):
-        invalid = {"kind": "plan", "plan": None, "questions": None}
+        invalid = {"language": "English", "kind": "plan", "plan": None, "questions": None}
         llm = FakeLLM([invalid, answer(classification_plan()), answer(regression_plan())])
         job = job_of(ws.run(llm), "cls", "agent")
         assert job.status == "ok"
@@ -293,7 +293,7 @@ class TestAgentMetrics:
         assert job.agent.first_plan_error_codes == []
 
     def test_a_rejected_revision_is_one_revision_and_one_retry(self, ws):
-        invalid = {"kind": "plan", "plan": None, "questions": None}
+        invalid = {"language": "English", "kind": "plan", "plan": None, "questions": None}
         llm = FakeLLM(
             [
                 answer(classification_plan(drop="nope")),

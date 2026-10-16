@@ -34,7 +34,10 @@ def prepare_args(tmp_path, *extra, csv=CSV):
 
 
 def use_llm(monkeypatch, plan) -> FakeLLM:
-    llm = FakeLLM([{"kind": "plan", "plan": plan, "questions": None}], usage=TokenUsage(10, 5))
+    llm = FakeLLM(
+        [{"language": "English", "kind": "plan", "plan": plan, "questions": None}],
+        usage=TokenUsage(10, 5),
+    )
     monkeypatch.setattr("prep_agent.cli.create_llm_client", lambda: llm)
     return llm
 
@@ -235,7 +238,7 @@ def test_prepare_with_no_baseline_writes_no_baseline_json(invoke_cli, monkeypatc
 def test_a_failed_prepare_run_writes_a_report_with_the_reason(invoke_cli, monkeypatch, tmp_path):
     bad = json.loads(json.dumps(VALID_PLAN))
     bad["steps"].insert(0, bad["steps"].pop(4))
-    llm = FakeLLM([{"kind": "plan", "plan": bad, "questions": None}])
+    llm = FakeLLM([{"language": "English", "kind": "plan", "plan": bad, "questions": None}])
     monkeypatch.setattr("prep_agent.cli.create_llm_client", lambda: llm)
 
     result = invoke_cli(prepare_args(tmp_path, "--max-revisions", "0"))

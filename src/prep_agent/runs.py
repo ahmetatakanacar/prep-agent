@@ -82,6 +82,8 @@ class RunInfo(BaseModel):
     goal: str | None = None
     model: str | None = None
     token_usage: TokenUsage | None = None
+    # The language the planner said the goal is written in; kept for inspection only.
+    language: str | None = None
     # Why a failed agent run stopped; None for runs that succeeded.
     error: str | None = None
 
@@ -129,6 +131,7 @@ def save_run(
         goal=trace.goal if trace else None,
         model=trace.model if trace else None,
         token_usage=trace.total_usage if trace else None,
+        language=trace.language if trace else None,
         error=error,
     )
     if result is not None:

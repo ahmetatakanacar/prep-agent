@@ -26,7 +26,9 @@ def question(**overrides) -> dict:
 
 
 def test_plan_response_holds_a_plan():
-    response = PlannerResponse.model_validate({"kind": "plan", "plan": PLAN, "questions": None})
+    response = PlannerResponse.model_validate(
+        {"language": "English", "kind": "plan", "plan": PLAN, "questions": None}
+    )
 
     assert isinstance(response.plan, Plan)
     assert response.questions is None
@@ -34,7 +36,7 @@ def test_plan_response_holds_a_plan():
 
 def test_questions_response_holds_questions():
     response = PlannerResponse.model_validate(
-        {"kind": "questions", "plan": None, "questions": [question()]}
+        {"language": "English", "kind": "questions", "plan": None, "questions": [question()]}
     )
 
     assert response.plan is None
@@ -42,15 +44,24 @@ def test_questions_response_holds_questions():
 
 
 def test_unused_fields_may_be_left_out():
-    assert PlannerResponse.model_validate({"kind": "plan", "plan": PLAN}).questions is None
     assert (
-        PlannerResponse.model_validate({"kind": "questions", "questions": [question()]}).plan
+        PlannerResponse.model_validate(
+            {"language": "English", "kind": "plan", "plan": PLAN}
+        ).questions
+        is None
+    )
+    assert (
+        PlannerResponse.model_validate(
+            {"language": "English", "kind": "questions", "questions": [question()]}
+        ).plan
         is None
     )
 
 
 def test_an_empty_questions_list_next_to_a_plan_is_the_same_as_none():
-    response = PlannerResponse.model_validate({"kind": "plan", "plan": PLAN, "questions": []})
+    response = PlannerResponse.model_validate(
+        {"language": "English", "kind": "plan", "plan": PLAN, "questions": []}
+    )
 
     assert response.questions is None
 
@@ -58,12 +69,12 @@ def test_an_empty_questions_list_next_to_a_plan_is_the_same_as_none():
 @pytest.mark.parametrize(
     "data",
     [
-        {"kind": "plan", "plan": None, "questions": None},
-        {"kind": "plan", "plan": PLAN, "questions": [question()]},
-        {"kind": "questions", "plan": None, "questions": None},
-        {"kind": "questions", "plan": None, "questions": []},
-        {"kind": "questions", "plan": PLAN, "questions": [question()]},
-        {"kind": "answer", "plan": PLAN, "questions": None},
+        {"language": "English", "kind": "plan", "plan": None, "questions": None},
+        {"language": "English", "kind": "plan", "plan": PLAN, "questions": [question()]},
+        {"language": "English", "kind": "questions", "plan": None, "questions": None},
+        {"language": "English", "kind": "questions", "plan": None, "questions": []},
+        {"language": "English", "kind": "questions", "plan": PLAN, "questions": [question()]},
+        {"language": "English", "kind": "answer", "plan": PLAN, "questions": None},
     ],
     ids=[
         "plan-kind-without-plan",
@@ -81,13 +92,19 @@ def test_inconsistent_kind_and_fields_are_rejected(data):
 
 def test_unknown_fields_are_rejected():
     with pytest.raises(ValidationError):
-        PlannerResponse.model_validate({"kind": "plan", "plan": PLAN, "note": "hi"})
+        PlannerResponse.model_validate(
+            {"language": "English", "kind": "plan", "plan": PLAN, "note": "hi"}
+        )
 
 
 def test_question_ids_must_be_distinct_within_a_response():
     with pytest.raises(ValidationError, match="distinct"):
         PlannerResponse.model_validate(
-            {"kind": "questions", "questions": [question(), question(question="Again?")]}
+            {
+                "language": "English",
+                "kind": "questions",
+                "questions": [question(), question(question="Again?")],
+            }
         )
 
 
@@ -132,14 +149,19 @@ def test_schema_converts_to_strict_mode_and_accepts_a_typical_answer():
     schema = to_strict_schema(PlannerResponse)
 
     Draft202012Validator.check_schema(schema)
-    answer = {"kind": "questions", "plan": None, "questions": [question(allow_custom=False)]}
+    answer = {
+        "language": "English",
+        "kind": "questions",
+        "plan": None,
+        "questions": [question(allow_custom=False)],
+    }
     assert not list(Draft202012Validator(schema).iter_errors(answer))
 
 
 def test_strict_schema_answer_with_added_nulls_validates_after_cleanup():
     step = {"op": "split", "reason": "r", "test_size": None, "stratify": True, "random_state": None}
     plan = {**PLAN, "steps": [step]}
-    answer = {"kind": "plan", "plan": plan, "questions": None}
+    answer = {"language": "English", "kind": "plan", "plan": plan, "questions": None}
 
     cleaned = drop_added_nulls(answer, PlannerResponse)
 
@@ -153,7 +175,12 @@ def test_allow_custom_defaults_to_false_and_can_be_set():
 
 
 def test_strict_mode_null_for_allow_custom_means_false():
-    answer = {"kind": "questions", "plan": None, "questions": [question(allow_custom=None)]}
+    answer = {
+        "language": "English",
+        "kind": "questions",
+        "plan": None,
+        "questions": [question(allow_custom=None)],
+    }
 
     cleaned = drop_added_nulls(answer, PlannerResponse)
 
@@ -161,3 +188,42 @@ def test_strict_mode_null_for_allow_custom_means_false():
     assert parsed.questions is not None and parsed.questions[0].allow_custom is False
     schema = to_strict_schema(PlannerResponse)
     assert not list(Draft202012Validator(schema).iter_errors(answer))
+
+
+LANGUAGE_DESCRIPTION = (
+    "The language the user's goal is written in, such as English or Turkish. "
+    "Write every question, option and reason in this language."
+)
+
+
+def test_language_is_the_first_property_of_the_schema_and_required():
+    schema = PlannerResponse.model_json_schema()
+    strict = to_strict_schema(PlannerResponse)
+
+    for form in (schema, strict):
+        assert list(form["properties"])[0] == "language"
+        assert form["required"][0] == "language"
+        assert form["properties"]["language"]["description"] == LANGUAGE_DESCRIPTION
+
+
+@pytest.mark.parametrize("language", [None, "", "  "])
+def test_a_response_without_a_language_is_a_schema_error(language):
+    answer = {"kind": "plan", "plan": PLAN, "questions": None}
+    if language is not None:
+        answer["language"] = language
+
+    with pytest.raises(ValidationError):
+        PlannerResponse.model_validate(answer)
+
+
+def test_any_language_name_is_accepted_as_it_is():
+    answer = {"language": "Türkçe", "kind": "plan", "plan": PLAN, "questions": None}
+
+    assert PlannerResponse.model_validate(answer).language == "Türkçe"
+
+
+def test_the_strict_schema_rejects_an_answer_without_a_language():
+    schema = to_strict_schema(PlannerResponse)
+    answer = {"language": "English", "kind": "plan", "plan": PLAN, "questions": None}
+
+    assert list(Draft202012Validator(schema).iter_errors(answer))

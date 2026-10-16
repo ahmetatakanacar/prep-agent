@@ -63,7 +63,7 @@ def make_trace(*, usage: TokenUsage | None = DEFAULT_USAGE, qa=(), model="fake-m
         issue_codes=[],
         warning_codes=[],
         response_kind="plan",
-        response=PlannerResponse(kind="plan", plan=plan),
+        response=PlannerResponse(language="English", kind="plan", plan=plan),
     )
     return AgentTrace(goal="prepare for churn", calls=[call], qa_history=list(qa))
 

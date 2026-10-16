@@ -27,11 +27,11 @@ STEP_IMPUTE = 4
 
 
 def plan_reply(plan: dict) -> dict:
-    return {"kind": "plan", "plan": plan, "questions": None}
+    return {"language": "English", "kind": "plan", "plan": plan, "questions": None}
 
 
 def questions_reply(*questions: dict) -> dict:
-    return {"kind": "questions", "plan": None, "questions": list(questions)}
+    return {"language": "English", "kind": "questions", "plan": None, "questions": list(questions)}
 
 
 def question(qid: str = "family", **overrides) -> dict:

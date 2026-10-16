@@ -84,6 +84,13 @@ class AgentTrace:
         return next((call.model for call in self.calls if call.model is not None), None)
 
     @property
+    def language(self) -> str | None:
+        """The language the planner named in its last valid answer."""
+        return next(
+            (call.response.language for call in reversed(self.calls) if call.response), None
+        )
+
+    @property
     def total_usage(self) -> TokenUsage | None:
         """Sum over the calls that reported usage; None if no call did. A cache count is summed
         over the calls that reported it and is None if none did."""

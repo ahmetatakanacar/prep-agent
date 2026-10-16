@@ -62,7 +62,12 @@ def wait_for(client: TestClient, session_id: str, statuses: set[str], timeout: f
 
 
 def plan_response(path: Path) -> dict:
-    return {"kind": "plan", "plan": json.loads(path.read_text(encoding="utf-8")), "questions": None}
+    return {
+        "language": "English",
+        "kind": "plan",
+        "plan": json.loads(path.read_text(encoding="utf-8")),
+        "questions": None,
+    }
 
 
 def scripted(*responses):

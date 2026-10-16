@@ -290,7 +290,7 @@ def make_trace(*, usage: TokenUsage | None = DEFAULT_USAGE) -> AgentTrace:
         issue_codes=[],
         warning_codes=[],
         response_kind="plan",
-        response=PlannerResponse(kind="plan", plan=plan),
+        response=PlannerResponse(language="Esperanto", kind="plan", plan=plan),
     )
     return AgentTrace(
         goal="prepare for churn",
@@ -317,6 +317,25 @@ def test_a_trace_adds_the_trace_and_qa_files(tmp_path, executed):
     assert call["response"]["kind"] == "plan"
     [qa] = json.loads((run_dir / "qa.json").read_text(encoding="utf-8"))
     assert qa["question"]["id"] == "family" and qa["answer"] == "any"
+
+
+def test_the_language_is_kept_in_the_trace_and_run_json_and_nowhere_else(tmp_path, executed):
+    run_dir = save(tmp_path, executed, run_id="r1", trace=make_trace())
+
+    trace = json.loads((run_dir / "llm_trace.json").read_text(encoding="utf-8"))
+    assert trace["calls"][0]["response"]["language"] == "Esperanto"
+    info = RunInfo.model_validate_json((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info.language == "Esperanto"
+    for name in ("plan.json", "pipeline.py", "report.md"):
+        assert "Esperanto" not in (run_dir / name).read_text(encoding="utf-8"), name
+    assert "language" not in json.loads((run_dir / "plan.json").read_text(encoding="utf-8"))
+
+
+def test_a_run_without_a_trace_has_no_language(tmp_path, executed):
+    run_dir = save(tmp_path, executed, run_id="r1")
+
+    info = RunInfo.model_validate_json((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info.language is None
 
 
 def test_run_json_gets_goal_model_and_usage_from_the_trace(tmp_path, executed):
