@@ -232,6 +232,12 @@ def test_a_brief_with_a_target_and_a_family_gets_a_plan_without_questions(demo):
     assert result["issues"] == []
 
 
+FAMILY_LABELS = {
+    "en": {"tree": "tree", "linear": "linear", "any": "any"},
+    "tr": {"tree": "ağaç", "linear": "doğrusal", "any": "fark etmez"},
+}
+
+
 def test_the_demo_asks_in_the_language_of_the_interface(demo):
     session_id = open_sample(demo)
     start(demo, session_id, lang="tr")
@@ -239,8 +245,14 @@ def test_the_demo_asks_in_the_language_of_the_interface(demo):
     target_question, family_question = waiting["questions"]
     assert "hangi sütunu" in target_question["question"]
     assert "tür modeli" in family_question["question"]
-    assert family_question["options"] == ["tree", "linear", "any"]
-    assert answer(demo, session_id, {"target": "churned", "model_family": "any"}).status_code == 200
+    # The options carry the labels of the family buttons of the form.
+    assert family_question["options"] == ["ağaç", "doğrusal", "fark etmez"]
+    assert family_question["recommended"] == "fark etmez"
+    assert "`any`" not in family_question["reason"]
+    assert "fark etmez" in family_question["reason"]
+    assert "any" not in family_question["options"]
+    answers = {"target": "churned", "model_family": "fark etmez"}
+    assert answer(demo, session_id, answers).status_code == 200
     assert wait_for(demo, session_id, FINISHED)["status"] == "done"
     result = demo.get(f"/api/sessions/{session_id}/result").json()
     drop = next(s for s in result["plan"]["steps"] if s["op"] == "drop_columns")
@@ -249,12 +261,24 @@ def test_the_demo_asks_in_the_language_of_the_interface(demo):
     assert "düşürmeyi sen seçtin" not in drop["reason"]
 
 
-@pytest.mark.parametrize("family", ["tree", "linear", "any"])
-def test_the_answer_about_the_family_shapes_the_plan(demo, family):
+def test_the_english_family_question_keeps_its_plain_options(demo):
     session_id = open_sample(demo)
     start(demo, session_id, target="churned")
+    [question] = wait_for(demo, session_id, {"waiting"})["questions"]
+
+    assert question["options"] == ["tree", "linear", "any"]
+    assert question["recommended"] == "any"
+    assert "`any`" in question["reason"]
+
+
+@pytest.mark.parametrize("lang", ["en", "tr"])
+@pytest.mark.parametrize("family", ["tree", "linear", "any"])
+def test_the_answer_about_the_family_shapes_the_plan(demo, lang, family):
+    session_id = open_sample(demo)
+    start(demo, session_id, target="churned", lang=lang)
     wait_for(demo, session_id, {"waiting"})
-    assert answer(demo, session_id, {"model_family": family}).status_code == 200
+    label = FAMILY_LABELS[lang][family]
+    assert answer(demo, session_id, {"model_family": label}).status_code == 200
     assert wait_for(demo, session_id, FINISHED)["status"] == "done"
 
     plan = demo.get(f"/api/sessions/{session_id}/result").json()["plan"]
@@ -405,7 +429,7 @@ def test_the_demo_ends_with_a_plan_that_has_no_issues_at_all(demo, lang, brief, 
     if asked:
         waiting = wait_for(demo, session_id, {"waiting"})
         assert [q["id"] for q in waiting["questions"]] == asked
-        answers = {"target": "churned", "model_family": "any"}
+        answers = {"target": "churned", "model_family": FAMILY_LABELS[lang]["any"]}
         assert answer(demo, session_id, {k: answers[k] for k in asked}).status_code == 200
     assert wait_for(demo, session_id, FINISHED)["status"] == "done"
 

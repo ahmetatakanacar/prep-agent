@@ -22,7 +22,6 @@ TARGET = "churned"
 REQUIRED_COLUMNS = frozenset(
     {"customer_id", "age", "plan", "signup_date", "monthly_spend", "churned", "country"}
 )
-FAMILIES = ["tree", "linear", "any"]
 TARGET_TYPES = ("binary", "categorical", "numeric")
 MAX_TARGET_OPTIONS = 4
 
@@ -34,6 +33,9 @@ TEXTS = {
             "`churned` is a yes/no column, which fits a goal about customers leaving."
         ),
         "family_q": "Which kind of model will you train on the prepared data?",
+        # The options carry the labels of the family buttons of the form, and the answer is
+        # mapped back to the family.
+        "families": {"tree": "tree", "linear": "linear", "any": "any"},
         "family_why": (
             "The goal does not say, and the preparation depends on it: tree models need no "
             "scaling, linear models do. `any` keeps the plan safe for both."
@@ -69,9 +71,10 @@ TEXTS = {
             "bir amaca uyuyor."
         ),
         "family_q": "Hazırlanan veriyle hangi tür modeli eğiteceksin?",
+        "families": {"tree": "ağaç", "linear": "doğrusal", "any": "fark etmez"},
         "family_why": (
             "Amaç bunu söylemiyor ve hazırlık buna bağlı: ağaç modelleri ölçeklemeye ihtiyaç "
-            "duymaz, doğrusal modeller duyar. `any` planı ikisi için de güvenli tutar."
+            "duymaz, doğrusal modeller duyar. `fark etmez` planı ikisi için de güvenli tutar."
         ),
         "drop_id": "customer_id bir müşteriyi tanımlar ve kayıp hakkında bir şey söylemez",
         "drop_country": "country tek bir değer taşıyor",
@@ -193,8 +196,8 @@ class DemoLLM:
                 {
                     "id": "model_family",
                     "question": text["family_q"],
-                    "options": FAMILIES,
-                    "recommended": "any",
+                    "options": list(text["families"].values()),
+                    "recommended": text["families"]["any"],
                     "reason": text["family_why"],
                     "allow_custom": False,
                 }
@@ -214,7 +217,8 @@ class DemoLLM:
         answers = self._answers()
         if answers.get("target", TARGET).strip() != TARGET:
             raise DemoScriptLimit(text["limit"])
-        family = self._family or answers.get("model_family", "any")
+        by_label = {label: family for family, label in text["families"].items()}
+        family = self._family or by_label.get(answers.get("model_family", ""), "any")
         build = _rejected_steps if rejected else _corrected_steps
         return {
             "target": TARGET,
