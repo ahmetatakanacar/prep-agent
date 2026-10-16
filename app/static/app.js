@@ -517,6 +517,18 @@ function warningTag(code) {
   return h("span", { class: `tag ${kind}`, title: lookup(`warn.${code}`) || code }, code);
 }
 
+const SEPARATOR_NAMES = {
+  ",": "profile.sep_comma",
+  ";": "profile.sep_semicolon",
+  "\t": "profile.sep_tab",
+  "|": "profile.sep_pipe",
+};
+
+// A separator is hard to read as a symbol (a tab is invisible), so it is shown by name.
+function separatorName(sep) {
+  return SEPARATOR_NAMES[sep] ? t(SEPARATOR_NAMES[sep]) : sep;
+}
+
 function renderProfileSheet(snap) {
   const sheet = sheets.profile;
   clear(sheet);
@@ -549,7 +561,7 @@ function renderProfileSheet(snap) {
   });
 
   const readAs = p.csv
-    ? [t("profile.sep", { sep: p.csv.sep === "\t" ? t("profile.sep_tab") : p.csv.sep }), t("profile.encoding", { encoding: p.csv.encoding })]
+    ? [t("profile.sep", { sep: separatorName(p.csv.sep) }), t("profile.encoding", { encoding: p.csv.encoding })]
     : [];
   const meta = [
     h("span", {}, [snap.filename, tn("rows", p.n_rows), tn("columns", p.n_columns), tn("dups", p.n_duplicate_rows), ...readAs].join(" · ")),

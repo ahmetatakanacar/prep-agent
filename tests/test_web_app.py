@@ -156,13 +156,39 @@ def test_a_run_on_a_semicolon_cp1254_file_keeps_the_settings_in_its_run_folder()
     assert 'CSV_OPTIONS = {"sep": ";", "decimal": ",", "encoding": "cp1254"}' in script
 
 
-@pytest.mark.parametrize("key", ["profile.sep", "profile.sep_tab", "profile.encoding"])
+@pytest.mark.parametrize("key", ["profile.sep", "profile.encoding"])
 def test_the_csv_settings_of_the_profile_are_translated_and_shown_by_the_page(key):
     texts = (STATIC / "i18n.js").read_text(encoding="utf-8")
     page = (STATIC / "app.js").read_text(encoding="utf-8")
 
     assert texts.count(f'"{key}":') == 2, "one entry for English and one for Turkish"
     assert f't("{key}"' in page
+
+
+def test_the_separator_of_the_profile_is_shown_by_name_in_both_languages():
+    texts = (STATIC / "i18n.js").read_text(encoding="utf-8")
+    page = (STATIC / "app.js").read_text(encoding="utf-8")
+
+    names = {
+        "profile.sep_comma": ("comma", "virgül"),
+        "profile.sep_semicolon": ("semicolon", "noktalı virgül"),
+        "profile.sep_tab": ("tab", "sekme"),
+        "profile.sep_pipe": ("pipe", "dikey çizgi"),
+    }
+    for key, (english, turkish) in names.items():
+        assert texts.count(f'"{key}":') == 2
+        assert f'"{key}": "{english}"' in texts
+        assert f'"{key}": "{turkish}"' in texts
+        assert f'"{key}"' in page
+    assert '"profile.sep": "separator: {sep}"' in texts
+    assert '"profile.sep": "ayraç: {sep}"' in texts
+
+
+def test_the_demo_mode_text_of_the_top_bar_is_short_enough_for_its_cell():
+    texts = (STATIC / "i18n.js").read_text(encoding="utf-8")
+
+    assert '"tb.mode_demo": "demo, scripted"' in texts
+    assert '"tb.mode_demo": "demo (betikli)"' in texts
 
 
 def test_upload_over_the_limit_is_refused():
