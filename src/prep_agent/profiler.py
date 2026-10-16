@@ -115,13 +115,16 @@ class ProfilerConfig:
 
     # Privacy: a column is flagged `possible_pii` if at least this share of its string values
     # looks like an email address or phone number, or if a part of its name is in the list and
-    # more than `pii_name_min_unique_ratio` of its values are distinct.
+    # more than `pii_name_min_unique_ratio` of its values are distinct. Names are compared without
+    # Turkish letters (see `_name_parts`), so the list holds the ASCII spelling only. An entry with
+    # an underscore is several parts in a row.
     pii_value_min_ratio: float = 0.8
     pii_name_min_unique_ratio: float = 0.5
     pii_name_parts: tuple[str, ...] = (
         "email", "mail", "phone", "telefon", "tel", "gsm", "name", "firstname", "lastname",
         "surname", "ad", "soyad", "isim", "address", "adres", "tckn", "iban", "ssn",
-        "username", "fullname", "adi", "adı", "soyadi", "soyadı",
+        "username", "fullname", "adi", "soyadi", "adsoyad", "eposta", "e_posta", "cep", "tc",
+        "tc_kimlik", "kimlik_no", "dogum_tarihi",
     )  # fmt: skip
     # The parts of `pii_name_parts` that can name a number. A numeric column is only flagged for
     # one of these.
@@ -135,6 +138,7 @@ DEFAULT_CONFIG = ProfilerConfig()
 
 _CAMEL_ID_NAME = re.compile(r"[a-z](Id|ID)$")
 _SNAKE_ID_NAME = re.compile(r"(^|[^a-z0-9])(id|uuid|guid)($|[^a-z0-9])", re.IGNORECASE)
+_ASCII_TURKISH = str.maketrans("ıİşŞğĞüÜöÖçÇ", "iIsSgGuUoOcC")
 _EMAIL = r"[^@\s]+@[^@\s]+\.[^@\s]+"
 _PHONE = r"\+?[\d\s().-]{7,20}"
 _PHONE_MIN_DIGITS = 7
@@ -531,8 +535,9 @@ def _looks_like_pii(
     name: str, non_null: pd.Series, n_unique: int, inferred: InferredType, config: ProfilerConfig
 ) -> bool:
     is_numeric = pdt.is_numeric_dtype(non_null.dtype)
-    name_parts = config.pii_numeric_name_parts if is_numeric else config.pii_name_parts
-    name_matches = not set(_name_parts(name)).isdisjoint(name_parts)
+    listed = config.pii_numeric_name_parts if is_numeric else config.pii_name_parts
+    joined = f"_{'_'.join(_name_parts(name))}_"
+    name_matches = any(f"_{entry}_" in joined for entry in listed)
     if name_matches and n_unique > config.pii_name_min_unique_ratio * len(non_null):
         return True
     if inferred == "datetime" or non_null.empty or is_numeric:
@@ -547,9 +552,13 @@ def _looks_like_pii(
 
 
 def _name_parts(name: str) -> list[str]:
-    """Split a column name on separators, camelCase and letter/digit boundaries, lowercased."""
+    """Split a column name on separators, camelCase and letter/digit boundaries, lowercased.
+
+    Turkish letters become their ASCII look-alikes first, with the case kept, so that "Adı"
+    matches "adi" and a capital "İ" is not read as a word boundary.
+    """
     parts = []
-    for chunk in re.split(r"[\W_]+", name):
+    for chunk in re.split(r"[\W_]+", name.translate(_ASCII_TURKISH)):
         start = 0
         for i in range(1, len(chunk)):
             prev, cur = chunk[i - 1], chunk[i]
@@ -562,8 +571,7 @@ def _name_parts(name: str) -> list[str]:
                 parts.append(chunk[start:i])
                 start = i
         parts.append(chunk[start:])
-    # The dotted capital I of Turkish lowercases to two code points; map it to plain "i" first.
-    return [part.replace("İ", "i").lower() for part in parts if part]
+    return [part.lower() for part in parts if part]
 
 
 def _numeric_stats(non_null: pd.Series, config: ProfilerConfig) -> tuple[dict, int]:

@@ -564,6 +564,59 @@ def test_pii_column_names_are_flagged(name):
 
 
 @pytest.mark.parametrize(
+    "name",
+    [
+        "ad_soyad",
+        "adsoyad",
+        "AdSoyad",
+        "Adı Soyadı",
+        "SOYADI",
+        "MüşteriAdı",
+        "İsim",
+        "İSİM",
+        "eposta",
+        "e_posta",
+        "E-Posta",
+        "cep",
+        "cep_telefonu",
+        "tc",
+        "tc_kimlik",
+        "TC_Kimlik_No",
+        "kimlik_no",
+        "kimlikNo",
+        "dogum_tarihi",
+        "doğum_tarihi",
+        "Doğum Tarihi",
+    ],
+)
+def test_turkish_pii_column_names_are_flagged_with_or_without_turkish_letters(name):
+    col = profile_column([f"value {i % 12}" for i in range(N)], name=name)
+
+    assert "possible_pii" in col.warnings
+    assert col.sample_values == []
+    assert col.top_values == []
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["adet", "adedi", "kadin", "posta_kodu", "kimlik", "no", "dogum_yili", "sube_adedi", "cepheli"],
+)
+def test_turkish_names_that_only_contain_a_pii_part_are_not_flagged(name):
+    col = profile_column([f"value {i % 12}" for i in range(N)], name=name)
+
+    assert "possible_pii" not in col.warnings
+    assert col.sample_values != []
+
+
+@pytest.mark.parametrize("name", ["adres_sayisi", "adet", "cep_sayisi", "ad_sayisi"])
+def test_a_numeric_turkish_column_is_not_flagged_for_a_pii_name_part(name):
+    col = profile_column([i * 2.5 for i in range(N)], name=name)
+
+    assert "possible_pii" not in col.warnings
+    assert col.max == 47.5
+
+
+@pytest.mark.parametrize(
     "name", ["filename", "paid", "valid", "company", "named", "telephone_x", "radio", "adidas"]
 )
 def test_non_pii_column_names_are_not_flagged(name):
