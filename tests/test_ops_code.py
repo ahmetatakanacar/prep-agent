@@ -98,13 +98,16 @@ def test_string_literals_use_the_quotes_ruff_format_keeps(text, expected):
         (float("-inf"), 'float("-inf")'),
         (["a", 1, None], '["a", 1, None]'),
         ([], "[]"),
+        ({"dtype": "int64"}, '{"dtype": "int64"}'),
+        ({"a": 1, "b": [None]}, '{"a": 1, "b": [None]}'),
+        ({}, "{}"),
     ],
 )
 def test_other_literals(value, expected):
     assert literal(value).flat() == expected
 
 
-@pytest.mark.parametrize("value", [{"a": 1}, {1}, b"bytes", object(), 1 + 2j, ["ok", {"no": 1}]])
+@pytest.mark.parametrize("value", [{1: "a"}, {1}, b"bytes", object(), 1 + 2j, ["ok", {2: "no"}]])
 def test_unsupported_literals_are_rejected(value):
     with pytest.raises(CodeError):
         literal(value)
@@ -301,3 +304,9 @@ def test_import_names_must_be_plain_identifiers():
         Import("os; import sys")
     with pytest.raises(CodeError):
         Import("sklearn", "a, b")
+
+
+def test_dict_keys_are_escaped_like_any_string():
+    key = 'x"); import os  #'
+
+    assert ast.literal_eval(literal({key: 1}).flat()) == {key: 1}

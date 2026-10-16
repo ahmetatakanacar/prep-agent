@@ -340,3 +340,40 @@ def test_expected_model_family_is_checked_before_anything_runs():
 
     with pytest.raises(PlanValidationError, match="model_family_mismatch"):
         execute(df, plan, profile, expected_model_family="tree")
+
+
+def census_like_frame(n: int = 200) -> pd.DataFrame:
+    i = np.arange(n)
+    return pd.DataFrame(
+        {
+            "age": 20.0 + i % 50,
+            "hours": 10.0 + i % 40,
+            "workclass": np.where(i % 9 == 0, None, np.where(i % 2 == 0, "Private", "Gov")),
+            "occupation": np.where(i % 11 == 0, None, np.where(i % 3 == 0, "Sales", "Tech")),
+            "sex": np.where(i % 2 == 0, "Male", "Female"),
+            "t": np.where(i % 5 == 0, ">50K", "<=50K"),
+        }
+    )
+
+
+def test_missing_indicators_of_text_columns_are_integers_the_validator_accepts(make_plan):
+    plan = make_plan(
+        split(),
+        {
+            "op": "impute",
+            "columns": ["workclass", "occupation"],
+            "strategy": "most_frequent",
+            "add_indicator": True,
+        },
+        {"op": "encode", "columns": ["workclass", "occupation", "sex"], "method": "onehot"},
+        {"op": "scale", "columns": ["age", "hours"], "method": "robust"},
+    )
+
+    result = run_frame(census_like_frame(), plan)
+
+    indicators = [c for c in result.train.columns if c.startswith("missingindicator_")]
+    assert indicators == ["missingindicator_workclass", "missingindicator_occupation"]
+    for frame in (result.train, result.test):
+        assert all(frame[c].dtype == "int64" for c in indicators)
+        assert set(frame[indicators].to_numpy().ravel()) <= {0, 1}
+    assert [i.code for i in result.result_issues if i.code == "non_numeric_output"] == []

@@ -5,10 +5,13 @@ passes every other column through, so a transformer can be fit on a whole train 
 applied to a whole test frame. Output is a pandas DataFrame that keeps the index.
 """
 
+import pandas as pd
 from sklearn.base import TransformerMixin
 from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
+from sklearn.impute import MissingIndicator, SimpleImputer
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import (
+    FunctionTransformer,
     MinMaxScaler,
     OneHotEncoder,
     OrdinalEncoder,
@@ -17,7 +20,7 @@ from sklearn.preprocessing import (
 )
 
 from prep_agent.ops.base import StatefulOpSpec, TransformerCode
-from prep_agent.ops.code import Call, Expr, Import, call
+from prep_agent.ops.code import Call, Expr, Import, call, ref
 from prep_agent.plan import EncodeStep, ImputeStep, ScaleStep
 
 
@@ -35,10 +38,29 @@ def _build_imputer(step: ImputeStep) -> ColumnTransformer:
     imputer = SimpleImputer(
         strategy=step.strategy,
         fill_value=step.fill_value,
-        add_indicator=step.add_indicator,
         keep_empty_features=True,
     )
-    return _on_columns(step.op, step.columns, imputer)
+    transformers = [(step.op, imputer, list(step.columns))]
+    if step.add_indicator:
+        # SimpleImputer(add_indicator=True) would stack the indicator onto the imputed values,
+        # and for text columns that makes an object column holding booleans, which no model
+        # can read. A separate transformer keeps the indicators as 0/1 integers.
+        indicator = Pipeline(
+            [
+                ("indicator", MissingIndicator(features="missing-only", error_on_new=False)),
+                ("to_int", _to_int()),
+            ]
+        )
+        transformers.append(("indicator", indicator, list(step.columns)))
+    return ColumnTransformer(
+        transformers, remainder="passthrough", verbose_feature_names_out=False
+    ).set_output(transform="pandas")
+
+
+def _to_int() -> FunctionTransformer:
+    return FunctionTransformer(
+        func=pd.DataFrame.astype, kw_args={"dtype": "int64"}, feature_names_out="one-to-one"
+    )
 
 
 def _build_encoder(step: EncodeStep) -> ColumnTransformer:
@@ -78,13 +100,43 @@ def _impute_code(step: ImputeStep) -> TransformerCode:
         "SimpleImputer",
         strategy=step.strategy,
         fill_value=step.fill_value,
-        add_indicator=step.add_indicator,
         keep_empty_features=True,
     )
-    return TransformerCode(
-        _on_columns_code(step.op, step.columns, imputer),
-        (_COLUMN_TRANSFORMER, Import("sklearn.impute", "SimpleImputer")),
-    )
+    imports = (_COLUMN_TRANSFORMER, Import("sklearn.impute", "SimpleImputer"))
+    transformers = [(step.op, imputer, step.columns)]
+    if step.add_indicator:
+        indicator = call(
+            "Pipeline",
+            [
+                (
+                    "indicator",
+                    call("MissingIndicator", features="missing-only", error_on_new=False),
+                ),
+                (
+                    "to_int",
+                    call(
+                        "FunctionTransformer",
+                        func=ref("pd.DataFrame.astype"),
+                        kw_args={"dtype": "int64"},
+                        feature_names_out="one-to-one",
+                    ),
+                ),
+            ],
+        )
+        transformers.append(("indicator", indicator, step.columns))
+        imports += (
+            Import("pandas", alias="pd"),
+            Import("sklearn.impute", "MissingIndicator"),
+            Import("sklearn.pipeline", "Pipeline"),
+            Import("sklearn.preprocessing", "FunctionTransformer"),
+        )
+    expression = call(
+        "ColumnTransformer",
+        transformers,
+        remainder="passthrough",
+        verbose_feature_names_out=False,
+    ).then("set_output", transform="pandas")
+    return TransformerCode(expression, imports)
 
 
 def _encode_code(step: EncodeStep) -> TransformerCode:

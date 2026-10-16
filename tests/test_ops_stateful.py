@@ -318,3 +318,17 @@ def test_fitting_on_one_frame_does_not_change_the_result_for_another(color_train
     after = transformer.transform(color_train)
 
     assert_frame_equal(before, after)
+
+
+@pytest.mark.parametrize(
+    ("strategy", "column"), [("median", "age"), ("most_frequent", "city")], ids=["number", "text"]
+)
+def test_missing_indicators_are_zero_one_integers_for_every_column_type(
+    train_df, test_df, strategy, column
+):
+    step = impute_step(strategy, (column,), add_indicator=True)
+
+    out = build("impute", step).fit(train_df).transform(test_df)
+
+    assert out[f"missingindicator_{column}"].dtype == "int64"
+    assert out[f"missingindicator_{column}"].tolist() == [1, 0]

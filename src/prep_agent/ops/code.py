@@ -3,8 +3,9 @@
 Ops describe their code as small expression and statement objects instead of strings, so that
 nothing from a plan can end up in the script as code:
 
-- A plain Python value (string, number, bool, None, list) is always rendered as a literal. A bare
-  string handed to `call` is data, never a name; names go through `ref` and must be identifiers.
+- A plain Python value (string, number, bool, None, list, dict with string keys) is always
+  rendered as a literal. A bare string handed to `call` is data, never a name; names go
+  through `ref` and must be identifiers.
 - Strings are escaped by `literal`, which keeps everything printable and escapes the rest, so
   a column name such as `x"); import os  #` is just a string in the script.
 - Comments come from `comment_lines`, which turns every line break and control character into
@@ -85,6 +86,17 @@ class Seq(Expr):
 
 
 @dataclass(frozen=True)
+class Dict(Expr):
+    """A dict with string keys. It is always written on one line."""
+
+    items: tuple[tuple[str, Expr], ...]
+
+    def flat(self) -> str:
+        inner = ", ".join(f"{_string_literal(key)}: {value.flat()}" for key, value in self.items)
+        return "{" + inner + "}"
+
+
+@dataclass(frozen=True)
 class Call(Expr):
     """A call, optionally followed by method calls on its result (`tail`)."""
 
@@ -149,6 +161,8 @@ def literal(value: Any) -> Expr:
         return Seq(tuple(literal(item) for item in value))
     if isinstance(value, tuple):
         return Seq(tuple(literal(item) for item in value), is_tuple=True)
+    if isinstance(value, dict) and all(isinstance(key, str) for key in value):
+        return Dict(tuple((key, literal(item)) for key, item in value.items()))
     raise CodeError(f"cannot write a value of type {type(value).__name__} as a literal")
 
 
