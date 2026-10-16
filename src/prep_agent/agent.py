@@ -40,7 +40,12 @@ from prep_agent.planner import (
     build_system_prompt,
     build_user_prompt,
 )
-from prep_agent.profiler import DatasetProfile, profile_dataframe, require_varying_target
+from prep_agent.profiler import (
+    CsvOptions,
+    DatasetProfile,
+    profile_dataframe,
+    require_varying_target,
+)
 from prep_agent.validators import SEVERITY, ValidationIssue, partition_issues
 
 MAX_SCHEMA_RETRIES = 1
@@ -191,10 +196,11 @@ def run_agent(
     max_question_rounds: int = 2,
     max_revisions: int = 2,
     max_schema_retries: int = MAX_SCHEMA_RETRIES,
+    csv_options: CsvOptions | None = None,
 ) -> AgentResult:
     """Prepare `df` for `goal`. Raises `ProfilerError` for an unusable frame or target (not a
     column, or with a single value) and `AgentError` if no valid result could be produced. `df` is
-    not modified."""
+    not modified. `csv_options`, how the file was read, are kept on the profile."""
     if max_question_rounds < 0 or max_revisions < 0 or max_schema_retries < 0:
         raise ValueError(
             "max_question_rounds, max_revisions and max_schema_retries must not be negative"
@@ -209,6 +215,7 @@ def run_agent(
         max_question_rounds,
         max_revisions,
         max_schema_retries,
+        csv_options,
     ).run()
 
 
@@ -224,6 +231,7 @@ class _Agent:
         max_question_rounds: int,
         max_revisions: int,
         max_schema_retries: int,
+        csv_options: CsvOptions | None,
     ) -> None:
         self.df = df
         self.goal = goal
@@ -234,8 +242,9 @@ class _Agent:
         self.max_question_rounds = max_question_rounds
         self.max_revisions = max_revisions
         self.max_schema_retries = max_schema_retries
+        self.csv_options = csv_options
 
-        self.profile = profile_dataframe(df, target=target)
+        self.profile = profile_dataframe(df, target=target, csv_options=csv_options)
         require_varying_target(self.profile)
         self.system_prompt = build_system_prompt()
         self.calls: list[LLMCallRecord] = []
@@ -403,7 +412,9 @@ class _Agent:
         }:
             return self.profile
         if plan.target not in self._profiles:
-            self._profiles[plan.target] = profile_dataframe(self.df, target=plan.target)
+            self._profiles[plan.target] = profile_dataframe(
+                self.df, target=plan.target, csv_options=self.csv_options
+            )
         return self._profiles[plan.target]
 
     def _trace(self) -> AgentTrace:

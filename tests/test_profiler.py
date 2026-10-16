@@ -9,6 +9,7 @@ from prep_agent.profiler import (
     DEFAULT_CONFIG,
     NA_VALUES,
     ColumnProfile,
+    CsvOptions,
     DatasetProfile,
     ProfilerConfig,
     ProfilerError,
@@ -806,6 +807,20 @@ def test_missing_target_column_raises_clear_error():
 
     with pytest.raises(ProfilerError, match="target column 'nope' not found"):
         profile_dataframe(df, target="nope")
+
+
+def test_the_profile_carries_the_csv_options_it_is_given():
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    options = CsvOptions(sep=";", decimal=",", encoding="cp1254")
+
+    profile = profile_dataframe(df, csv_options=options)
+
+    assert profile.csv == options
+    assert DatasetProfile.model_validate_json(profile.model_dump_json()).csv == options
+
+
+def test_the_profile_of_a_frame_without_a_file_has_no_csv_options():
+    assert profile_dataframe(pd.DataFrame({"a": [1, 2, 3]})).csv is None
 
 
 def test_binary_target_hints_classification():

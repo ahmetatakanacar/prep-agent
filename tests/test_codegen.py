@@ -22,6 +22,8 @@ from prep_agent.profiler import NA_VALUES, load_csv, profile_dataframe
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CUSTOMERS_CSV = FIXTURES / "customers.csv"
+# The same table with ";" as separator, "," as decimal mark and cp1254 as encoding.
+CUSTOMERS_TR_CSV = FIXTURES / "customers_tr.csv"
 CUSTOMERS_PLAN = FIXTURES / "customers_plan.json"
 
 RUN_ID = "test-run"
@@ -333,7 +335,13 @@ def make_script(tmp_path: Path, csv_path: Path, plan: Plan) -> Path:
     sha = hashlib.sha256(csv_path.read_bytes()).hexdigest()
     script = tmp_path / "pipeline.py"
     script.write_text(
-        generate_pipeline_script(plan, run_id=RUN_ID, prep_agent_version="9.9.9", input_sha256=sha),
+        generate_pipeline_script(
+            plan,
+            run_id=RUN_ID,
+            prep_agent_version="9.9.9",
+            input_sha256=sha,
+            csv_options=load_csv(csv_path).options,
+        ),
         encoding="utf-8",
         newline="\n",
     )
@@ -398,6 +406,31 @@ def test_fixture_plan_matches_the_executor(workdirs):
     plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
 
     check_subprocess_run(workdirs, CUSTOMERS_CSV, plan)
+
+
+def test_a_semicolon_cp1254_file_with_decimal_commas_matches_the_executor(workdirs):
+    plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
+
+    check_subprocess_run(workdirs, CUSTOMERS_TR_CSV, plan)
+
+
+def test_the_script_reads_the_input_with_the_options_it_was_made_for(tmp_path):
+    plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
+    module = load_module(make_script(tmp_path, CUSTOMERS_TR_CSV, plan))
+
+    produced = module.read_input(CUSTOMERS_TR_CSV)
+
+    pd.testing.assert_frame_equal(produced, load_csv(CUSTOMERS_TR_CSV).df)
+    assert module.CSV_OPTIONS == {"sep": ";", "decimal": ",", "encoding": "cp1254"}
+    assert produced["plan"].tolist()[3] == "işletme"
+    assert produced["monthly_spend"].tolist()[:2] == [29.9, 59.5]
+
+
+def test_the_script_of_a_plain_file_reads_with_comma_point_and_utf8(tmp_path):
+    plan = Plan.model_validate_json(CUSTOMERS_PLAN.read_text(encoding="utf-8"))
+    module = load_module(make_script(tmp_path, CUSTOMERS_CSV, plan))
+
+    assert module.CSV_OPTIONS == {"sep": ",", "decimal": ".", "encoding": "utf-8"}
 
 
 @pytest.mark.parametrize("name", PLANS)

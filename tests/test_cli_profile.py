@@ -1,9 +1,10 @@
 import json
 from pathlib import Path
 
-from prep_agent.profiler import DatasetProfile
+from prep_agent.profiler import CsvOptions, DatasetProfile
 
 FIXTURE = Path(__file__).parent / "fixtures" / "customers.csv"
+FIXTURE_TR = Path(__file__).parent / "fixtures" / "customers_tr.csv"
 
 
 def test_profile_prints_summary_table(invoke_cli):
@@ -77,3 +78,29 @@ def test_profile_no_samples_flag_removes_values_from_json(invoke_cli, tmp_path):
     assert all(not c.top_values for c in profile.columns)
     assert "enterprise" not in text
     assert "2023-01-05" not in text
+
+
+def test_profile_json_records_the_csv_settings_that_were_found(invoke_cli, tmp_path):
+    out = tmp_path / "profile.json"
+
+    result = invoke_cli(["profile", str(FIXTURE_TR), "--out", str(out)])
+
+    assert result.exit_code == 0, result.output
+    profile = DatasetProfile.model_validate_json(out.read_text(encoding="utf-8"))
+    assert profile.csv == CsvOptions(sep=";", decimal=",", encoding="cp1254")
+    assert profile.n_rows == 20
+    assert [c.inferred_type for c in profile.columns if c.name == "monthly_spend"] == ["numeric"]
+
+
+def test_profile_warns_when_the_file_is_not_utf8(invoke_cli):
+    result = invoke_cli(["profile", str(FIXTURE_TR)])
+
+    assert result.exit_code == 0, result.output
+    assert "Warning" in result.output
+    assert "cp1254" in result.output
+
+
+def test_profile_of_a_utf8_file_has_no_warning(invoke_cli):
+    result = invoke_cli(["profile", str(FIXTURE)])
+
+    assert "Warning" not in result.output

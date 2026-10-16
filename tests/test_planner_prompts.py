@@ -14,7 +14,7 @@ from prep_agent.planner import (
     build_system_prompt,
     build_user_prompt,
 )
-from prep_agent.profiler import profile_dataframe
+from prep_agent.profiler import CsvOptions, profile_dataframe
 from prep_agent.validators import ValidationIssue
 
 
@@ -197,6 +197,17 @@ def test_user_prompt_says_when_target_and_family_are_unspecified(profile):
 
     assert "Target column: not specified" in prompt
     assert "Model family: not specified" in prompt
+
+
+def test_the_csv_settings_of_the_file_are_not_part_of_the_prompt(profile):
+    with_csv = profile.model_copy(
+        update={"csv": CsvOptions(sep=";", decimal=",", encoding="cp1254")}
+    )
+
+    prompt = user_prompt(with_csv)
+
+    assert "cp1254" not in prompt
+    assert user_prompt(profile) == prompt
 
 
 def test_profile_is_compact_json_without_none_fields(profile):

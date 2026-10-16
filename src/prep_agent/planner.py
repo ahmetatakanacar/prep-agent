@@ -160,7 +160,7 @@ def build_user_prompt(
         goal=goal,
         target=target,
         model_family=model_family,
-        profile_json=profile.model_dump_json(exclude_none=True),
+        profile_json=profile.model_dump_json(exclude_none=True, exclude={"csv"}),
         qa_history=qa_history,
         revision=revision,
         previous_plan_json=revision.plan.model_dump_json(exclude_none=True) if revision else "",

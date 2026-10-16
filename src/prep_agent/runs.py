@@ -40,7 +40,7 @@ from prep_agent.codegen import generate_pipeline_script
 from prep_agent.executor import ExecutionResult
 from prep_agent.llm.base import TokenUsage
 from prep_agent.plan import Plan
-from prep_agent.profiler import DatasetProfile
+from prep_agent.profiler import CsvOptions, DatasetProfile
 from prep_agent.report import render_report
 from prep_agent.validators import ValidationIssue, has_errors
 
@@ -71,6 +71,9 @@ class RunInfo(BaseModel):
     prep_agent_version: str
     input_path: str
     input_sha256: str
+    # How the input file was read; a run made from a frame that did not come from a file says
+    # comma, point and UTF-8.
+    csv: CsvOptions = CsvOptions()
     # None when the planner never produced a plan.
     target: str | None
     rows: Counts
@@ -123,6 +126,7 @@ def save_run(
         prep_agent_version=__version__,
         input_path=Path(input_path).as_posix(),
         input_sha256=_sha256(Path(input_path)),
+        csv=profile.csv or CsvOptions(),
         target=plan.target if plan else None,
         rows=Counts(before=profile.n_rows),
         columns=Counts(before=profile.n_columns),
@@ -179,6 +183,7 @@ def _write_artifacts(
                 run_id=info.run_id,
                 prep_agent_version=info.prep_agent_version,
                 input_sha256=info.input_sha256,
+                csv_options=info.csv,
             )
             _write_text(run_dir / "pipeline.py", script)
     issues = {

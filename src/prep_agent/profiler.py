@@ -176,6 +176,19 @@ class ColumnProfile(BaseModel):
     max_length: int | None = None
 
 
+class CsvOptions(BaseModel):
+    """How a CSV file is read. `load_csv` finds them; the generated pipeline.py reads with them."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sep: str = ","
+    decimal: str = "."
+    encoding: str = "utf-8"
+
+    def read_kwargs(self) -> dict[str, str]:
+        return {"sep": self.sep, "decimal": self.decimal, "encoding": self.encoding}
+
+
 class DatasetProfile(BaseModel):
     n_rows: int
     n_columns: int
@@ -184,6 +197,8 @@ class DatasetProfile(BaseModel):
     columns: list[ColumnProfile]
     target: str | None = None
     target_task_hint: TaskHint | None = None
+    # How the file the profile comes from was read; None for a frame that did not come from a file.
+    csv: CsvOptions | None = None
 
 
 TARGET_CONSTANT_MESSAGE = "the target has only one value, so there is nothing to predict"
@@ -198,19 +213,6 @@ def require_varying_target(profile: DatasetProfile) -> None:
     target = next((c for c in profile.columns if c.name == profile.target), None)
     if target is not None and target.n_unique == 1:
         raise ProfilerError(f"{TARGET_CONSTANT_MESSAGE}: column {target.name!r}")
-
-
-class CsvOptions(BaseModel):
-    """How a CSV file is read. `load_csv` finds them; the generated pipeline.py reads with them."""
-
-    model_config = ConfigDict(frozen=True)
-
-    sep: str = ","
-    decimal: str = "."
-    encoding: str = "utf-8"
-
-    def read_kwargs(self) -> dict[str, str]:
-        return {"sep": self.sep, "decimal": self.decimal, "encoding": self.encoding}
 
 
 @dataclass(frozen=True)
@@ -346,10 +348,12 @@ def profile_dataframe(
     target: str | None = None,
     config: ProfilerConfig = DEFAULT_CONFIG,
     include_samples: bool = True,
+    csv_options: CsvOptions | None = None,
 ) -> DatasetProfile:
     """Profile every column of `df`. The input is not modified.
 
-    With `include_samples=False`, no column gets `sample_values` or `top_values`.
+    With `include_samples=False`, no column gets `sample_values` or `top_values`. `csv_options`
+    are recorded as they are.
     """
     if df.shape[1] == 0:
         raise ProfilerError("DataFrame is empty (no columns)")
@@ -379,6 +383,7 @@ def profile_dataframe(
         columns=columns,
         target=target,
         target_task_hint=hint,
+        csv=csv_options,
     )
 
 

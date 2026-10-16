@@ -28,7 +28,7 @@ from prep_agent.ops.code import (
     render_statements,
 )
 from prep_agent.plan import Plan, Step
-from prep_agent.profiler import NA_VALUES
+from prep_agent.profiler import NA_VALUES, CsvOptions
 
 _BODY = 4
 
@@ -50,7 +50,7 @@ _READ_INPUT = [
     "def read_input(path: Path) -> pd.DataFrame:",
     '    """Read the raw CSV file the way prep-agent did."""',
     '    options = {"low_memory": False, "keep_default_na": False, "na_values": NA_VALUES}',
-    "    return pd.read_csv(path, **options)",
+    "    return pd.read_csv(path, **options, **CSV_OPTIONS)",
 ]
 
 _FILE_SHA256 = [
@@ -116,9 +116,17 @@ _ENTRY_POINT = ['if __name__ == "__main__":', "    main()"]
 
 
 def generate_pipeline_script(
-    plan: Plan, *, run_id: str, prep_agent_version: str, input_sha256: str
+    plan: Plan,
+    *,
+    run_id: str,
+    prep_agent_version: str,
+    input_sha256: str,
+    csv_options: CsvOptions | None = None,
 ) -> str:
     """The source of the standalone pipeline.py for `plan`.
+
+    The script reads its input with `csv_options` (separator, decimal mark, encoding), the ones
+    the run's file was read with; the default is a comma file with decimal points in UTF-8.
 
     The plan must have passed the plan validator: stateless steps first, then exactly one split,
     then the stateful steps. Steps are taken by kind in plan order, as the executor does.
@@ -129,6 +137,7 @@ def generate_pipeline_script(
     stateful = [(i, s, op) for i, s, op in steps if op.kind == "stateful"]
     if len(splits) != 1:
         raise ValueError(f"the plan needs exactly one split step, it has {len(splits)}")
+    csv_options = csv_options or CsvOptions()
 
     imports = {
         Import("argparse"),
@@ -172,6 +181,7 @@ def generate_pipeline_script(
                 Assign("TARGET", literal(plan.target)),
                 Assign("INPUT_SHA256", literal(input_sha256)),
                 Assign("NA_VALUES", literal(list(NA_VALUES))),
+                Assign("CSV_OPTIONS", literal(csv_options.read_kwargs())),
             ]
         ),
         _READ_INPUT,

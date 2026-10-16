@@ -69,6 +69,21 @@ def read_json(path: Path):
 # --- success ---
 
 
+def test_prepare_records_the_csv_settings_of_a_semicolon_cp1254_file(
+    invoke_cli, monkeypatch, tmp_path
+):
+    use_llm(monkeypatch, [plan_reply(VALID_PLAN)])
+    csv = str(FIXTURES / "customers_tr.csv")
+
+    result = invoke_cli(prepare_args(tmp_path, "--target", "churned", "--non-interactive", csv=csv))
+
+    assert result.exit_code == 0, result.output
+    run_dir = only_run(tmp_path)
+    expected = {"sep": ";", "decimal": ",", "encoding": "cp1254"}
+    assert read_json(run_dir / "run.json")["csv"] == expected
+    assert read_json(run_dir / "profile.json")["csv"] == expected
+
+
 def test_prepare_runs_the_plan_and_writes_the_run(invoke_cli, monkeypatch, tmp_path):
     llm = use_llm(monkeypatch, [plan_reply(VALID_PLAN)], usage=TokenUsage(1200, 340))
 

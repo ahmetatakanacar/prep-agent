@@ -21,7 +21,7 @@ from prep_agent.llm.base import TokenUsage
 from prep_agent.ops import OpContext, get_op
 from prep_agent.plan import Plan
 from prep_agent.planner import PlannerResponse, QARecord, Question
-from prep_agent.profiler import DatasetProfile, load_csv, profile_dataframe
+from prep_agent.profiler import CsvOptions, DatasetProfile, load_csv, profile_dataframe
 from prep_agent.runs import RunExistsError, RunInfo, save_run
 from prep_agent.validators import ValidationIssue
 
@@ -113,6 +113,36 @@ def test_run_json_describes_the_run(tmp_path, executed):
     assert "stateful" in info.pipeline_joblib
     assert "pipeline.py" in info.pipeline_joblib
     assert "not generated" not in info.pipeline_joblib
+
+
+def test_the_csv_options_of_the_profile_are_written_to_run_json_and_profile_json(
+    tmp_path, executed
+):
+    df, plan, _, _ = executed
+    options = CsvOptions(sep=";", decimal=",", encoding="cp1254")
+    profile = profile_dataframe(df, target=plan.target, csv_options=options)
+    result = execute(df, plan, profile)
+
+    run_dir = save_run(
+        tmp_path / "runs",
+        input_path=CUSTOMERS_CSV,
+        profile=profile,
+        plan=plan,
+        result=result,
+        run_id="r1",
+    )
+
+    info = RunInfo.model_validate_json((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info.csv == options
+    saved = DatasetProfile.model_validate_json((run_dir / "profile.json").read_text("utf-8"))
+    assert saved.csv == options
+
+
+def test_run_json_of_a_profile_without_csv_options_says_comma_point_utf8(tmp_path, executed):
+    run_dir = save(tmp_path, executed, run_id="r1")
+
+    info = RunInfo.model_validate_json((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info.csv == CsvOptions()
 
 
 def test_relative_input_path_is_stored_as_given(tmp_path, executed, monkeypatch):

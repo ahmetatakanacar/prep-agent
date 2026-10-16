@@ -1,4 +1,7 @@
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -156,3 +159,34 @@ def test_target_missing_from_the_csv_fails_cleanly(invoke_cli, tmp_path):
     assert result.exit_code == 1
     assert "churned" in result.output
     assert not (tmp_path / "r").exists()
+
+
+def test_a_semicolon_cp1254_file_is_run_and_its_pipeline_py_reads_it_the_same_way(
+    invoke_cli, tmp_path
+):
+    csv = FIXTURES / "customers_tr.csv"
+    args = ["run", str(csv), "--plan", PLAN, "--out-dir", str(tmp_path / "runs"), "--no-baseline"]
+
+    result = invoke_cli(args)
+
+    assert result.exit_code == 0, result.output
+    [run_dir] = list((tmp_path / "runs").iterdir())
+    info = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert info["csv"] == {"sep": ";", "decimal": ",", "encoding": "cp1254"}
+    profile = json.loads((run_dir / "profile.json").read_text(encoding="utf-8"))
+    assert profile["csv"] == info["csv"]
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    done = subprocess.run(
+        [sys.executable, str(run_dir / "pipeline.py"), str(csv), "--out-dir", "out"],
+        cwd=elsewhere,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+    assert done.returncode == 0, done.stderr
+    for name in ("train.csv", "test.csv"):
+        assert (elsewhere / "out" / name).read_bytes() == (run_dir / name).read_bytes()

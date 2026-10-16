@@ -33,7 +33,13 @@ from prep_agent.plan import (
     Step,
 )
 from prep_agent.planner import Question
-from prep_agent.profiler import DatasetProfile, ProfilerError, load_csv, profile_dataframe
+from prep_agent.profiler import (
+    DatasetProfile,
+    LoadedCsv,
+    ProfilerError,
+    load_csv,
+    profile_dataframe,
+)
 from prep_agent.report import step_columns
 from prep_agent.runs import RunExistsError, save_run
 from prep_agent.validators import ValidationIssue, has_errors, validate_plan
@@ -91,12 +97,14 @@ def profile_command(
 ) -> None:
     """Profile a CSV file and print a summary table."""
     try:
+        loaded = load_csv(csv_path)
         profile = profile_dataframe(
-            load_csv(csv_path).df, target=target, include_samples=not no_samples
+            loaded.df, target=target, include_samples=not no_samples, csv_options=loaded.options
         )
     except ProfilerError as exc:
         Console(stderr=True).print(Text.assemble(("Error: ", "red"), str(exc)))
         raise typer.Exit(1) from None
+    _print_csv_warnings(loaded)
 
     if out is not None:
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -128,10 +136,12 @@ def run_command(
     console = Console()
     try:
         plan = _load_plan(plan_path)
-        df = load_csv(csv_path).df
-        profile = profile_dataframe(df, target=plan.target)
+        loaded = load_csv(csv_path)
+        df = loaded.df
+        profile = profile_dataframe(df, target=plan.target, csv_options=loaded.options)
     except (ProfilerError, PlanFileError) as exc:
         _fail(str(exc))
+    _print_csv_warnings(loaded)
 
     if dry_run:
         issues = validate_plan(plan, profile)
@@ -213,17 +223,19 @@ def prepare_command(
     if not goal.strip():
         _fail("the goal must not be empty")
     try:
-        df = load_csv(csv_path).df
+        loaded = load_csv(csv_path)
+        _print_csv_warnings(loaded)
         llm = create_llm_client()
         console.print(Text("Profiling the data and planning..."))
         result = run_agent(
-            df,
+            loaded.df,
             goal,
             llm,
             _ask_recommended(console) if non_interactive else _ask_interactively(console),
             target=target,
             model_family=model_family.value if model_family else None,
             max_revisions=max_revisions,
+            csv_options=loaded.options,
         )
     except AgentError as exc:
         _report_agent_failure(console, exc, csv_path, out_dir)
@@ -456,6 +468,11 @@ def _op_label(step: Step) -> str:
     if isinstance(step, EncodeStep | ScaleStep):
         return f"{step.op} ({step.method})"
     return step.op
+
+
+def _print_csv_warnings(loaded: LoadedCsv) -> None:
+    for warning in loaded.warnings:
+        Console(stderr=True).print(Text.assemble(("Warning: ", "yellow"), warning))
 
 
 def _fail(message: str) -> NoReturn:

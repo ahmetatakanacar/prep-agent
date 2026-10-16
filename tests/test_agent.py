@@ -17,7 +17,7 @@ from prep_agent.llm.base import LLMAPIError, TokenUsage
 from prep_agent.llm.fake import FakeLLM
 from prep_agent.plan import Plan
 from prep_agent.planner import PlannerResponse, build_system_prompt
-from prep_agent.profiler import ProfilerError, load_csv
+from prep_agent.profiler import CsvOptions, ProfilerError, load_csv
 
 FIXTURES = Path(__file__).parent / "fixtures"
 GOAL = "prepare for churn prediction"
@@ -192,6 +192,23 @@ def test_unknown_target_is_reported_before_any_llm_call(df):
         run_agent(df, GOAL, llm, Asker(), target="nope")
 
     assert llm.calls == []
+
+
+def test_the_csv_options_are_kept_on_the_profile_of_the_result(df):
+    options = CsvOptions(sep=";", decimal=",", encoding="cp1254")
+
+    result, _, _ = run(df, [plan_reply(VALID_PLAN)], csv_options=options)
+
+    assert result.profile.csv == options
+
+
+def test_the_csv_options_survive_a_planner_chosen_target(df):
+    options = CsvOptions(sep=";", decimal=",", encoding="cp1254")
+
+    result, _, _ = run(df, [plan_reply(VALID_PLAN)], target=None, csv_options=options)
+
+    assert result.profile.target == "churned"
+    assert result.profile.csv == options
 
 
 def test_a_target_with_one_value_is_reported_before_any_llm_call(df):
