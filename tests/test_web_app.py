@@ -13,9 +13,16 @@ pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 
 from app.config import Settings  # noqa: E402
+from app.results import _baseline_view  # noqa: E402
 from app.server import create_app  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+from prep_agent.baseline import (  # noqa: E402
+    NOT_CONVERGED_NOTE,
+    BaselineResult,
+    BaselineScore,
+    ModelBaseline,
+)
 from prep_agent.llm.base import LLMConfigError, TokenUsage  # noqa: E402
 from prep_agent.llm.fake import FakeLLM  # noqa: E402
 
@@ -306,6 +313,38 @@ def test_the_result_has_token_counts_and_no_cost():
     }
     assert len(llm["calls"]) == 1
     assert llm["calls"][0]["usage"]["cached_input_tokens"] == 400
+
+
+def baseline_with_a_note() -> BaselineResult:
+    score = {"accuracy": BaselineScore(mean=0.8, std=0.1)}
+    return BaselineResult(
+        task_type="classification",
+        n_rows=200,
+        random_state=42,
+        n_folds=5,
+        metrics=["accuracy"],
+        models=[
+            ModelBaseline(name="dummy_most_frequent", scores=score),
+            ModelBaseline(name="logistic_regression", scores=score, note=NOT_CONVERGED_NOTE),
+        ],
+    )
+
+
+def test_the_result_carries_the_note_of_a_model_that_did_not_converge():
+    models = _baseline_view(baseline_with_a_note())["models"]
+
+    assert [m["note"] for m in models] == [None, NOT_CONVERGED_NOTE]
+    assert [m["not_converged"] for m in models] == [False, True]
+
+
+@pytest.mark.parametrize("key", ["model.not_converged", "base.not_converged"])
+def test_the_convergence_note_is_translated_and_used_by_the_page(key):
+    static = Path(__file__).parent.parent / "app" / "static"
+    texts = (static / "i18n.js").read_text(encoding="utf-8")
+    page = (static / "app.js").read_text(encoding="utf-8")
+
+    assert texts.count(f'"{key}":') == 2, "one entry for English and one for Turkish"
+    assert f't("{key}")' in page
 
 
 def test_a_plan_that_stays_invalid_ends_as_a_failed_run_that_can_still_be_inspected():

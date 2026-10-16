@@ -346,6 +346,9 @@ window.I18N = {
     "vs.worse": "does not beat the dummy ({delta})",
     "model.reference": "reference",
     "model.skipped": " was skipped: ",
+    "model.not_converged": "did not converge",
+    "base.not_converged":
+      "A model marked \"did not converge\" reached its iteration limit in at least one fold, so its scores come from a fit that stopped early.",
 
     "use.title": "Usage and files",
     "use.planner": "What the planner used",
@@ -712,6 +715,9 @@ window.I18N = {
     "vs.worse": "dummy'yi geçemiyor ({delta})",
     "model.reference": "referans",
     "model.skipped": " atlandı: ",
+    "model.not_converged": "yakınsamadı",
+    "base.not_converged":
+      "“yakınsamadı” işaretli bir model en az bir fold'da yineleme sınırına ulaştı; skorları erken duran bir eğitimden geliyor.",
 
     "use.title": "Kullanım ve dosyalar",
     "use.planner": "Planlayıcının kullandığı",

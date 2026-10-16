@@ -15,7 +15,12 @@ from pathlib import Path
 
 from app.sessions import Outcome, Session
 from prep_agent.agent import AgentTrace, LLMCallRecord
-from prep_agent.baseline import HIGHER_IS_BETTER, BaselineResult, metric_label
+from prep_agent.baseline import (
+    HIGHER_IS_BETTER,
+    NOT_CONVERGED_NOTE,
+    BaselineResult,
+    metric_label,
+)
 from prep_agent.ops import get_op
 from prep_agent.plan import (
     DedupeStep,
@@ -391,6 +396,8 @@ def _baseline_view(baseline: BaselineResult | None) -> dict | None:
                 "is_reference": model.name.startswith("dummy"),
                 "scores": {name: score.model_dump() for name, score in model.scores.items()},
                 "skipped_reason": model.skipped_reason,
+                "note": model.note,
+                "not_converged": model.note == NOT_CONVERGED_NOTE,
             }
             for model in baseline.models
         ],

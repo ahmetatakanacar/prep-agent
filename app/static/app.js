@@ -1523,6 +1523,9 @@ function baselineBlock(result) {
     parts.push(h("p", { class: "smalldata" }, h("b", {}, t("base.small")), t("base.small_body", { n: base.n_rows })));
   }
   parts.push(h("div", { class: "metrics" }, base.metrics.map((m) => metricChart(m, base.models))));
+  if (base.models.some((m) => m.not_converged)) {
+    parts.push(h("p", { class: "baseline-note" }, t("base.not_converged")));
+  }
   const skipped = base.models.filter((m) => m.skipped_reason);
   if (skipped.length) {
     parts.push(h("ul", { class: "skipped" }, skipped.map((m) => h("li", {}, h("span", { class: "mono" }, m.name), t("model.skipped"), m.skipped_reason))));
@@ -1569,7 +1572,7 @@ function metricChart(metric, models) {
     );
     const verdict = reference && !model.is_reference ? versusDummy(metric, score, reference.scores[metric.name]) : null;
     return [
-      h("div", { class: "mname" }, model.name, model.is_reference ? h("small", {}, t("model.reference")) : null),
+      h("div", { class: "mname" }, model.name, model.is_reference ? h("small", {}, t("model.reference")) : null, model.not_converged ? h("small", {}, t("model.not_converged")) : null),
       h("div", {}, track, h("div", { class: "mval" }, h("b", {}, fmtScore(score.mean)), ` ± ${fmtScore(score.std)}`, verdict)),
     ];
   });
