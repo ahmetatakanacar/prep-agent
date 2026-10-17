@@ -6,6 +6,12 @@ prep-agent prepares a CSV file for machine learning from a goal written in plain
 
 It exists because data preparation is where most leakage and quiet mistakes happen (a statistic fitted on the whole table, an identifier left in, a column that gives the answer away), and because letting an LLM write the code for it is a way to make those mistakes harder to see. Here the LLM chooses from a fixed set of operations, and code decides what is allowed.
 
+## Demo
+
+<!-- demo video: open this file on GitHub, click the pencil, drag prep-agent-demo-en.mp4 onto this line, and GitHub inserts the link here. Replace this whole comment with that link, on a line of its own. -->
+
+A 75-second walkthrough of the web UI: the profile, the agent's questions, the plan with its split line, a first plan that the validators reject and the agent corrects, the baseline scores and the report. The demo runs in demo mode, with a scripted planner on `tests/fixtures/customers.csv` and no API calls. To try it yourself, see the Quick start below.
+
 ## Quick start
 
 You need Python 3.12 and [uv](https://docs.astral.sh/uv/). If `uv` is not installed:
