@@ -6,6 +6,84 @@ prep-agent prepares a CSV file for machine learning from a goal written in plain
 
 It exists because data preparation is where most leakage and quiet mistakes happen (a statistic fitted on the whole table, an identifier left in, a column that gives the answer away), and because letting an LLM write the code for it is a way to make those mistakes harder to see. Here the LLM chooses from a fixed set of operations, and code decides what is allowed.
 
+## Quick start
+
+You need Python 3.12 and [uv](https://docs.astral.sh/uv/). If `uv` is not installed:
+
+```powershell
+# Windows PowerShell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Open a new terminal afterwards so that `uv` is on the path. uv can fetch Python 3.12 itself (`uv python install 3.12`). Commands below that are not labelled work the same in PowerShell and bash.
+
+### 1. Try it without an API key
+
+```shell
+git clone https://github.com/ahmetatakanacar/prep-agent.git
+cd prep-agent
+uv sync
+uv run --extra web python -m app --fake
+```
+
+Open http://127.0.0.1:8000 in a browser and pick the `customers` sample. The `--fake` demo uses a scripted planner on `tests/fixtures/customers.csv`, makes no API calls and offers no other file. Stop the server with Ctrl+C.
+
+### 2. Profile your own CSV (no key needed)
+
+```shell
+uv run prep-agent profile path/to/your.csv --target your_target_column
+```
+
+This prints the column types, missing rates and warnings, and nothing leaves your machine. See "Profile a file" below for the options.
+
+### 3. Plan with a real LLM
+
+Create an API key on the OpenAI platform's [API keys](https://platform.openai.com/api-keys) page, then copy the template and put the key after `OPENAI_API_KEY=`:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+```bash
+cp .env.example .env
+```
+
+Run the commands from the folder that holds `.env`; it is read from the working directory and is git-ignored. Then check the key and run the agent, in the terminal or in the web UI:
+
+```shell
+uv run prep-agent llm-check
+uv run prep-agent prepare path/to/your.csv --goal "prepare for churn prediction" --target your_target_column
+uv run --extra openai --extra web python -m app
+```
+
+`llm-check` sends one small request and prints the model and token usage. In the web UI, upload your file or pick a sample; the nine benchmark datasets appear in the list after `uv run python benchmarks/download.py` (about 13 MB from OpenML), and only in this real-LLM mode.
+
+The default model is `gpt-6.1-sol`. With the cheaper `gpt-6-luna` a run costs about $0.0017 (see [Benchmark](#benchmark); other models cost more):
+
+```powershell
+$env:PREP_AGENT_MODEL="gpt-6-luna"
+```
+
+```bash
+export PREP_AGENT_MODEL=gpt-6-luna
+```
+
+### Troubleshooting
+
+| Problem | What to do |
+|---|---|
+| `uv` is not found | Install it (above) and open a new terminal. |
+| Python 3.12 is missing | `uv python install 3.12`, then run `uv sync` again. |
+| The server stops with `error while attempting to bind on address` | Port 8000 is taken. Start it on another port: `uv run --extra web python -m app --fake --port 8001`, and open that port. |
+| `Error: OPENAI_API_KEY is not set` | Put the key in a `.env` file in the folder you run the command from, or set it in the shell. A variable already set in the shell wins over `.env`. |
+| `OpenAI request failed (AuthenticationError, HTTP 401)` | The key is wrong or revoked: create a new one on the API keys page. Check the shell for an old `OPENAI_API_KEY`, which overrides `.env`. `llm-check` shows this message without running anything else. |
+| The sample list has only `customers` | Demo mode (`--fake`) offers only that file. In real mode run `uv run python benchmarks/download.py`, then reload the page. |
+
 ## How it works
 
 ```
@@ -43,9 +121,9 @@ A plan or a result with errors is sent back to the planner for a revision, up to
 
 ## Install
 
-Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.12 and [uv](https://docs.astral.sh/uv/) (see [Quick start](#quick-start) to install it).
 
-```powershell
+```shell
 git clone https://github.com/ahmetatakanacar/prep-agent.git
 cd prep-agent
 uv sync --extra openai
@@ -56,7 +134,7 @@ The commands that do not call a model (`profile` and `run`) work without the `op
 
 ### LLM provider
 
-The LLM layer is a small `LLMClient` interface with one adapter, OpenAI's (Responses API, structured outputs). Put your key in the environment or in a `.env` file in the working directory (`.env` is git-ignored):
+The LLM layer is a small `LLMClient` interface with one adapter, OpenAI's (Responses API, structured outputs). Put your key in the environment or in a `.env` file in the working directory (`.env` is git-ignored; [.env.example](.env.example) is the template, see the [Quick start](#3-plan-with-a-real-llm)):
 
 ```
 OPENAI_API_KEY=sk-...
@@ -75,13 +153,18 @@ $env:PREP_AGENT_MODEL="gpt-6-luna"
 uv run prep-agent llm-check
 ```
 
+```bash
+export PREP_AGENT_MODEL=gpt-6-luna
+uv run prep-agent llm-check
+```
+
 `llm-check` sends one small request and prints the model and token usage; it exits 1 with a message if the key is missing or the request fails. `PREP_AGENT_PROVIDER` selects the provider; only `openai` exists.
 
 ## Usage
 
 ### Profile a file
 
-```powershell
+```shell
 uv run prep-agent profile tests/fixtures/customers.csv --target churned --out runs/profile.json
 ```
 
@@ -91,7 +174,7 @@ How a file is read is found, not assumed, and the result is written to `profile.
 
 ### Run a plan you wrote
 
-```powershell
+```shell
 uv run prep-agent run tests/fixtures/customers.csv --plan tests/fixtures/customers_plan.json --out-dir runs
 ```
 
@@ -99,13 +182,13 @@ The plan is validated first; if it has errors nothing runs. `--dry-run` only val
 
 ### Let the LLM plan
 
-```powershell
+```shell
 uv run prep-agent prepare tests/fixtures/customers.csv --goal "prepare for churn prediction, I will use XGBoost" --target churned --model-family tree
 ```
 
 Questions are asked in the terminal with numbered options; the recommended one is marked and Enter picks it, and some questions allow an answer of your own as the last option. For unattended use:
 
-```powershell
+```shell
 uv run prep-agent prepare tests/fixtures/customers.csv --goal "prepare for churn prediction" --target churned --non-interactive
 ```
 
@@ -129,7 +212,7 @@ Every run writes `runs/<run_id>/`. A real one, without the data files, is in [do
 
 `pipeline.py` needs only pandas and scikit-learn; prep-agent does not have to be installed. It repeats every step on a raw CSV file and gives the same `train.csv` and `test.csv` as the run folder, when the pandas and scikit-learn versions match:
 
-```powershell
+```shell
 python runs/<run_id>/pipeline.py tests/fixtures/customers.csv --out-dir out
 ```
 
@@ -143,7 +226,7 @@ On a successful run the baseline scores a dummy model, a logistic regression and
 
 `app/` is a small web interface for trying prep-agent on your own machine: upload a CSV or pick a sample, write the goal, answer the agent's questions on the page, and read the plan with the split line, the validators' notes, how a rejected plan was corrected, the baseline scores and report.md, then download the whole run folder as a zip. An uploaded file is read with the settings found automatically (see "Profile a file"), and the profile heading names the separator and the encoding. It shows the LLM calls and token counts of a run, not what they cost. The page is plain HTML, CSS and JavaScript (no build step), in English and Turkish.
 
-```powershell
+```shell
 # demo: a scripted planner on tests/fixtures/customers.csv, no API calls
 uv run --extra web python -m app --fake
 
@@ -197,7 +280,7 @@ Out of scope: model selection or AutoML, a database, multi-user features.
 
 ## Development
 
-```powershell
+```shell
 uv sync --locked --extra web
 uv run pytest -q
 uv run ruff check .
@@ -208,6 +291,10 @@ Tests never call the real API; they use a fake LLM. The few tests that do are ma
 
 ```powershell
 $env:PREP_AGENT_RUN_LLM_TESTS="1"; uv run pytest -m llm -v -s
+```
+
+```bash
+PREP_AGENT_RUN_LLM_TESTS=1 uv run pytest -m llm -v -s
 ```
 
 The tests that need the downloaded benchmark datasets (`uv run python benchmarks/download.py`) are skipped when the files are missing. CI runs ruff and pytest on Ubuntu and Windows, with the `web` extra installed so that the web UI tests run (without it they are skipped).
