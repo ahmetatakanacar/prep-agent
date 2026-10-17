@@ -4,6 +4,7 @@ network is touched."""
 import io
 import json
 import re
+import socket
 import threading
 import time
 import zipfile
@@ -16,7 +17,7 @@ pytest.importorskip("httpx")
 
 from app.config import Settings  # noqa: E402
 from app.results import _baseline_view  # noqa: E402
-from app.server import create_app  # noqa: E402
+from app.server import create_app, main  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from prep_agent.baseline import (  # noqa: E402
@@ -766,3 +767,39 @@ def test_a_leakage_claim_is_read_per_column(column, columns, reason, expected):
     from app.results import claims_leakage
 
     assert claims_leakage(column, columns, reason) is expected
+
+
+@pytest.fixture
+def no_serving(monkeypatch):
+    """Stops `main` right after the socket is bound, so that no server runs."""
+    import uvicorn
+
+    monkeypatch.setattr(uvicorn.Server, "run", lambda self, sockets=None: None)
+
+
+def test_a_busy_port_ends_with_a_short_message_and_no_address(monkeypatch, capsys):
+    import uvicorn
+
+    def serving(self, sockets=None):
+        raise AssertionError("the server must not start on a busy port")
+
+    monkeypatch.setattr(uvicorn.Server, "run", serving)
+    with socket.socket() as holder:
+        holder.bind(("127.0.0.1", 0))
+        holder.listen()
+        port = holder.getsockname()[1]
+        with pytest.raises(SystemExit) as exit_info:
+            main(["--fake", "--port", str(port)])
+    captured = capsys.readouterr()
+    assert exit_info.value.code == 1
+    assert f"port {port} is already in use; pick another with --port" in captured.err
+    assert "web UI:" not in captured.out + captured.err
+
+
+def test_the_address_is_shown_with_the_port_that_was_bound(no_serving, capsys):
+    main(["--fake", "--port", "0"])
+    out = capsys.readouterr().out
+    match = re.search(r"web UI: http://127\.0\.0\.1:(\d+)", out)
+    assert match is not None
+    assert int(match.group(1)) > 0
+    assert "demo mode" in out

@@ -5,7 +5,10 @@ browser polls the session state.
 """
 
 import argparse
+import errno
 import os
+import socket
+import sys
 import tempfile
 import zipfile
 from collections.abc import AsyncIterator, Callable
@@ -324,5 +327,16 @@ def main(argv: list[str] | None = None) -> None:
         load_dotenv_file()
     settings = Settings(fake=args.fake, max_upload_bytes=int(args.max_upload_mb * 1024 * 1024))
     mode = "demo mode (scripted planner, no API calls)" if args.fake else "real LLM"
-    print(f"prep-agent web UI: http://{HOST}:{args.port}  [{mode}]", flush=True)
-    uvicorn.run(create_app(settings), host=HOST, port=args.port, log_level="warning")
+    # Binding here, before anything is printed, keeps the address from being announced for a port
+    # that is taken, and replaces the operating system's localised error with a fixed message.
+    try:
+        sock = socket.create_server((HOST, args.port))
+    except OSError as exc:
+        if exc.errno != errno.EADDRINUSE:
+            raise
+        print(f"port {args.port} is already in use; pick another with --port", file=sys.stderr)
+        raise SystemExit(1) from None
+    with sock:
+        print(f"prep-agent web UI: http://{HOST}:{sock.getsockname()[1]}  [{mode}]", flush=True)
+        config = uvicorn.Config(create_app(settings), log_level="warning")
+        uvicorn.Server(config).run(sockets=[sock])

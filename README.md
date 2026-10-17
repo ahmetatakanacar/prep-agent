@@ -79,7 +79,7 @@ export PREP_AGENT_MODEL=gpt-6-luna
 |---|---|
 | `uv` is not found | Install it (above) and open a new terminal. |
 | Python 3.12 is missing | `uv python install 3.12`, then run `uv sync` again. |
-| The server stops with `error while attempting to bind on address` | Port 8000 is taken. Start it on another port: `uv run --extra web python -m app --fake --port 8001`, and open that port. |
+| `port 8000 is already in use; pick another with --port` | Another program uses that port. Start the server on another one: `uv run --extra web python -m app --fake --port 8001`, and open that port. |
 | `Error: OPENAI_API_KEY is not set` | Put the key in a `.env` file in the folder you run the command from, or set it in the shell. A variable already set in the shell wins over `.env`. |
 | `OpenAI request failed (AuthenticationError, HTTP 401)` | The key is wrong or revoked: create a new one on the API keys page. Check the shell for an old `OPENAI_API_KEY`, which overrides `.env`. `llm-check` shows this message without running anything else. |
 | The sample list has only `customers` | Demo mode (`--fake`) offers only that file. In real mode run `uv run python benchmarks/download.py`, then reload the page. |
