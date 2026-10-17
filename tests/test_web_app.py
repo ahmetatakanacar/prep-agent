@@ -803,3 +803,49 @@ def test_the_address_is_shown_with_the_port_that_was_bound(no_serving, capsys):
     assert match is not None
     assert int(match.group(1)) > 0
     assert "demo mode" in out
+
+
+KEY_WARNING = (
+    "OPENAI_API_KEY is not set: plans will fail. "
+    "Use --fake for the demo or set the key (see README)."
+)
+
+
+@pytest.fixture
+def no_key_anywhere(monkeypatch, tmp_path):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+
+def test_a_missing_key_in_real_mode_is_warned_about_once_at_start(
+    no_serving, no_key_anywhere, capsys
+):
+    main(["--port", "0"])
+    captured = capsys.readouterr()
+    assert (captured.out + captured.err).count(KEY_WARNING) == 1
+    assert "web UI:" in captured.out
+
+
+def test_an_empty_key_counts_as_missing(no_serving, no_key_anywhere, monkeypatch, capsys):
+    monkeypatch.setenv("OPENAI_API_KEY", "  ")
+    main(["--port", "0"])
+    assert KEY_WARNING in capsys.readouterr().err
+
+
+def test_a_key_in_the_environment_or_in_dotenv_gives_no_warning_and_is_never_printed(
+    no_serving, no_key_anywhere, monkeypatch, tmp_path, capsys
+):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-from-environment")
+    main(["--port", "0"])
+    monkeypatch.delenv("OPENAI_API_KEY")
+    (tmp_path / ".env").write_text("OPENAI_API_KEY=sk-from-dotenv\n", encoding="utf-8")
+    main(["--port", "0"])
+    captured = capsys.readouterr()
+    assert "OPENAI_API_KEY" not in captured.out + captured.err
+    assert "sk-from" not in captured.out + captured.err
+
+
+def test_the_demo_does_not_need_a_key(no_serving, no_key_anywhere, capsys):
+    main(["--fake", "--port", "0"])
+    captured = capsys.readouterr()
+    assert "OPENAI_API_KEY" not in captured.out + captured.err

@@ -38,6 +38,7 @@ from app.sessions import (
 from prep_agent.env import load_dotenv_file
 from prep_agent.llm.base import LLMClient, LLMError
 from prep_agent.llm.factory import create_llm_client
+from prep_agent.llm.openai import API_KEY_VARIABLE
 from prep_agent.profiler import ProfilerError, load_csv
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -338,5 +339,14 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(1) from None
     with sock:
         print(f"prep-agent web UI: http://{HOST}:{sock.getsockname()[1]}  [{mode}]", flush=True)
+        # The server still starts without a key, so that samples and profiles work; only a plan
+        # needs it. Only the variable's name is ever printed.
+        if not args.fake and not os.environ.get(API_KEY_VARIABLE, "").strip():
+            print(
+                f"{API_KEY_VARIABLE} is not set: plans will fail. "
+                "Use --fake for the demo or set the key (see README).",
+                file=sys.stderr,
+                flush=True,
+            )
         config = uvicorn.Config(create_app(settings), log_level="warning")
         uvicorn.Server(config).run(sockets=[sock])
