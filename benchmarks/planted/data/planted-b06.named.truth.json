@@ -1,0 +1,99 @@
+{
+  "dataset": "planted-b06",
+  "variant": "named",
+  "seed": 206,
+  "target": "isten_ayrildi",
+  "task_type": "classification",
+  "n_rows": 1000,
+  "columns": [
+    {
+      "name": "aylik_maas",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "terfi_sonrasi_gun",
+      "role": "either",
+      "fault": "sentinel",
+      "measurable": false
+    },
+    {
+      "name": "ik_degerlendirme_notu",
+      "role": "must_drop",
+      "fault": "leak_categorical",
+      "measurable": true
+    },
+    {
+      "name": "fazla_mesai_saat",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "yas",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "pozisyon_kodu",
+      "role": "must_keep",
+      "fault": "numeric_category",
+      "expected_op": "cast_to_category",
+      "measurable": true
+    },
+    {
+      "name": "memnuniyet_endeksi_son",
+      "role": "must_drop",
+      "fault": "leak_linear",
+      "measurable": true
+    },
+    {
+      "name": "job_level",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "cep_telefonu",
+      "role": "must_drop",
+      "fault": "pii_phone",
+      "measurable": true
+    },
+    {
+      "name": "calisma_saati_ay",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "medeni_durum",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "departman",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "performance_score",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "sicil_no",
+      "role": "must_drop",
+      "fault": "id_sequential",
+      "measurable": true
+    },
+    {
+      "name": "egitim_saati",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "egitim_saati_v2",
+      "role": "either",
+      "fault": "duplicate_exact",
+      "duplicate_of": "egitim_saati",
+      "measurable": true
+    }
+  ]
+}

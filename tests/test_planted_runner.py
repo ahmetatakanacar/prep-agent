@@ -278,3 +278,10 @@ def test_the_estimate_scales_with_repeats_modes_and_data():
     assert m.cost is not None and x.cost is None
     assert len(three.jobs) == 48
     assert len(RECIPES) == 8
+
+
+def test_the_second_set_can_be_selected_by_name_but_is_not_the_default():
+    check_selection(["planted-b01", "planted-08"], VARIANTS, list(MODES))
+    from planted_runner import DATASETS as DEFAULT
+
+    assert "planted-b01" not in DEFAULT and len(DEFAULT) == 8

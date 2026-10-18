@@ -11,6 +11,7 @@ regenerates them and fails if they differ from what is committed.
 """
 
 import argparse
+import dataclasses
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,6 +60,8 @@ class Recipe:
     n_numeric: int
     n_categorical: int
     items: tuple[Item, ...]
+    # The recipe whose column names and domain this one shares, if it is not its own.
+    domain: str | None = None
 
 
 # Every measurable fault type appears in at least two datasets.
@@ -84,6 +87,18 @@ RECIPES: tuple[Recipe, ...] = (
     Recipe("planted-08", 108, "classification", 700, 6, 2,
            ("id_sequential", "constant", "count_decoy", "pii_name")),
 )  # fmt: skip
+
+# The second set: the same recipes (task, size, faults, domain names) with other seeds. The first
+# set was used to measure the agent before the profile got its leakage and duplicate signals; this
+# one measures it after, and has to stay unseen by anyone tuning those signals.
+RECIPES_B: tuple[Recipe, ...] = tuple(
+    dataclasses.replace(
+        recipe, name=recipe.name.replace("planted-", "planted-b"), seed=recipe.seed + 100,
+        domain=recipe.name,
+    )
+    for recipe in RECIPES
+)  # fmt: skip
+ALL_RECIPES: tuple[Recipe, ...] = RECIPES + RECIPES_B
 
 
 def generate(recipe: Recipe, variant: Variant = "anonymous") -> tuple[pd.DataFrame, DatasetTruth]:
@@ -311,7 +326,11 @@ class _Builder:
         keys = list(self.columns)
         order = [keys[i] for i in self.rng.permutation(len(keys))]
         rename = self._public_names(order)
-        target_name = TARGET if self.variant == "anonymous" else NAMES[self.recipe.name].target
+        target_name = (
+            TARGET
+            if self.variant == "anonymous"
+            else NAMES[self.recipe.domain or self.recipe.name].target
+        )
         frame = pd.DataFrame({rename[key]: self.columns[key] for key in order})
         frame[target_name] = target
         columns = [
@@ -337,7 +356,7 @@ class _Builder:
     def _public_names(self, order: list[str]) -> dict[str, str]:
         if self.variant == "anonymous":
             return {key: f"c{i + 1:02d}" for i, key in enumerate(order)}
-        domain = NAMES[self.recipe.name]
+        domain = NAMES[self.recipe.domain or self.recipe.name]
         names = {key: domain.numeric[i] for i, key in enumerate(self.numeric_keys)}
         names |= {key: domain.categorical[i] for i, key in enumerate(self.categorical_keys)}
         for key, truth in self.truth.items():
@@ -352,7 +371,7 @@ class _Builder:
 
 def write_all(out_dir: Path = DATA_DIR) -> list[str]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    for recipe in RECIPES:
+    for recipe in ALL_RECIPES:
         for variant in VARIANTS:
             frame, truth = generate(recipe, variant)
             stem = file_stem(recipe.name, variant)
@@ -360,7 +379,7 @@ def write_all(out_dir: Path = DATA_DIR) -> list[str]:
             (out_dir / f"{stem}.truth.json").write_text(
                 truth.model_dump_json(indent=2, exclude_none=True) + NEWLINE, encoding="utf-8"
             )
-    return [recipe.name for recipe in RECIPES]
+    return [recipe.name for recipe in ALL_RECIPES]
 
 
 def load(

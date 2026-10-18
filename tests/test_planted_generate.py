@@ -338,3 +338,62 @@ def test_every_domain_has_enough_names_for_its_recipe():
 def test_the_named_set_mixes_turkish_and_english():
     words = {n for d in DOMAINS.values() for n in (*d.numeric, *d.categorical)}
     assert {"yas", "applicant_age"} <= words
+
+
+# --- the second set ---
+
+from planted_generate import ALL_RECIPES, RECIPES_B  # noqa: E402
+
+NAMES_B = [recipe.name for recipe in RECIPES_B]
+
+
+def test_the_second_set_has_the_same_recipes_with_other_seeds():
+    assert [r.name for r in RECIPES_B] == [n.replace("planted-", "planted-b") for n in NAMES]
+    for a, b in zip(RECIPES, RECIPES_B, strict=True):
+        assert (a.task, a.n_rows, a.n_numeric, a.n_categorical, a.items) == (
+            b.task,
+            b.n_rows,
+            b.n_numeric,
+            b.n_categorical,
+            b.items,
+        )
+        assert a.seed != b.seed and b.domain == a.name
+    seeds = [r.seed for r in ALL_RECIPES]
+    assert len(set(seeds)) == len(seeds) == 16
+
+
+@pytest.mark.parametrize("name", NAMES_B)
+@pytest.mark.parametrize("variant", VARIANTS)
+def test_the_committed_files_of_the_second_set_are_what_the_generator_writes(name, variant):
+    recipe = next(r for r in RECIPES_B if r.name == name)
+    frame, truth = generate(recipe, variant)
+    committed_frame, committed_truth = load(name, variant)
+    assert committed_truth == truth
+    pd.testing.assert_frame_equal(committed_frame, frame, check_dtype=False, rtol=1e-9)
+
+
+def test_the_second_set_has_the_same_faults_in_other_data():
+    for a, b in zip(RECIPES, RECIPES_B, strict=True):
+        frame_a, truth_a = generate(a)
+        frame_b, truth_b = generate(b)
+        assert sorted(c.fault or "" for c in truth_a.columns) == sorted(
+            c.fault or "" for c in truth_b.columns
+        )
+        assert frame_a.shape == frame_b.shape and not frame_a.equals(frame_b)
+
+
+def test_the_second_set_has_the_same_names_as_the_first_in_the_named_variant():
+    for a, b in zip(RECIPES, RECIPES_B, strict=True):
+        _, truth_a = generate(a, "named")
+        _, truth_b = generate(b, "named")
+        assert truth_a.target == truth_b.target
+
+        # A copy is named after the column it copies, which the seed picks.
+        def plain(truth):
+            return sorted(c.name for c in truth.columns if not (c.fault or "").startswith("dup"))
+
+        assert plain(truth_a) == plain(truth_b)
+
+
+def test_the_first_set_is_not_changed_by_the_second():
+    assert [r.seed for r in RECIPES] == list(range(101, 109))

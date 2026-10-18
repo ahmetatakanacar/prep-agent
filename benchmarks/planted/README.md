@@ -6,6 +6,10 @@ Eight small synthetic datasets, each in an anonymous and a named variant, with f
 
 **These datasets are held out. Do not use them to tune the planner prompt, the validator rules or the profiler thresholds.** The point of the set is to measure the agent on faults it was not fitted to; if a rule is written because a planted dataset failed, the set no longer measures that and the number it gives is worthless. When a run on this set shows a weakness, write the fix against a new dataset of your own, or change the generator's seeds and recipes only as part of building a *new* held-out set, and say so in the commit.
 
+## Two sets
+
+There are two sets of eight datasets built from the same recipes (task, size, faults, domain names) with different seeds. `planted-01` to `planted-08` is the first set; it measured the agent (`docs/benchmark/planted-results/`) before the profile had signals for leakage and copies, and it is the set those signals were designed without looking at. `planted-b01` to `planted-b08` is the second set, made after the signals existed to measure the agent with and without them, and it must not be used to tune them either. A run uses the first set unless `--datasets` names the datasets of the second (`--datasets planted-b01,planted-b02,...`).
+
 ## What is in a dataset
 
 A realistic base table (4 to 7 numeric and 2 to 3 categorical features, some of them with missing values, and a target that depends on them) plus faults. Each dataset exists in two variants with the same values, the same faults and the same ground truth; only the column names differ:

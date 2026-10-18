@@ -28,7 +28,7 @@ from bench_cost import (
     price_of_usage,
 )
 from bench_runner import ModelEstimate
-from planted_generate import DATA_DIR, RECIPES, load
+from planted_generate import ALL_RECIPES, DATA_DIR, RECIPES, load
 from planted_modes import MODES, Answerer, question_rounds
 from planted_results import AgentRecord, PlantedResults, RunConfig, RunResult
 from planted_scorer import score_plan
@@ -42,7 +42,9 @@ from prep_agent.validators import partition_issues
 MODEL_FAMILY = "any"
 RESULTS_FILE = "results.json"
 SUMMARY_FILE = "summary.md"
+# The default run uses the first set; the second one is named explicitly.
 DATASETS: tuple[str, ...] = tuple(recipe.name for recipe in RECIPES)
+KNOWN_DATASETS: tuple[str, ...] = tuple(recipe.name for recipe in ALL_RECIPES)
 
 ClientFactory = Callable[[str], LLMClient]
 Progress = Callable[[RunResult, int, int], None]
@@ -76,7 +78,7 @@ def goal_for(truth: DatasetTruth) -> str:
 
 def check_selection(datasets: list[str], variants: list[str], modes: list[str]) -> None:
     for kind, chosen, known in (
-        ("dataset", datasets, DATASETS),
+        ("dataset", datasets, KNOWN_DATASETS),
         ("variant", variants, VARIANTS),
         ("mode", modes, MODES),
     ):

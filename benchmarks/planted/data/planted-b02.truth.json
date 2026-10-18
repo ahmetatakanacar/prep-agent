@@ -1,0 +1,81 @@
+{
+  "dataset": "planted-b02",
+  "variant": "anonymous",
+  "seed": 202,
+  "target": "y",
+  "task_type": "classification",
+  "n_rows": 700,
+  "columns": [
+    {
+      "name": "c01",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c02",
+      "role": "either",
+      "fault": "sentinel",
+      "measurable": false
+    },
+    {
+      "name": "c03",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c04",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c05",
+      "role": "must_drop",
+      "fault": "leak_categorical",
+      "measurable": true
+    },
+    {
+      "name": "c06",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c07",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c08",
+      "role": "must_drop",
+      "fault": "id_uuid",
+      "measurable": true
+    },
+    {
+      "name": "c09",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c10",
+      "role": "either",
+      "fault": "duplicate_scaled",
+      "duplicate_of": "c12",
+      "measurable": true
+    },
+    {
+      "name": "c11",
+      "role": "must_drop",
+      "fault": "pii_name",
+      "measurable": true
+    },
+    {
+      "name": "c12",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "c13",
+      "role": "must_keep",
+      "measurable": true
+    }
+  ]
+}
