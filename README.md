@@ -243,7 +243,7 @@ uv run --extra web python -m app --fake
 uv run --extra openai --extra web python -m app
 ```
 
-It listens on 127.0.0.1 only, at http://127.0.0.1:8000 (`--port` changes it) and is not meant to be deployed. Sessions live in memory and their files in a temporary folder that is removed when the session is deleted or the server stops. Uploads are limited to 20 MB (`--max-upload-mb`).
+It listens on 127.0.0.1 only, at http://127.0.0.1:8000 (`--port` changes it) and is not meant to be deployed. Sessions live in memory and their files in a temporary folder that is removed when the session is deleted or the server stops. Uploads are limited to 20 MB (`--max-upload-mb`), and the limit is applied while the file is received: a body that declares more is refused before it is read, and one that does not say its length is cut off once it passes the limit.
 
 ## Benchmark
 

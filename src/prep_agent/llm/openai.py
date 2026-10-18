@@ -38,6 +38,12 @@ MODEL_VARIABLE = "PREP_AGENT_MODEL"
 _REDACTED = "[redacted]"
 
 
+# An explicit limit on one request, so that a connection that hangs ends in an `LLMAPIError`
+# and not in ten minutes of waiting (the SDK default). The slowest call in the stored benchmark
+# runs took 211 seconds on average over the calls of its run; this leaves room above that.
+REQUEST_TIMEOUT_SECONDS = 300.0
+
+
 class OpenAIClient:
     """`LLMClient` backed by the OpenAI Responses API.
 
@@ -71,6 +77,7 @@ class OpenAIClient:
                 # The exchange holds dataset summaries; there is no reason for the provider to
                 # keep it.
                 store=False,
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
         except openai.OpenAIError as exc:
             status = getattr(exc, "status_code", None)
@@ -163,4 +170,4 @@ def _build_sdk_client() -> Any:
             f"{API_KEY_VARIABLE} is not set; export it or put it in a .env file in the "
             "current directory"
         )
-    return openai.OpenAI(api_key=api_key)
+    return openai.OpenAI(api_key=api_key, timeout=REQUEST_TIMEOUT_SECONDS)

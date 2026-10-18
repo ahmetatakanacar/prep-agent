@@ -16,7 +16,7 @@ from prep_agent.llm.base import (
     LLMSchemaError,
     TokenUsage,
 )
-from prep_agent.llm.openai import DEFAULT_MODEL, OpenAIClient
+from prep_agent.llm.openai import DEFAULT_MODEL, REQUEST_TIMEOUT_SECONDS, OpenAIClient
 from prep_agent.llm.strict_schema import to_strict_schema
 from prep_agent.plan import Plan
 
@@ -556,3 +556,28 @@ def test_key_is_redacted_from_refusal_errors():
         client.generate("s", "u", Answer)
 
     assert SECRET not in str(raised.value)
+
+
+def test_every_request_carries_an_explicit_timeout():
+    client, sdk = make_client(_reply(Answer(value=1)))
+
+    client.generate("the system", "the user", Answer)
+
+    assert sdk.calls[0]["timeout"] == REQUEST_TIMEOUT_SECONDS
+    assert 0 < REQUEST_TIMEOUT_SECONDS < 600
+
+
+def test_the_sdk_client_is_built_with_the_same_timeout(monkeypatch):
+    from prep_agent.llm.openai import _build_sdk_client
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-not-real")
+
+    assert _build_sdk_client().timeout == REQUEST_TIMEOUT_SECONDS
+
+
+def test_a_timeout_of_the_sdk_is_an_llm_api_error_without_the_key():
+    request = _request()
+    client, _ = make_client(openai.APITimeoutError(request=request))
+
+    with pytest.raises(LLMAPIError, match="APITimeoutError"):
+        client.generate("the system", "the user", Answer)

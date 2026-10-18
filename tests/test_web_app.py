@@ -849,3 +849,95 @@ def test_the_demo_does_not_need_a_key(no_serving, no_key_anywhere, capsys):
     main(["--fake", "--port", "0"])
     captured = capsys.readouterr()
     assert "OPENAI_API_KEY" not in captured.out + captured.err
+
+
+# --- the upload limit while the body is received ---
+
+
+def run_asgi(middleware, scope, chunks):
+    """Drive an ASGI app with a body sent in `chunks`; return what it sent and how much it read."""
+    import asyncio
+
+    sent, consumed = [], []
+
+    async def inner(scope, receive, send):
+        while True:
+            message = await receive()
+            consumed.append(len(message.get("body", b"")))
+            if not message.get("more_body", False):
+                break
+        await send({"type": "http.response.start", "status": 201, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    app = middleware(inner)
+    messages = [
+        {"type": "http.request", "body": chunk, "more_body": i < len(chunks) - 1}
+        for i, chunk in enumerate(chunks)
+    ]
+
+    async def receive():
+        return messages.pop(0) if messages else {"type": "http.disconnect"}
+
+    async def send(message):
+        sent.append(message)
+
+    asyncio.run(app(scope, receive, send))
+    return sent, consumed
+
+
+def upload_scope(headers=(), path="/api/sessions", method="POST"):
+    return {"type": "http", "method": method, "path": path, "headers": list(headers)}
+
+
+def limited(limit):
+    from app.server import UploadLimit
+
+    return lambda inner: UploadLimit(inner, "/api/sessions", limit)
+
+
+def test_a_body_that_declares_more_than_the_limit_is_refused_without_reading_it():
+    chunks = [b"x" * 1000] * 3
+    scope = upload_scope([(b"content-length", b"300000")])
+
+    sent, consumed = run_asgi(limited(1000), scope, chunks)
+
+    assert sent[0]["status"] == 413 and consumed == []
+    assert b"file_too_large" in sent[1]["body"]
+
+
+def test_a_body_without_a_length_is_cut_off_once_it_passes_the_limit():
+    from app.server import UPLOAD_FRAMING_BYTES
+
+    chunk = b"x" * 50_000
+    chunks = [chunk] * 20
+
+    sent, consumed = run_asgi(limited(100_000), upload_scope(), chunks)
+
+    assert sent[0]["status"] == 413
+    assert sum(consumed) <= 100_000 + UPLOAD_FRAMING_BYTES
+    assert sum(consumed) < sum(map(len, chunks))
+
+
+def test_a_body_within_the_limit_passes_through_untouched():
+    sent, consumed = run_asgi(limited(100_000), upload_scope(), [b"x" * 40_000, b"y" * 40_000])
+
+    assert sent[0]["status"] == 201 and sum(consumed) == 80_000
+
+
+@pytest.mark.parametrize(
+    "path, method", [("/api/sessions/sample", "POST"), ("/api/sessions", "GET"), ("/other", "POST")]
+)
+def test_other_requests_are_not_measured(path, method):
+    sent, consumed = run_asgi(limited(10), upload_scope(path=path, method=method), [b"x" * 5000])
+
+    assert sent[0]["status"] == 201 and sum(consumed) == 5000
+
+
+def test_the_real_app_refuses_a_big_upload_with_the_usual_error_body():
+    with make_client(max_upload_bytes=10_000) as client:
+        response = client.post(
+            "/api/sessions", files={"file": ("big.csv", b"a,b\n" + b"1,2\n" * 100_000)}
+        )
+    assert response.status_code == 413
+    body = response.json()
+    assert body["code"] == "file_too_large" and "limit" in body["params"]

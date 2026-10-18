@@ -57,6 +57,72 @@ class ApiError(HTTPException):
         self.params = params
 
 
+# Room for the multipart framing around a file (boundaries and headers) when the body is
+# measured against the limit on the file.
+UPLOAD_FRAMING_BYTES = 64 * 1024
+
+
+class _BodyTooLarge(Exception):
+    pass
+
+
+class UploadLimit:
+    """Refuses an upload that is over the limit while it is being received.
+
+    A request that declares a body over the limit is refused before a byte is read. One that does
+    not say how long it is (chunked) is cut off as soon as it has sent more than the limit, so
+    the server never reads, spools or writes more than the limit plus a little framing. The
+    route still checks the size of the file itself.
+    """
+
+    def __init__(self, app, path: str, limit: int) -> None:
+        self.app = app
+        self.path = path
+        self.limit = limit + UPLOAD_FRAMING_BYTES
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http" or scope["method"] != "POST" or scope["path"] != self.path:
+            await self.app(scope, receive, send)
+            return
+        declared = dict(scope["headers"]).get(b"content-length", b"")
+        if declared.isdigit() and int(declared) > self.limit:
+            await self._refuse(scope, receive, send)
+            return
+
+        received = 0
+
+        async def counting():
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.limit:
+                    raise _BodyTooLarge
+            return message
+
+        started = False
+
+        async def watching(message) -> None:
+            nonlocal started
+            started = started or message["type"] == "http.response.start"
+            await send(message)
+
+        try:
+            await self.app(scope, counting, watching)
+        except _BodyTooLarge:
+            if not started:
+                await self._refuse(scope, receive, send)
+
+    async def _refuse(self, scope, receive, send) -> None:
+        limit = _megabytes(self.limit - UPLOAD_FRAMING_BYTES)
+        body = {
+            "detail": f"the file is larger than the limit of {limit}",
+            "code": "file_too_large",
+            "params": {"limit": limit},
+        }
+        await JSONResponse(body, status_code=413)(scope, receive, send)
+
+
 class PlanRequest(BaseModel):
     goal: str
     target: str | None = None
@@ -106,6 +172,7 @@ def create_app(settings: Settings | None = None, llm_factory: LLMFactory | None 
 
     app = FastAPI(title="prep-agent", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.allowed_hosts))
+    app.add_middleware(UploadLimit, path="/api/sessions", limit=settings.max_upload_bytes)
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
