@@ -69,7 +69,7 @@ uv run --extra openai --extra web python -m app
 
 `llm-check` sends one small request and prints the model and token usage. In the web UI, upload your file or pick a sample; the nine benchmark datasets appear in the list after `uv run python benchmarks/download.py` (about 13 MB from OpenML), and only in this real-LLM mode.
 
-The default model is `gpt-6.1-sol`. With the cheaper `gpt-6-luna` a run costs about $0.0017 (see [Benchmark](#benchmark); other models cost more):
+The default model is `gpt-6.1-sol`. With the cheaper `gpt-6-luna` a run on the benchmark datasets costs about $0.001 to $0.002 (see [Benchmark](#benchmark); other models cost more):
 
 ```powershell
 $env:PREP_AGENT_MODEL="gpt-6-luna"
@@ -118,7 +118,7 @@ baseline: cross-validation on the train split
 report.md, train.csv, test.csv, pipeline.py, ...
 ```
 
-- **The LLM never sees the raw data.** It gets `profile.json` only: column types, missing rates, cardinality, distribution summaries, a few sample values, and for each column how well it alone predicts the target and which earlier column it copies. Columns that look like personal data have their samples left out.
+- **The LLM sees a profile of the data, not the table.** It gets `profile.json` only: column types, missing rates, cardinality, distribution summaries, up to 5 sample values per column (cut to 50 characters), for categorical and binary columns the 10 most frequent values with their counts, and for each column how well it alone predicts the target and which earlier column it copies. So example values do leave your machine when you plan with a real LLM. Columns that look like personal data have their samples and frequent values left out; `profile --no-samples` leaves them out for every column, but `prepare` and the web UI always send them. The model also receives your goal and your answers to its questions.
 - **The LLM writes no code.** It returns a JSON plan that must match a Pydantic schema. Every step is an op from a registry (`dedupe`, `drop_columns`, `drop_missing_target`, `cast_to_category`, `split`, `impute`, `encode`, `scale`), and a step that does not match the schema or names an unknown op is rejected. pandas and scikit-learn do the work, in this project's code.
 - **Leakage rules are enforced by code.** Ops are either stateless (dedupe, drop columns, cast, drop rows with a missing target) or stateful (impute, encode, scale). Stateless steps must come before the single split, stateful steps after it, and they are fitted on the train set only. The validator checks this from the kind of each op, so a plan that gets the order wrong is rejected before anything runs.
 - **Open decisions become questions.** When the target, a column with many missing values or a column that could be an identifier is unclear, the planner asks you instead of guessing. If you do not give a model family (`tree`, `linear`, `any`), it asks or uses `any`.
@@ -247,7 +247,20 @@ It listens on 127.0.0.1 only, at http://127.0.0.1:8000 (`--port` changes it) and
 
 ## Benchmark
 
-`benchmarks/` runs the agent on nine OpenML datasets and compares it with a hand-reviewed reference plan and a rule-based naive plan, all scored by the same baseline. In the final run (gpt-6-luna, 3 repeats per dataset) all 27 agent runs ended with a valid executed plan and none kept a column that gives the target away, which the validator's rules cannot see and which makes the naive plan look far better than it is. The agent's scores were within noise of the reference plans on 8 of 9 datasets and slightly lower on bike-sharing-demand, and careful preparation changed the score little compared with sensible defaults; the main difference was leakage. A run costs about $0.0017 with gpt-6-luna (prices from `benchmarks/prices.yaml`, which can change); the results come from one model and cross-validation on the train split, and [docs/benchmark.md](docs/benchmark.md) has the method, tables, limitations and how to repeat it.
+`benchmarks/` runs the agent on nine OpenML datasets and compares it with a hand-reviewed reference plan and a rule-based naive plan, all scored by the same baseline. In the run of 16 October (gpt-6-luna, 3 repeats per dataset) all 27 agent runs ended with a valid executed plan and none kept a column that gives the target away, which the validator's rules cannot see and which makes the naive plan look far better than it is. The agent's scores were within noise of the reference plans on 8 of 9 datasets and slightly lower on bike-sharing-demand, and careful preparation changed the score little compared with sensible defaults; the main difference was leakage. Two runs of 18 October, made after the profile signals were added, each kept the leaky `2016_gross_pay_received` in one of three employee-salaries runs; the closing run of that day, with the final code, kept none (27 of 27 valid plans). A run costs about $0.001 to $0.002 with gpt-6-luna (prices from `benchmarks/prices.yaml`, which can change); the results come from one model and cross-validation on the train split, and [docs/benchmark.md](docs/benchmark.md) has the method, tables, limitations and how to repeat it.
+
+## Evaluation
+
+Besides the nine OpenML datasets, the agent was measured on synthetic datasets with faults planted on purpose and a ground truth for every column: leaks, identifiers, personal data, copies, and (set D) partial leaks next to legitimate features that are just as strongly related to the target. The test half of set D was run once, at the end; the other planted sets are the same eight recipes with different seeds and steered the design, so they are not independent evidence. One model (gpt-6-luna), three repeats, synthetic data. [docs/eval.md](docs/eval.md) tells the whole story with the sources, including a transition condition that was violated on purpose.
+
+| What was measured | Data | Result |
+|---|---|---|
+| Faults that give themselves away (leaks at 0.95 or more, identifiers, personal data, copies) | planted set C, closing run | 0.97 (anonymous) and 1.00 (named) of the planted faults handled when the agent's own advice is followed |
+| Partial leaks, 0.75 to 0.95 | planted set D, test half | found in 27 of 27 cases (anonymous and named) |
+| Leaks under 0.6 | planted set D, test half | found in 0 of 9 (anonymous) and 3 of 9 (named, by name only) |
+| Legitimate strong features dropped when every recommendation is followed | planted set D, test half | 24 of 27 (anonymous) and 13 of 27 (named); the price of dropping what cannot be told apart |
+| Plan accuracy when the questions are answered with knowledge of the data | planted set D, test half | 0.96 (anonymous and named) |
+| Valid plans, leaky columns kept | nine OpenML datasets, closing run | 27 of 27 valid, 0 of 9 leaky columns kept, scores within noise of the reference plans on 7 datasets and higher on 2 |
 
 ## Validation rules
 
@@ -274,7 +287,8 @@ The checks that decide what a plan or a result may do live in [src/prep_agent/va
 - Tabular data only: CSV files that fit in memory, classification and regression. No text or NLP data sets.
 - A very long column name (about 80 characters or more) can make a line of the generated `pipeline.py` longer than the lint limit, so `ruff check` may report E501 for it. The script still runs.
 - PII detection relies on a list of column-name parts and on email and phone value patterns. Email addresses or phone numbers inside free text are not detected.
-- The benchmark covers nine datasets and one model (gpt-6-luna, 3 repeats); see its limitations.
+- Marked columns whose meaning cannot be told are dropped, so a user who accepts every recommendation loses real features that are strongly related to the target: on the test half of planted set D, 24 of 27 in the anonymous variant and 13 of 27 in the named one. Questions and the report are the remedy; see [docs/eval.md](docs/eval.md).
+- The evaluation covers nine datasets, synthetic planted datasets and one model (gpt-6-luna, 3 repeats); see its limitations in [docs/eval.md](docs/eval.md) and [docs/benchmark.md](docs/benchmark.md).
 
 ## Roadmap
 
