@@ -2,7 +2,7 @@
 
 The benchmark measures the agent on nine real datasets against two other plans for the same data. This page describes the method, the result of the run kept in the repository, what it does and does not show, and how to repeat it.
 
-Short version: in the final run (gpt-6-luna, 9 datasets × 3 repeats) all 27 agent runs ended with a valid, executed plan, none needed a schema retry, and no final plan had a warning. The agent never kept a column that gives the target away, including ones the validator's rules cannot see. Its random forest scored within noise of the hand-reviewed reference plan on 8 of 9 datasets and was slightly worse on bike-sharing-demand (R² 0.004 lower). It does not prepare the data much better than a sensible rule-based plan; what it adds is that it avoids leakage and still ends with a validated plan, without a person writing one.
+Short version, for the run of 16 October kept in this page (gpt-6-luna, 9 datasets × 3 repeats; later runs are under "Later runs"): all 27 agent runs ended with a valid, executed plan, none needed a schema retry, and no final plan had a warning. In that run the agent never kept a column that gives the target away, including ones the validator's rules cannot see; two later runs did keep one in one of three employee-salaries runs. Its random forest scored within noise of the hand-reviewed reference plan on 8 of 9 datasets and was slightly worse on bike-sharing-demand (R² 0.004 lower). It does not prepare the data much better than a sensible rule-based plan; what it adds is that it avoids leakage and still ends with a validated plan, without a person writing one.
 
 ## Method
 
@@ -120,7 +120,7 @@ Cost is the token use the provider reported times the prices in `benchmarks/pric
 
 ## Findings
 
-**(a) The agent notices leakage that the rules cannot.** The validator's leakage rules are mechanical. The only one that looks at values, `possible_target_leakage`, runs on the result, warns instead of blocking, and needs a numeric target and an absolute correlation above 0.98. It cannot fire on `boat` and `body` in titanic, which are categorical, and not on `2016_gross_pay_received` in employee-salaries either, which correlates 0.89 with the target (the naive plan keeps it and gets no warning). The agent dropped all 9 leaky columns in its 6 runs on these two datasets. In all three titanic runs it asked whether `boat` and `body` should be used to predict survival, and in all three employee-salaries runs it asked about the 2016 pay columns; the benchmark answers with the recommended option, and the prompt now says that for a column that may give the target away the recommended option is always the one that drops it. So what the table measures is that the agent raised the question for the right columns, not that it decided without a rule. In an interactive run a person decides, and could decide differently.
+**(a) The agent notices leakage that the rules cannot.** The validator's leakage rules are mechanical. The only one that looks at values, `possible_target_leakage`, runs on the result, warns instead of blocking, and needs a numeric target and an absolute correlation above 0.98. It cannot fire on `boat` and `body` in titanic, which are categorical, and not on `2016_gross_pay_received` in employee-salaries either, which correlates 0.89 with the target (the naive plan keeps it and gets no warning). The agent dropped all 9 leaky columns in its 6 runs on these two datasets. In all three titanic runs it asked whether `boat` and `body` should be used to predict survival, and in all three employee-salaries runs it asked about the 2016 pay columns; the benchmark answers with the recommended option, and the prompt at that time said that for a column that may give the target away the recommended option is always the one that drops it (it has been rewritten since: a column whose name plainly says it is known before the outcome is now kept, with a reason; see "Later runs"). So what the table measures is that the agent raised the question for the right columns, not that it decided without a rule. In an interactive run a person decides, and could decide differently.
 
 **(b) For the score, careful preprocessing hardly beats sensible defaults; the difference is leakage.** Against the naive plan, the agent's random forest score is within noise on six of the seven comparable datasets, worse on bike-sharing-demand, and better on none. The two large differences in the score are the leaky ones: the naive plan scores 0.945 on titanic and 0.972 on employee-salaries because it kept columns that give the answer away. The linear model does react to preparation (adult 0.766 naive against 0.782 agent, bike-sharing-demand 0.396 against 0.686, because the naive plan neither scales nor casts hour and month to categories).
 
@@ -136,9 +136,22 @@ Cost is the token use the provider reported times the prices in `benchmarks/pric
 
 **(f) On judgement calls the agent is not fully consistent from run to run.** The standard deviation of the forest score across the three runs is 0.024 on employee-salaries, 0.009 on credit-g, 0.005 on titanic, 0.002 on telco-customer-churn, and 0.000 on the other five datasets. The runs on employee-salaries differ in which columns they drop and how they group categories (see above).
 
+## Later runs
+
+The same nine datasets were run again on 18 October with later versions of the code, 3 repeats each, gpt-6-luna. All four rows are summarised with the current noise rule (`summary-new-noise-rule.md` in the older folders; the tables above use the first rule, which is why the 16 October row differs from "against the reference plan: 0 / 1 / 8" above). The story around them, and the planted-fault evaluation that prompted the changes, is in [eval.md](eval.md).
+
+| run | code | valid plans | first plan had errors | questions/run | cost/run | leaky columns kept (of 9) | against the reference: better / worse / within noise | against the naive plan |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 16 Oct | before the profile signals | 27/27 | 4 | 1.2 | $0.0017 | 0 | 0 / 0 / 9 | 0 / 1 / 6 |
+| 18 Oct | with the signals (`d584967`) | 27/27 | 3 | 0.9 | $0.0012 | 1 | 0 / 1 / 8 | 0 / 2 / 6 |
+| 18 Oct | after a prompt rule on missing marks (`25418da`) | 27/27 | 3 | 1.0 | $0.0013 | 1 | 0 / 1 / 8 | 0 / 2 / 6 |
+| 18 Oct, closing | `1402ac1` | 27/27 | 4 | 0.3 | $0.0011 | 0 | 2 / 0 / 7 | 0 / 1 / 6 |
+
+Folders under `docs/benchmark/results/`: `20261016-115230-gpt-6-luna`, `20261018-081350-gpt-6-luna-signals`, `20261018-093038-gpt-6-luna-final`, `20261018-200117-gpt-6-luna-closing`. In the second and third rows the "worse" against the reference is employee-salaries, where one run kept `2016_gross_pay_received`; a run that keeps a leak counts as a loss under the new rule. In the closing run two datasets scored higher than the reference (adult +0.006, employee-salaries +0.033); on employee-salaries the plans differ from the reference in their encoding limits and in whether `employee_position_title` is kept, and the runs do not isolate which of these moves the score, so it is not evidence of better preparation (see eval.md, section 6.3). The questions per run fell; the prompt now lets the agent decide a column by its name when the name settles it (titanic and house-prices ran without a question), which is the likely reason, not a tested one. The closing run was made once, after the planted-fault evaluation, with no change to the code between it and the second correction round.
+
 ## What changed
 
-This run was made after a series of fixes, which were prompted by earlier runs on these same nine datasets and which this run does not test on new data:
+This run (16 October) was made after a series of fixes, which were prompted by earlier runs on these same nine datasets and which this run does not test on new data:
 
 - **Leakage rule.** When a question is about a column that may give the target away or may not be known at prediction time, the recommended option is always the one that drops it. The user can still choose otherwise.
 - **Dates and text.** Datetime and free-text columns are dropped without asking, because no op can use them; the reason of the drop step says why.
@@ -154,8 +167,8 @@ This run was made after a series of fixes, which were prompted by earlier runs o
 - **The reference plans are an AI draft that one person reviewed.** The review is documented, but it is one reviewer, and the employee-salaries result shows that a reviewed choice can do worse than a simpler one.
 - **Few datasets.** Nine, all tabular and small or medium, and none with usable dates or text features. They cover the problems listed in the table, not tabular data in general.
 - **Most score differences are inside the noise.** The comparison is a single random forest on a single split, scored with 5-fold cross-validation, and most differences are below the fold spread (that is what ≈ means). The benchmark can show that the agent is not worse, and where plans have a real difference (leakage), but it cannot rank two reasonable plans.
-- **The fixes were made on these datasets.** The changes listed above followed from earlier runs on the same nine datasets, so this run is not a test on unseen data.
-- **Non-interactive answers.** Questions are answered with the agent's own recommendation, so the benchmark does not measure what happens when a person answers differently.
+- **The fixes were made on these datasets.** The changes listed above followed from earlier runs on the same nine datasets, so this run is not a test on unseen data. The same holds for the later runs: the changes between them followed from results on these datasets as well as from the planted-fault evaluation.
+- **Non-interactive answers.** Questions are answered with the agent's own recommendation, so the benchmark does not measure what happens when a person answers differently. The planted-fault evaluation has answer modes for that (an informed user, a user who disagrees with every recommendation); see [eval.md](eval.md).
 - **Costs are approximate.** They are the token use the provider reported times the prices in `benchmarks/prices.yaml`, which are filled in by hand and can change.
 
 ## Reproduce

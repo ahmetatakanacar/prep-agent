@@ -1,14 +1,16 @@
 # Planted-fault datasets
 
-Eight small synthetic datasets, each in an anonymous and a named variant, with faults planted on purpose, a ground truth for every column, and a scorer that judges a plan against that truth. They sit next to the real-data benchmark (`benchmarks/`, `docs/benchmark.md`) and change nothing in it.
+Small synthetic datasets (four sets: A, B and C with eight each, D with twelve), each in an anonymous and a named variant, with faults planted on purpose, a ground truth for every column, and a scorer that judges a plan against that truth. They sit next to the real-data benchmark (`benchmarks/`, `docs/benchmark.md`) and change nothing in it. How the sets were used and what they showed is told in `docs/eval.md`.
 
 ## Held-out: do not tune on this set
 
-**These datasets are held out. Do not use them to tune the planner prompt, the validator rules or the profiler thresholds.** The point of the set is to measure the agent on faults it was not fitted to; if a rule is written because a planted dataset failed, the set no longer measures that and the number it gives is worthless. When a run on this set shows a weakness, write the fix against a new dataset of your own, or change the generator's seeds and recipes only as part of building a *new* held-out set, and say so in the commit.
+**Do not use these datasets to tune the planner prompt, the validator rules or the profiler thresholds.** The point of a set is to measure the agent on faults it was not fitted to; if a rule is written because a planted dataset failed, the set no longer measures that and the number it gives is worthless. When a run shows a weakness, write the fix against a new dataset of your own, or change the generator's seeds and recipes only as part of building a *new* held-out set, and say so in the commit.
 
-## Two sets
+This was not kept to for the sets that came first, and the history says so: set A was run and its profile read before the profile signals were written, and set B measured the signals and was followed by a prompt change, so neither is a held-out set for the code that exists now. Set C was made after the last of those changes, but it is the same recipes. Only the test half of set D (below) was generated for one run and not looked at before it. See `docs/eval.md`.
 
-There are two sets of eight datasets built from the same recipes (task, size, faults, domain names) with different seeds. `planted-01` to `planted-08` is the first set; it measured the agent (`docs/benchmark/planted-results/`) before the profile had signals for leakage and copies, and it is the set those signals were designed without looking at. `planted-b01` to `planted-b08` is the second set, made after the signals existed to measure the agent with and without them, and it must not be used to tune them either. A third set, `planted-c01` to `planted-c08`, was made for the closing measurement after the last change to the profile and the prompt; nobody looked at it before that run. A run uses the first set unless `--datasets` names the datasets of another one (`--datasets planted-b01,planted-b02,...`).
+## Four sets
+
+There are three sets of eight datasets built from the same recipes (task, size, faults, domain names) with different seeds, and a fourth, independent set (D, below). `planted-01` to `planted-08` is the first set (A); it measured the agent (`docs/benchmark/planted-results/`) before the profile had signals for leakage and copies, and the signals were written after it showed that the leaks carried none. `planted-b01` to `planted-b08` is the second set (B), made after the signals existed to measure the agent with and without them. A third set, `planted-c01` to `planted-c08` (C), was made for a closing measurement after the last change to the profile and the prompt that followed B; nobody looked at it before its first run, and it was run again as a closing measurement after set D. A, B and C are the same eight recipes, so they are not independent of one another. A run uses the first set unless `--datasets` names the datasets of another one (`--datasets planted-b01,planted-b02,...`).
 
 ## What is in a dataset
 
@@ -90,7 +92,7 @@ A run is the product of datasets, variants (`anonymous`, `named`), answer modes,
 
 ### Answer modes
 
-The agent may ask the user questions. Three modes say how a run answers them without a person:
+The agent may ask the user questions. Four modes say how a run answers them without a person:
 
 | mode | what happens |
 | --- | --- |
@@ -113,9 +115,11 @@ The agent may ask the user questions. Three modes say how a run answers them wit
 
 A run that failed or errored has no score. It counts in the `runs` column (`3 (2)` is three runs, two of them scored), is listed at the end, and is not counted as a miss.
 
-## What the profile shows the agent (observed before any change)
+## What the profile showed the agent before the signals (observed on 18 October 2026)
 
-The planner sees only the profile (`profile.json`), never the data. Profiling the anonymous set shows how much of each fault the profile gives away. These are observations on the current profiler, prompt and validator, listed so that the first results can be read against them; nothing was changed because of them (the set is held out).
+**Dated.** These observations were made on the profiler, prompt and validator as they were before the target association, duplicate and hash identifier signals (commit `463ac12`), so that the first results could be read against them. The first two bullets below no longer hold: a leak column is now marked by `target_association`, and a UUID or hash is `id_like`. The others were checked again on the current profiler and still hold. The text below is left as it was written.
+
+The planner sees a profile (`profile.json`), not the table; it includes a few sample values. Profiling the anonymous set shows how much of each fault the profile gives away.
 
 - **Leak columns carry no warning.** None of the three leak types has a profile warning, and the profile has no relation to the target. The only leak check, `possible_target_leakage`, runs after execution, only warns, and needs a numeric target with an absolute correlation above 0.98, so it can only fire on `leak_linear`. An agent finds a leak by asking about it or by guessing from the values, and in the anonymous variant there is no name to go on.
 - **UUID columns are typed `text`, not `id_like`.** A 36-character unique string has a mean length above the text threshold, so no `possible_id` warning is raised. The prompt tells the agent to drop text columns, so a UUID is still dropped, for another reason.
