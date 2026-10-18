@@ -1,3 +1,4 @@
 Product code: commit 1402ac1 (branch eval-set-d): a marked column of unclear meaning is dropped by default with or without questions, and a marked column the user chose to keep when asked is reported as a decision and not as a warning.
 Benchmark code and data: the same commit, set D dev half, both variants, four modes, 3 repeats.
 The gate for the closing measurements was not met (named false alarms above 6 of 27 in recommended and no_questions), so the closing runs were not made.
+Added on 2026-10-19: the line above about the closing runs describes the situation when this summary was written. The owner then decided to keep the principle and the closing runs were made (see docs/eval-d-round2.md); their results are in the folders with 'closing' and 'set-d-test' in their names.
