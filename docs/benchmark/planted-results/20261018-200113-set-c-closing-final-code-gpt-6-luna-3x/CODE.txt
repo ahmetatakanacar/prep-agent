@@ -1,0 +1,1 @@
+Product code: commit 1402ac1 (branch eval-set-d). Set C (planted-c01 to planted-c08), both variants, four modes (the oracle included), 3 repeats. Expectations: docs/eval-d-test-expectations.md.
