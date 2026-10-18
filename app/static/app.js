@@ -511,7 +511,14 @@ function startOver() {
 /* ================================================================ 01 profile */
 
 // Warnings that say a column is a candidate to be dropped. The others only inform.
-const CANDIDATE_WARNINGS = { possible_pii: "alert", possible_id: "cand", constant: "cand", high_missing: "cand" };
+const CANDIDATE_WARNINGS = {
+  possible_pii: "alert",
+  suspected_target_leakage: "alert",
+  possible_id: "cand",
+  constant: "cand",
+  high_missing: "cand",
+  duplicate_column: "cand",
+};
 
 function warningTag(code) {
   const kind = CANDIDATE_WARNINGS[code] || "";

@@ -115,6 +115,9 @@ window.I18N = {
     "warn.many_outliers": "More than 5% of the values are outliers by the IQR rule.",
     "warn.low_cardinality_numeric":
       "Few distinct whole numbers: may be categories stored as numbers.",
+    "warn.suspected_target_leakage":
+      "On its own it predicts the target almost perfectly: probably derived from the target or recorded after it.",
+    "warn.duplicate_column": "A copy of an earlier column: equal, rescaled or relabelled.",
 
     "brief.title": "Brief",
     "brief.goal": "Goal",
@@ -496,6 +499,9 @@ window.I18N = {
     "warn.many_outliers": "Değerlerin %5'inden fazlası IQR kuralına göre aykırı.",
     "warn.low_cardinality_numeric":
       "Az sayıda farklı tam sayı: sayı olarak saklanan kategoriler olabilir.",
+    "warn.suspected_target_leakage":
+      "Tek başına hedefi neredeyse kusursuz tahmin ediyor: büyük olasılıkla hedeften türetilmiş ya da sonrasında kaydedilmiş.",
+    "warn.duplicate_column": "Önceki bir sütunun kopyası: aynı, yeniden ölçeklenmiş ya da yeniden etiketlenmiş.",
 
     "brief.title": "Özet",
     "brief.goal": "Amaç",

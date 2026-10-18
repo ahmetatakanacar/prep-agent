@@ -26,6 +26,11 @@ threshold lives in `ProfilerConfig`.
      `datetime_sample_size` values) parse as dates. A value is only tried if it has at least
      two digits and one non-digit character, so month names ("May"), zip codes ("90210") and
      other bare numbers are not mistaken for dates.
+   - `id_like` if every value is a UUID, or a hexadecimal hash of at least `id_hash_min_length`
+     characters (an md5 or sha digest), and every value is distinct. Such a value is long, so
+     the rule on short strings below would call the column `text`, but it is an identifier by its
+     form alone. A random hash holds a letter a-f in nearly every value, which is how a long
+     number (a card number, a phone number) is kept out; see `id_hash_min_letter_ratio`.
    - `id_like` if every value is distinct (or almost, for an identifier name as in rule 4),
      there are at least `id_min_rows` of them and the mean length is below
      `text_min_mean_length` (short unique strings).
@@ -57,6 +62,26 @@ Such columns get no `sample_values`, no `top_values` and no
 numeric statistics (min and max would expose real values); counts and ratios are kept. This
 applies whether or not samples are disabled.
 
+Target association: with a target, every numeric, categorical or binary column gets
+`target_association`, the share of the possible improvement over the trivial predictor that a
+model seeing only that column reaches on rows it was not fitted on (see `prep_agent.signals`).
+A column at or above `leakage_min_score` also gets the warning `suspected_target_leakage`: it
+nearly determines the target alone, which in tabular data is far more often a column derived
+from the target, or recorded after it, than a good predictor. The warning is a suspicion for the
+planner to put to the user, not a verdict.
+
+This is computed on all the rows before any split, with the target, so the choice of what to
+drop is informed by labels of rows that will land in the test set. The risk is small and bounded,
+and the design keeps it that way: the score is out of fold, so it does not reward fitting;
+it is shown rounded to two decimals; it only ever causes a column to be dropped, never picks the
+best columns, so no feature is selected for how well it scores; and at most `leakage_max_rows`
+rows (a fixed random sample) are used. It cannot be avoided altogether: the split is made later,
+by the executor, and the profile cannot know which rows it will hold out.
+
+Duplicate columns: a column that copies an earlier one gets `duplicate_of` (the name of the
+earlier column) and the warning `duplicate_column`. See `prep_agent.signals.find_duplicates` for
+what counts as a copy.
+
 `unique_ratio` and the other ratios of a column use its non-missing values as denominator,
 except `missing_ratio`, which uses all rows. Numeric statistics ignore missing and infinite
 values. Outliers follow the IQR rule: values outside [q1 - k * IQR, q3 + k * IQR].
@@ -74,6 +99,8 @@ import numpy as np
 import pandas as pd
 from pandas.api import types as pdt
 from pydantic import BaseModel, ConfigDict
+
+from prep_agent.signals import find_duplicates, target_association
 
 InferredType = Literal[
     "numeric", "categorical", "binary", "datetime", "text", "id_like", "constant"
@@ -154,9 +181,47 @@ class ProfilerConfig:
     # Task hint: a numeric target with more distinct values than this looks like regression.
     regression_min_unique: int = 20
 
+    # Hash-shaped identifiers (UUIDs, md5/sha digests). 16 hexadecimal characters are 64 bits:
+    # a shorter string can be a plain code, a longer one that is unique per row is not a word
+    # or a category. A random hex string is all digits with probability (10/16)^length, under
+    # 0.05% at 16, so almost every value holds a letter; requiring it of 90% of the values keeps
+    # out a column of long numbers (phone or card numbers stored as text).
+    id_hash_min_length: int = 16
+    id_hash_min_letter_ratio: float = 0.9
+
+    # Target association (see prep_agent.signals). The thresholds follow from what the score
+    # means, not from any dataset.
+    # - 0.9: the column alone reaches at least 90% of the possible improvement over the trivial
+    #   predictor, so at most a tenth is left to every other column together. A column that is
+    #   merely a strong predictor leaves a lot more than that to the rest; one that is a
+    #   (noisy) function of the target, or of something that follows it, does not.
+    # - 20,000 rows: five tree fits per column stay cheap, and the sampling error of a score on
+    #   that many rows is small next to the distance between 0.9 and the scores of ordinary
+    #   predictors. Fewer rows are used whole.
+    # - 100 rows: under that, each of the five folds holds out about 20 rows, too few for a
+    #   score out of fold to mean anything (the baseline warns under 100 train rows too).
+    # - 5 folds, like the cross-validation of the baseline.
+    # - depth 4: 16 leaves follow a stepped or curved relation and separate a few groups of
+    #   codes along the axis, and are too few to memorise noise.
+    leakage_min_score: float = 0.9
+    leakage_max_rows: int = 20_000
+    leakage_min_rows: int = 100
+    leakage_folds: int = 5
+    leakage_tree_depth: int = 4
+
+    # Duplicate columns (see prep_agent.signals.find_duplicates).
+    # - 0.9999: a unit conversion, even rounded to four decimals, leaves the correlation within
+    #   about 1e-4 of 1, and at 0.9999 less than 0.02% of the variance is not shared. Two
+    #   measurements of the same thing that merely move together stay well below it.
+    # - 5,000 rows: a copy agrees on any subset of rows, so a sample decides as well as the
+    #   whole column and bounds the cost of comparing many columns.
+    duplicate_min_abs_corr: float = 0.9999
+    duplicate_corr_rows: int = 5_000
+
 
 DEFAULT_CONFIG = ProfilerConfig()
 
+_UUID = r"[{]?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}[}]?"
 _CAMEL_ID_NAME = re.compile(r"[a-z](Id|ID)$")
 _SNAKE_ID_NAME = re.compile(r"(^|[^a-z0-9])(id|uuid|guid)($|[^a-z0-9])", re.IGNORECASE)
 _ASCII_TURKISH = str.maketrans("ıİşŞğĞüÜöÖçÇ", "iIsSgGuUoOcC")
@@ -199,6 +264,11 @@ class ColumnProfile(BaseModel):
     # Text columns
     mean_length: float | None = None
     max_length: int | None = None
+
+    # Relations to other columns. `target_association` is set only when the profile has a target
+    # and enough rows; `duplicate_of` names the earlier column this one copies.
+    target_association: float | None = None
+    duplicate_of: str | None = None
 
 
 class CsvOptions(BaseModel):
@@ -412,6 +482,10 @@ def profile_dataframe(
     hint = None
     if target is not None:
         hint = _task_hint(columns[names.index(target)], config)
+    frame = df if list(df.columns) == names else df.set_axis(names, axis=1)
+    _add_duplicates(columns, frame, target, config)
+    if target is not None and hint is not None:
+        _add_target_association(columns, frame, target, hint, config)
     return DatasetProfile(
         n_rows=n_rows,
         n_columns=int(df.shape[1]),
@@ -422,6 +496,51 @@ def profile_dataframe(
         target_task_hint=hint,
         csv=csv_options,
     )
+
+
+def _add_duplicates(
+    columns: list[ColumnProfile], df: pd.DataFrame, target: str | None, config: ProfilerConfig
+) -> None:
+    comparable = [c.name for c in columns if c.name != target and c.inferred_type != "constant"]
+    copies = find_duplicates(
+        df,
+        comparable,
+        min_abs_corr=config.duplicate_min_abs_corr,
+        corr_rows=config.duplicate_corr_rows,
+    )
+    for column in columns:
+        if column.name in copies:
+            column.duplicate_of = copies[column.name]
+            column.warnings.append("duplicate_column")
+
+
+def _add_target_association(
+    columns: list[ColumnProfile],
+    df: pd.DataFrame,
+    target: str,
+    task: TaskHint,
+    config: ProfilerConfig,
+) -> None:
+    candidates = [
+        c.name
+        for c in columns
+        if c.name != target and c.inferred_type in ("numeric", "categorical", "binary")
+    ]
+    scores = target_association(
+        df,
+        target,
+        candidates,
+        task=task,
+        max_rows=config.leakage_max_rows,
+        min_rows=config.leakage_min_rows,
+        folds=config.leakage_folds,
+        tree_depth=config.leakage_tree_depth,
+    )
+    for column in columns:
+        if column.name in scores:
+            column.target_association = round(scores[column.name], 2)
+            if column.target_association >= config.leakage_min_score:
+                column.warnings.append("suspected_target_leakage")
 
 
 def _profile_column(
@@ -509,6 +628,8 @@ def _infer_type(
         return "binary"
 
     strings = non_null.astype(str)
+    if n >= config.id_min_rows and n_unique == n and _looks_like_hash(strings, config):
+        return "id_like"
     if _looks_like_datetime(strings, config):
         return "datetime"
     mean_length = float(strings.str.len().mean())
@@ -547,6 +668,16 @@ def _looks_like_id_name(name: str, config: ProfilerConfig) -> bool:
     if _SNAKE_ID_NAME.search(name) or _CAMEL_ID_NAME.search(name):
         return True
     return not set(_name_parts(name)).isdisjoint(config.id_name_parts)
+
+
+def _looks_like_hash(strings: pd.Series, config: ProfilerConfig) -> bool:
+    """Every value is a UUID, or every value is hexadecimal of at least the minimum length and
+    nearly all of them contain a letter."""
+    if strings.str.fullmatch(_UUID).all():
+        return True
+    if not strings.str.fullmatch(f"[0-9a-fA-F]{{{config.id_hash_min_length},}}").all():
+        return False
+    return bool(strings.str.contains("[a-fA-F]").mean() >= config.id_hash_min_letter_ratio)
 
 
 def _is_date_candidate(value: str) -> bool:
