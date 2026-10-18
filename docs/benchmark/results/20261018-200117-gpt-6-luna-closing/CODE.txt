@@ -1,0 +1,1 @@
+Product code: commit 1402ac1 (branch eval-set-d). The OpenML benchmark of 9 datasets with gpt-6-luna, 3 repeats, summarised with the new noise rule. Expectations: docs/eval-d-test-expectations.md.
