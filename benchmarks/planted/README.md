@@ -1,6 +1,6 @@
 # Planted-fault datasets
 
-Eight small synthetic datasets with faults planted on purpose, and a ground truth for every column. They sit next to the real-data benchmark (`benchmarks/`, `docs/benchmark.md`) and change nothing in it.
+Eight small synthetic datasets with faults planted on purpose, a ground truth for every column, and a scorer that judges a plan against that truth. They sit next to the real-data benchmark (`benchmarks/`, `docs/benchmark.md`) and change nothing in it.
 
 ## Held-out: do not tune on this set
 
@@ -30,7 +30,7 @@ A realistic base table (4 to 7 numeric and 2 to 3 categorical features, some of 
 
 ### Types that cannot be scored
 
-`sentinel` is marked `measurable: false` in the ground truth. The op registry has no op that replaces a value with a missing value, so a plan cannot handle the fault; dropping the column and keeping it are both defensible. The columns are in the data, so a later change to the ops can start scoring them, but no score is computed from them now. They are left out of every rate.
+`sentinel` is marked `measurable: false` in the ground truth. The op registry has no op that replaces a value with a missing value, so a plan cannot handle the fault; dropping the column and keeping it are both defensible. The columns are in the data, so a later change to the ops can start scoring them, but no score is computed from them now. The scorer lists them as unmeasurable and leaves them out of every rate.
 
 ## Ground truth
 
@@ -52,3 +52,17 @@ uv run python benchmarks/planted/planted_generate.py
 ```
 
 The recipes (seed, task, size and faults of each dataset) are in `planted_generate.py`. A test regenerates every dataset and fails if the result differs from the committed files, so the files and the code cannot drift apart.
+
+## Scoring a plan
+
+`planted_scorer.score_plan(plan, truth)` judges the decisions in a plan, not the data it produces: which columns `drop_columns` removes and which `cast_to_category` converts. It gives:
+
+- **Detection rate per fault type**: the share of columns of that type the plan handled, with the count behind it. A `must_drop` column is handled when dropped. A duplicate pair is handled when at least one of the two is dropped. A `numeric_category` column is handled when it is cast and not dropped. The overall detection rate is the same ratio over all measurable faults.
+- **Drop precision and recall**. A drop is right when it removes a `must_drop` column or one of a duplicate pair, and wrong when it removes a `must_keep` column. Dropping both columns of a pair is one right drop and one wrong drop. Dropping an `either` column is neutral. Precision is `None` when the plan drops nothing that counts, recall is `None` when the data needs no drop.
+- **Wrongly dropped `must_keep` columns** (`over_dropped`) and pairs dropped as a whole (`pairs_dropped_both`).
+- **Expected op applied**: how many columns with an `expected_op` got it (`op_rate`, `missing_ops`), and the columns that got an `avoid_op` (`avoided_op_violations`).
+- **Unmeasurable columns** and any dropped column the truth does not know (`unknown_dropped`).
+
+`combine` adds the counts of several scores before taking ratios, so a rate over the whole set is a micro average: a dataset with more faults weighs more. With 8 datasets most fault types occur 2 to 4 times, so a single run's per-type rate moves in steps of 25 to 50 percentage points; read it together with its count.
+
+The scorer says nothing about how well the rest of the plan prepares the data (imputation, encoding, scaling). That is what the main benchmark's cross-validated scores are for.
