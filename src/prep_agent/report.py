@@ -99,6 +99,7 @@ def render_report(
         plan_rows=_plan_rows(plan) if plan is not None else [],
         dropped=_dropped_columns(plan) if plan is not None else [],
         qa=trace.qa_history if trace is not None else [],
+        user_kept=trace.user_kept if trace is not None else [],
         has_result=result is not None,
         plan_issues=plan_issues,
         result_issues=result_issues,

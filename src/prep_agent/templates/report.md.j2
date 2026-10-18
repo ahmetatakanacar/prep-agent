@@ -53,6 +53,16 @@ No train or test set was produced.
 - **{{ record.question.question | cell }}** Answer: {{ record.answer | cell }}. Why it was asked: {{ record.question.reason | cell }}
 {% endfor %}
 {% endif %}
+{% if user_kept %}
+
+## Marked columns kept by your decision
+
+The profile related these columns strongly to the target, the planner asked about them and you chose to keep them. They are in the data on your word: nothing checks that they are known when a prediction is made.
+
+{% for kept in user_kept %}
+- **{{ kept.column | cell }}** ({{ "almost determines the target" if kept.tier == "suspected" else "strongly related to the target" }}, score {{ "%.2f" | format(kept.score) }}). Question: {{ kept.question | cell }} Your answer: {{ kept.answer | cell }}
+{% endfor %}
+{% endif %}
 {% if plan is not none %}
 
 ## Plan

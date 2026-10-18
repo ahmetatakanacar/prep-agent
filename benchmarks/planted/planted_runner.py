@@ -283,6 +283,7 @@ def _run_job(
             warning_codes=[issue.code for issue in warnings],
             agent=_agent_record(exc.trace, answerer, price),
             marked=_marked(exc.profile, answerer, truth),
+            user_kept=[u.column for u in exc.trace.user_kept],
             plan=exc.plan,
             plan_seconds=time.perf_counter() - started,
         )
@@ -300,6 +301,7 @@ def _run_job(
         warning_codes=[issue.code for issue in warnings],
         agent=_agent_record(result.trace, answerer, price),
         marked=_marked(result.profile, answerer, truth),
+        user_kept=[u.column for u in result.trace.user_kept],
         plan=result.plan,
         score=score_plan(result.plan, truth),
         plan_seconds=time.perf_counter() - started,

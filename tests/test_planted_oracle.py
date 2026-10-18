@@ -221,3 +221,28 @@ def test_the_summary_has_the_accuracy_and_the_question_columns(tmp_path):
     assert "leaks, 0.6 to 0.9" in summary
     row = [line for line in summary.splitlines() if line.startswith("| m | named | recommended")][0]
     assert "0 of 1" in row and "1 of 2" in row
+
+
+def test_a_marked_column_the_user_kept_is_recorded_as_a_decision_and_gets_no_warning(tmp_path):
+    [r] = run(tmp_path, "planted-d01", "named", "not_recommended").runs
+    # The planner asked about the first leaking column; this user answers against its advice.
+    [item] = r.agent.qa
+    assert item.answer.startswith("Keep ")
+    kept = item.answer.removeprefix("Keep ")
+    assert r.user_kept == [kept]
+
+
+def test_a_run_where_nobody_decided_has_no_user_kept_columns(tmp_path):
+    [r] = run(tmp_path, "planted-d01", "named", "no_questions").runs
+    assert r.user_kept == []
+    assert "suspected_leakage_kept" in r.warning_codes
+
+
+def test_the_summary_counts_the_columns_kept_by_decision(tmp_path):
+    run(tmp_path, "planted-d01", "named", "not_recommended")
+    summary = (tmp_path / "named-not_recommended" / "summary.md").read_text(encoding="utf-8")
+    header = next(line for line in summary.splitlines() if "kept by decision" in line)
+    cells = [c.strip() for c in header.strip("|").split("|")]
+    row = next(line for line in summary.splitlines() if line.startswith("| m | named | not_rec"))
+    values = [c.strip() for c in row.strip("|").split("|")]
+    assert values[cells.index("kept by decision")] == "1"

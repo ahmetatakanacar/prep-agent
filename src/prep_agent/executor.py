@@ -18,6 +18,7 @@ The whole procedure is deterministic: the split is seeded by the plan and no ste
 randomness of its own.
 """
 
+from collections.abc import Collection
 from dataclasses import dataclass, field, replace
 
 import numpy as np
@@ -81,12 +82,14 @@ def execute(
     plan: Plan,
     profile: DatasetProfile,
     expected_model_family: str | None = None,
+    decided_by_user: Collection[str] = (),
 ) -> ExecutionResult:
     """Run `plan` on `df`. The input frame is not modified.
 
-    `expected_model_family` is passed on to the plan validator (see `validate_plan`).
+    `expected_model_family` and `decided_by_user` are passed on to the plan validator (see
+    `validate_plan`).
     """
-    plan_issues = validate_plan(plan, profile, expected_model_family)
+    plan_issues = validate_plan(plan, profile, expected_model_family, decided_by_user)
     if has_errors(plan_issues):
         raise PlanValidationError(plan_issues)
 

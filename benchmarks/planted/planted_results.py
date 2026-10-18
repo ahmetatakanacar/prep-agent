@@ -69,6 +69,9 @@ class RunResult(BaseModel):
     agent: AgentRecord | None = None
     plan: Plan | None = None
     marked: list[MarkedColumn] = []
+    # Marked columns that stay in the plan because the user said so when asked (they get no
+    # warning from the validator; the report lists them).
+    user_kept: list[str] = []
     # Only for `ok` runs.
     score: Score | None = None
     plan_seconds: float | None = None

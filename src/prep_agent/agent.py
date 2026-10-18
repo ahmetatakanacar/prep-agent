@@ -32,15 +32,16 @@ The planner only ever sees the profile (see `prep_agent.planner`), never the dat
 """
 
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 import pandas as pd
 from pydantic import BaseModel
 
+from prep_agent.decisions import UserKept, kept_by_user
 from prep_agent.executor import ExecutionError, ExecutionResult, PlanValidationError, execute
 from prep_agent.llm.base import LLMClient, LLMError, LLMSchemaError, TokenUsage
-from prep_agent.plan import Plan
+from prep_agent.plan import DropColumnsStep, Plan
 from prep_agent.planner import (
     PlannerResponse,
     QARecord,
@@ -96,6 +97,8 @@ class AgentTrace:
     goal: str
     calls: list[LLMCallRecord]
     qa_history: list[QARecord]
+    # Marked columns that stay in the final plan because the user said so when asked.
+    user_kept: list[UserKept] = field(default_factory=list)
 
     @property
     def model(self) -> str | None:
@@ -299,7 +302,11 @@ class _Agent:
             if not errors:
                 assert attempt.execution is not None
                 return AgentResult(
-                    plan, attempt.profile, attempt.execution, attempt.issues, self._trace()
+                    plan,
+                    attempt.profile,
+                    attempt.execution,
+                    attempt.issues,
+                    self._trace(plan),
                 )
             if self.revisions >= self.max_revisions:
                 if attempt.execution_error is not None:
@@ -452,7 +459,13 @@ class _Agent:
         profile = self._profile_for(plan)
         # `execute` validates the plan itself and refuses to run one with errors.
         try:
-            execution = execute(self.df, plan, profile, self.model_family)
+            execution = execute(
+                self.df,
+                plan,
+                profile,
+                self.model_family,
+                decided_by_user={u.column for u in kept_by_user(self.qa_history, profile)},
+            )
         except PlanValidationError as exc:
             self.attempt = _Attempt(plan, profile, exc.issues, None)
             return self.attempt
@@ -481,8 +494,20 @@ class _Agent:
             )
         return self._profiles[plan.target]
 
-    def _trace(self) -> AgentTrace:
-        return AgentTrace(self.goal, list(self.calls), list(self.qa_history))
+    def _trace(self, plan: Plan | None = None) -> AgentTrace:
+        """The trace; with the final `plan`, it lists the marked columns the user kept that the
+        plan still has."""
+        kept = []
+        if plan is not None:
+            dropped = {
+                name
+                for step in plan.steps
+                if isinstance(step, DropColumnsStep)
+                for name in step.columns
+            }
+            profile = self._profile_for(plan)
+            kept = [u for u in kept_by_user(self.qa_history, profile) if u.column not in dropped]
+        return AgentTrace(self.goal, list(self.calls), list(self.qa_history), kept)
 
     def _failure(self, attempt: _Attempt | None = None) -> dict:
         attempt = attempt or self.attempt

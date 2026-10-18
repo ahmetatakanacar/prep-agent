@@ -31,6 +31,7 @@ profiler's `regression_min_unique` gets a warning, since that is where the profi
 hint at regression.
 """
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Literal
 
@@ -197,14 +198,19 @@ def partition_issues(
 
 
 def validate_plan(
-    plan: Plan, profile: DatasetProfile, expected_model_family: str | None = None
+    plan: Plan,
+    profile: DatasetProfile,
+    expected_model_family: str | None = None,
+    decided_by_user: Collection[str] = (),
 ) -> list[ValidationIssue]:
     """Check `plan` against `profile` without running anything. Inputs are not modified.
 
     `expected_model_family` is the family the user asked for, if any; a plan with another one
     gets `model_family_mismatch`. Without it, the plan's family is not questioned.
+    `decided_by_user` are marked columns the user was asked about and chose to keep (see
+    `prep_agent.decisions`): their staying is a decision and not a warning.
     """
-    return _Validation(plan, profile, expected_model_family).run()
+    return _Validation(plan, profile, expected_model_family, frozenset(decided_by_user)).run()
 
 
 @dataclass
@@ -241,8 +247,13 @@ def _needs_encoding(column: _Column) -> bool:
 
 class _Validation:
     def __init__(
-        self, plan: Plan, profile: DatasetProfile, expected_model_family: str | None
+        self,
+        plan: Plan,
+        profile: DatasetProfile,
+        expected_model_family: str | None,
+        decided_by_user: frozenset[str] = frozenset(),
     ) -> None:
+        self.decided_by_user = decided_by_user
         self.plan = plan
         self.profile = profile
         self.expected_model_family = expected_model_family
@@ -702,6 +713,8 @@ class _Validation:
             if name == target:
                 continue
             if not (name in self.columns or "one-hot" in self.gone.get(name, "")):
+                continue
+            if name in self.decided_by_user:
                 continue
             if SUSPECTED_LEAKAGE_WARNING in column.warnings:
                 self._add(
