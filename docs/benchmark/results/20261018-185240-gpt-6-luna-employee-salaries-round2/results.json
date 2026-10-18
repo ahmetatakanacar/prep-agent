@@ -1,0 +1,1290 @@
+{
+  "started_at": "2026-10-18T18:52:40.821597Z",
+  "finished_at": "2026-10-18T18:57:10.944210Z",
+  "config": {
+    "models": [
+      "gpt-6-luna"
+    ],
+    "repeats": 3,
+    "datasets": [
+      "employee-salaries"
+    ],
+    "currency": "USD",
+    "prices": {
+      "gpt-6-luna": {
+        "input_per_million": 0.1,
+        "output_per_million": 0.5,
+        "cached_input_per_million": 0.01,
+        "cache_write_per_million": 0.125
+      }
+    },
+    "estimated_max_cost": {
+      "gpt-6-luna": 0.076183125
+    }
+  },
+  "jobs": [
+    {
+      "dataset": "employee-salaries",
+      "task_type": "regression",
+      "method": "reference",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [
+        "high_association_kept"
+      ],
+      "agent": null,
+      "plan": {
+        "target": "current_annual_salary",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "full_name is personal data and unique per employee. department_name repeats department one to one. date_first_hired is a date stored as text that no step can parse, and year_first_hired holds the same information. 2016_gross_pay_received is what the employee was paid for the salary being predicted (correlation 0.89), so it would leak the target.",
+            "op": "drop_columns",
+            "columns": [
+              "full_name",
+              "department_name",
+              "date_first_hired",
+              "2016_gross_pay_received"
+            ]
+          },
+          {
+            "reason": "The target is continuous, so there are no classes to stratify on; a seeded random 80/20 split keeps the run reproducible.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": false,
+            "random_state": 42
+          },
+          {
+            "reason": "17 genders are missing; the most frequent value is a safe fill for so few rows.",
+            "op": "impute",
+            "columns": [
+              "gender"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "88% of the values are missing, and the missing value means the employee holds the title they were hired for; a value means they are temporarily in a lower title. The two groups differ in pay (median 73,296 against 53,788), so the fact is kept as the category 'None'.",
+            "op": "impute",
+            "columns": [
+              "underfilled_job_title"
+            ],
+            "strategy": "constant",
+            "fill_value": "None",
+            "add_indicator": false
+          },
+          {
+            "reason": "32% are missing while only 6 rows hold an explicit 0, so a missing overtime pay evidently means no overtime and the fill is 0. The indicator is kept because the missing values are concentrated in a few departments (all of ZAH, 7% of DLC) and the rows with a missing value have a higher median salary, which fits departments that do not record overtime.",
+            "op": "impute",
+            "columns": [
+              "2016_overtime_pay"
+            ],
+            "strategy": "constant",
+            "fill_value": 0,
+            "add_indicator": true
+          },
+          {
+            "reason": "Text categories with two to 37 values; one-hot is the family-neutral encoding.",
+            "op": "encode",
+            "columns": [
+              "gender",
+              "department",
+              "assignment_category"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "694 divisions; the 50 most frequent cover 47% of the rows and the rest are grouped.",
+            "op": "encode",
+            "columns": [
+              "division"
+            ],
+            "method": "onehot",
+            "max_categories": 50
+          },
+          {
+            "reason": "385 position titles and the position is the strongest signal for pay, so the 100 most frequent are kept (88% of the rows) and the rest are grouped.",
+            "op": "encode",
+            "columns": [
+              "employee_position_title"
+            ],
+            "method": "onehot",
+            "max_categories": 100
+          },
+          {
+            "reason": "Only 84 titles, and the column is mostly 'None'; the 10 most frequent are kept and the rest are grouped to avoid near-empty columns.",
+            "op": "encode",
+            "columns": [
+              "underfilled_job_title"
+            ],
+            "method": "onehot",
+            "max_categories": 10
+          },
+          {
+            "reason": "Overtime pay is skewed with many outliers. The model family is open and may include linear models; scaling costs trees nothing and puts linear models on comparable footing.",
+            "op": "scale",
+            "columns": [
+              "2016_overtime_pay",
+              "year_first_hired"
+            ],
+            "method": "robust"
+          }
+        ]
+      },
+      "leaky_columns": [
+        "2016_gross_pay_received"
+      ],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 7382,
+      "n_test": 1846,
+      "n_features": 204,
+      "baseline": {
+        "task_type": "regression",
+        "n_rows": 7382,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "r2",
+          "rmse",
+          "mae"
+        ],
+        "models": [
+          {
+            "name": "dummy_mean",
+            "scores": {
+              "r2": {
+                "mean": -0.0020597418935011545,
+                "std": 0.0018901411882165505,
+                "folds": [
+                  -0.0017021552909317617,
+                  -0.0005629206070369985,
+                  -0.005357508754022966,
+                  -5.427652152167894e-7,
+                  -0.0026755820502988303
+                ]
+              },
+              "rmse": {
+                "mean": 29065.15280830061,
+                "std": 624.6689487690725,
+                "folds": [
+                  30175.342457753577,
+                  28389.043513570196,
+                  28823.064864631753,
+                  28665.53304786817,
+                  29272.780157679335
+                ]
+              },
+              "mae": {
+                "mean": 22779.382659093215,
+                "std": 309.8707120910479,
+                "folds": [
+                  23348.171575551056,
+                  22414.512718525148,
+                  22754.6790393789,
+                  22631.55537403284,
+                  22747.99458797814
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          },
+          {
+            "name": "ridge",
+            "scores": {
+              "r2": {
+                "mean": 0.8119588915916018,
+                "std": 0.009480828996556065,
+                "folds": [
+                  0.8005884620643309,
+                  0.8259308514948411,
+                  0.8124073732671664,
+                  0.802685471580807,
+                  0.8181822995508636
+                ]
+              },
+              "rmse": {
+                "mean": 12590.717789357102,
+                "std": 525.260183294547,
+                "folds": [
+                  13463.502178112878,
+                  11841.029433654065,
+                  12450.528261365009,
+                  12733.254990399639,
+                  12465.27408325392
+                ]
+              },
+              "mae": {
+                "mean": 7118.701914114727,
+                "std": 52.539693665660344,
+                "folds": [
+                  7178.330057289989,
+                  7027.0678118418,
+                  7154.453889037339,
+                  7100.027821916335,
+                  7133.629990488167
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "r2": {
+                "mean": 0.7924156829376068,
+                "std": 0.006875055908418108,
+                "folds": [
+                  0.7900451201625203,
+                  0.7965558709485319,
+                  0.7936730663018119,
+                  0.8010857153666882,
+                  0.7807186419084816
+                ]
+              },
+              "rmse": {
+                "mean": 13229.532850687625,
+                "std": 439.3083457821278,
+                "folds": [
+                  13814.840974141556,
+                  12801.213445805979,
+                  13057.434565709998,
+                  12784.769144217864,
+                  13689.406123562727
+                ]
+              },
+              "mae": {
+                "mean": 6436.7719026267405,
+                "std": 213.68781962596606,
+                "folds": [
+                  6524.259060711715,
+                  6530.564642700114,
+                  6372.159623778261,
+                  6061.514658143668,
+                  6695.361527799945
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.3272094000000152,
+      "baseline_seconds": 19.32613619999995
+    },
+    {
+      "dataset": "employee-salaries",
+      "task_type": "regression",
+      "method": "naive",
+      "model": null,
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [
+        "personal_data_kept",
+        "high_association_kept",
+        "high_association_kept"
+      ],
+      "agent": null,
+      "plan": {
+        "target": "current_annual_salary",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Naive rule: 80/20 split with seed 42, stratified for classification.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": false,
+            "random_state": 42
+          },
+          {
+            "reason": "Naive rule: numeric columns with missing values get the median.",
+            "op": "impute",
+            "columns": [
+              "2016_gross_pay_received",
+              "2016_overtime_pay"
+            ],
+            "strategy": "median",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Naive rule: other columns with missing values get the most frequent value.",
+            "op": "impute",
+            "columns": [
+              "gender",
+              "underfilled_job_title"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Naive rule: every non-numeric column is one-hot encoded.",
+            "op": "encode",
+            "columns": [
+              "gender",
+              "department",
+              "department_name",
+              "assignment_category"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "Naive rule: one-hot encode, keeping only the 50 most frequent categories of columns with more.",
+            "op": "encode",
+            "columns": [
+              "full_name",
+              "division",
+              "employee_position_title",
+              "underfilled_job_title",
+              "date_first_hired"
+            ],
+            "method": "onehot",
+            "max_categories": 50
+          }
+        ]
+      },
+      "leaky_columns": [
+        "2016_gross_pay_received"
+      ],
+      "kept_leaky_columns": [
+        "2016_gross_pay_received"
+      ],
+      "leaky_columns_kept": 1,
+      "n_train": 7382,
+      "n_test": 1846,
+      "n_features": 331,
+      "baseline": {
+        "task_type": "regression",
+        "n_rows": 7382,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "r2",
+          "rmse",
+          "mae"
+        ],
+        "models": [
+          {
+            "name": "dummy_mean",
+            "scores": {
+              "r2": {
+                "mean": -0.0020597418935011545,
+                "std": 0.0018901411882165505,
+                "folds": [
+                  -0.0017021552909317617,
+                  -0.0005629206070369985,
+                  -0.005357508754022966,
+                  -5.427652152167894e-7,
+                  -0.0026755820502988303
+                ]
+              },
+              "rmse": {
+                "mean": 29065.15280830061,
+                "std": 624.6689487690725,
+                "folds": [
+                  30175.342457753577,
+                  28389.043513570196,
+                  28823.064864631753,
+                  28665.53304786817,
+                  29272.780157679335
+                ]
+              },
+              "mae": {
+                "mean": 22779.382659093215,
+                "std": 309.8707120910479,
+                "folds": [
+                  23348.171575551056,
+                  22414.512718525148,
+                  22754.6790393789,
+                  22631.55537403284,
+                  22747.99458797814
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          },
+          {
+            "name": "ridge",
+            "scores": {
+              "r2": {
+                "mean": 0.9366966696784497,
+                "std": 0.0058044887808460024,
+                "folds": [
+                  0.9440140670086824,
+                  0.9328723378141479,
+                  0.9275245955912389,
+                  0.9393981167247805,
+                  0.9396742312533986
+                ]
+              },
+              "rmse": {
+                "mean": 7292.5601295043,
+                "std": 243.42791837189606,
+                "folds": [
+                  7133.823554905724,
+                  7353.249794621271,
+                  7738.828454608054,
+                  7056.721281808659,
+                  7180.177561577794
+                ]
+              },
+              "mae": {
+                "mean": 4185.851463157759,
+                "std": 46.766369263164044,
+                "folds": [
+                  4201.5488105684535,
+                  4253.686250133506,
+                  4113.256128637048,
+                  4199.846002888399,
+                  4160.920123561386
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "r2": {
+                "mean": 0.9716320360463782,
+                "std": 0.0036099886551019967,
+                "folds": [
+                  0.9747030482359268,
+                  0.9645835360976217,
+                  0.9730861542723278,
+                  0.9722815662826291,
+                  0.9735058753433848
+                ]
+              },
+              "rmse": {
+                "mean": 4876.6417243379765,
+                "std": 233.66830309556758,
+                "folds": [
+                  4795.313442303742,
+                  5341.105507145355,
+                  4715.934619055022,
+                  4772.481430151691,
+                  4758.373623034072
+                ]
+              },
+              "mae": {
+                "mean": 2271.136303623607,
+                "std": 81.0978606009962,
+                "folds": [
+                  2211.8448891559456,
+                  2355.3491610471683,
+                  2166.968488708221,
+                  2246.392920692701,
+                  2375.1260585140017
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 0.42173300000001746,
+      "baseline_seconds": 19.889559700000063
+    },
+    {
+      "dataset": "employee-salaries",
+      "task_type": "regression",
+      "method": "agent",
+      "model": "gpt-6-luna",
+      "repeat": 1,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": {
+        "reported_model": "gpt-6-luna",
+        "calls": 3,
+        "revisions": 0,
+        "schema_retries": 0,
+        "questions": 3,
+        "first_plan_error_codes": [],
+        "input_tokens": 21298,
+        "output_tokens": 2978,
+        "cached_input_tokens": 14217,
+        "cache_write_tokens": 7072,
+        "cost": 0.0025160699999999996,
+        "qa": [
+          {
+            "question": "Should `2016_gross_pay_received` be included when predicting `current_annual_salary`?",
+            "answer": "Drop `2016_gross_pay_received`"
+          },
+          {
+            "question": "Should `employee_position_title` be included when predicting `current_annual_salary`?",
+            "answer": "Drop `employee_position_title`"
+          },
+          {
+            "question": "Should `underfilled_job_title` be included when predicting `current_annual_salary`?",
+            "answer": "Keep it, treating missing values as an explicit category"
+          }
+        ]
+      },
+      "plan": {
+        "target": "current_annual_salary",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Remove the near-unique employee name because it is identifying information, the gross-pay and position-title columns per your decisions, the duplicate department label, and the datetime column, which this tool cannot use.",
+            "op": "drop_columns",
+            "columns": [
+              "full_name",
+              "2016_gross_pay_received",
+              "employee_position_title",
+              "department_name",
+              "date_first_hired"
+            ]
+          },
+          {
+            "reason": "Use a regression split for predicting annual salary; stratification is not applicable.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": false,
+            "random_state": 42
+          },
+          {
+            "reason": "The overtime-pay column has missing values and a highly skewed distribution with many outliers, so its median is a robust fill; a missingness indicator preserves information about which values were absent.",
+            "op": "impute",
+            "columns": [
+              "2016_overtime_pay"
+            ],
+            "strategy": "median",
+            "fill_value": null,
+            "add_indicator": true
+          },
+          {
+            "reason": "Fill the few missing gender values with the most frequent observed category.",
+            "op": "impute",
+            "columns": [
+              "gender"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Keep underfilled_job_title as requested and use an explicit category for its missing values.",
+            "op": "impute",
+            "columns": [
+              "underfilled_job_title"
+            ],
+            "strategy": "constant",
+            "fill_value": "No underfilled job title",
+            "add_indicator": false
+          },
+          {
+            "reason": "One-hot encode the remaining text features for a model family that may include linear models. Cap each source column at 100 categories to limit the expansion from high-cardinality features.",
+            "op": "encode",
+            "columns": [
+              "gender",
+              "department",
+              "division",
+              "assignment_category",
+              "underfilled_job_title"
+            ],
+            "method": "onehot",
+            "max_categories": 100
+          },
+          {
+            "reason": "Scale the numeric features for possible linear models; robust scaling is appropriate given the strong skew and many outliers in overtime pay.",
+            "op": "scale",
+            "columns": [
+              "2016_overtime_pay",
+              "year_first_hired"
+            ],
+            "method": "robust"
+          }
+        ]
+      },
+      "leaky_columns": [
+        "2016_gross_pay_received"
+      ],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 7382,
+      "n_test": 1846,
+      "n_features": 224,
+      "baseline": {
+        "task_type": "regression",
+        "n_rows": 7382,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "r2",
+          "rmse",
+          "mae"
+        ],
+        "models": [
+          {
+            "name": "dummy_mean",
+            "scores": {
+              "r2": {
+                "mean": -0.0020597418935011545,
+                "std": 0.0018901411882165505,
+                "folds": [
+                  -0.0017021552909317617,
+                  -0.0005629206070369985,
+                  -0.005357508754022966,
+                  -5.427652152167894e-7,
+                  -0.0026755820502988303
+                ]
+              },
+              "rmse": {
+                "mean": 29065.15280830061,
+                "std": 624.6689487690725,
+                "folds": [
+                  30175.342457753577,
+                  28389.043513570196,
+                  28823.064864631753,
+                  28665.53304786817,
+                  29272.780157679335
+                ]
+              },
+              "mae": {
+                "mean": 22779.382659093215,
+                "std": 309.8707120910479,
+                "folds": [
+                  23348.171575551056,
+                  22414.512718525148,
+                  22754.6790393789,
+                  22631.55537403284,
+                  22747.99458797814
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          },
+          {
+            "name": "ridge",
+            "scores": {
+              "r2": {
+                "mean": 0.6342224523886444,
+                "std": 0.008821651475801624,
+                "folds": [
+                  0.6447402857563396,
+                  0.6386766466573912,
+                  0.6398049798115418,
+                  0.6210961812474414,
+                  0.626794168470508
+                ]
+              },
+              "rmse": {
+                "mean": 17557.348212027027,
+                "std": 349.2070926611941,
+                "folds": [
+                  17970.32305429512,
+                  17059.903659236115,
+                  17252.369391362405,
+                  17645.1110263855,
+                  17859.033928855995
+                ]
+              },
+              "mae": {
+                "mean": 11718.31453020008,
+                "std": 256.1320891372061,
+                "folds": [
+                  12171.61378058209,
+                  11550.982861490258,
+                  11500.585477432473,
+                  11534.522374337499,
+                  11833.868157158073
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "r2": {
+                "mean": 0.5986730599380287,
+                "std": 0.01507594918383824,
+                "folds": [
+                  0.6005880926414743,
+                  0.5704966862667422,
+                  0.6159478934581113,
+                  0.6033201061328822,
+                  0.6030125211909333
+                ]
+              },
+              "rmse": {
+                "mean": 18388.471242190084,
+                "std": 431.298625754206,
+                "folds": [
+                  19054.317935650237,
+                  18599.951751518412,
+                  17814.55473746111,
+                  18054.272718464752,
+                  18419.25906785592
+                ]
+              },
+              "mae": {
+                "mean": 11136.788136204774,
+                "std": 360.4720139304067,
+                "folds": [
+                  11484.546343807848,
+                  11520.197382201748,
+                  10722.642758468186,
+                  10695.439644007369,
+                  11261.11455253872
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 44.09817250000003,
+      "baseline_seconds": 13.203521900000055
+    },
+    {
+      "dataset": "employee-salaries",
+      "task_type": "regression",
+      "method": "agent",
+      "model": "gpt-6-luna",
+      "repeat": 2,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [
+        "high_association_kept"
+      ],
+      "agent": {
+        "reported_model": "gpt-6-luna",
+        "calls": 3,
+        "revisions": 0,
+        "schema_retries": 0,
+        "questions": 2,
+        "first_plan_error_codes": [],
+        "input_tokens": 21230,
+        "output_tokens": 2288,
+        "cached_input_tokens": 16494,
+        "cache_write_tokens": 4727,
+        "cost": 0.001900715,
+        "qa": [
+          {
+            "question": "Should `2016_gross_pay_received` be used to predict `current_annual_salary`?",
+            "answer": "Drop `2016_gross_pay_received`"
+          },
+          {
+            "question": "How should `underfilled_job_title` be handled?",
+            "answer": "Keep it and fill missing values with an explicit category"
+          }
+        ]
+      },
+      "plan": {
+        "target": "current_annual_salary",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Remove full_name because it is personally identifying, department_name because it duplicates department, and date_first_hired because datetime columns cannot be used by this preparation tool. Drop 2016_gross_pay_received as requested.",
+            "op": "drop_columns",
+            "columns": [
+              "full_name",
+              "department_name",
+              "date_first_hired",
+              "2016_gross_pay_received"
+            ]
+          },
+          {
+            "reason": "Create a regression train/test split without stratification. Keep employee_position_title because a job title is information available before the salary outcome and is useful for predicting salary.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": false,
+            "random_state": 42
+          },
+          {
+            "reason": "Fill missing overtime pay with the training-set median because it is numeric and strongly skewed; add an indicator to preserve information about its missingness.",
+            "op": "impute",
+            "columns": [
+              "2016_overtime_pay"
+            ],
+            "strategy": "median",
+            "fill_value": null,
+            "add_indicator": true
+          },
+          {
+            "reason": "Fill the small number of missing gender values with the most frequent category so the categorical feature can be encoded.",
+            "op": "impute",
+            "columns": [
+              "gender"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Keep underfilled_job_title as requested and represent its many missing values with an explicit category.",
+            "op": "impute",
+            "columns": [
+              "underfilled_job_title"
+            ],
+            "strategy": "constant",
+            "fill_value": "Missing/Not applicable",
+            "add_indicator": false
+          },
+          {
+            "reason": "One-hot encode the text and categorical features so they are usable by linear as well as tree models.",
+            "op": "encode",
+            "columns": [
+              "gender",
+              "department",
+              "division",
+              "assignment_category",
+              "employee_position_title",
+              "underfilled_job_title"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "Scale year_first_hired for compatibility with linear models; its profile does not show many outliers, so standard scaling is appropriate.",
+            "op": "scale",
+            "columns": [
+              "year_first_hired"
+            ],
+            "method": "standard"
+          }
+        ]
+      },
+      "leaky_columns": [
+        "2016_gross_pay_received"
+      ],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 7382,
+      "n_test": 1846,
+      "n_features": 1162,
+      "baseline": {
+        "task_type": "regression",
+        "n_rows": 7382,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "r2",
+          "rmse",
+          "mae"
+        ],
+        "models": [
+          {
+            "name": "dummy_mean",
+            "scores": {
+              "r2": {
+                "mean": -0.0020597418935011545,
+                "std": 0.0018901411882165505,
+                "folds": [
+                  -0.0017021552909317617,
+                  -0.0005629206070369985,
+                  -0.005357508754022966,
+                  -5.427652152167894e-7,
+                  -0.0026755820502988303
+                ]
+              },
+              "rmse": {
+                "mean": 29065.15280830061,
+                "std": 624.6689487690725,
+                "folds": [
+                  30175.342457753577,
+                  28389.043513570196,
+                  28823.064864631753,
+                  28665.53304786817,
+                  29272.780157679335
+                ]
+              },
+              "mae": {
+                "mean": 22779.382659093215,
+                "std": 309.8707120910479,
+                "folds": [
+                  23348.171575551056,
+                  22414.512718525148,
+                  22754.6790393789,
+                  22631.55537403284,
+                  22747.99458797814
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          },
+          {
+            "name": "ridge",
+            "scores": {
+              "r2": {
+                "mean": 0.8839691105304965,
+                "std": 0.015080677393447152,
+                "folds": [
+                  0.8707559480383168,
+                  0.8983025757713916,
+                  0.8930884280393514,
+                  0.8612210361503375,
+                  0.8964775646530847
+                ]
+              },
+              "rmse": {
+                "mean": 9874.725614607954,
+                "std": 735.0013304589773,
+                "folds": [
+                  10838.97428843023,
+                  9050.728449599377,
+                  9399.229497452769,
+                  10678.782092449263,
+                  9405.913745108135
+                ]
+              },
+              "mae": {
+                "mean": 5726.862416247981,
+                "std": 63.21810874748272,
+                "folds": [
+                  5681.45634646119,
+                  5665.072702830198,
+                  5695.5108877927705,
+                  5838.102543157495,
+                  5754.169600998251
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "r2": {
+                "mean": 0.8251598529745674,
+                "std": 0.01326385246378915,
+                "folds": [
+                  0.813352302053992,
+                  0.8399993738599971,
+                  0.8423389128040019,
+                  0.8182680829925223,
+                  0.8118405931623243
+                ]
+              },
+              "rmse": {
+                "mean": 12138.595007612643,
+                "std": 667.8521554007829,
+                "folds": [
+                  13025.494576281722,
+                  11352.444811781937,
+                  11414.11265570945,
+                  12220.121054265835,
+                  12680.801940024265
+                ]
+              },
+              "mae": {
+                "mean": 5829.280866269736,
+                "std": 221.81007178033204,
+                "folds": [
+                  5892.512085213534,
+                  5823.631413627945,
+                  5618.933227017181,
+                  5600.6608510843635,
+                  6210.666754405659
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 32.423344799999995,
+      "baseline_seconds": 64.87729230000002
+    },
+    {
+      "dataset": "employee-salaries",
+      "task_type": "regression",
+      "method": "agent",
+      "model": "gpt-6-luna",
+      "repeat": 3,
+      "status": "ok",
+      "error": null,
+      "error_codes": [],
+      "warning_codes": [],
+      "agent": {
+        "reported_model": "gpt-6-luna",
+        "calls": 3,
+        "revisions": 0,
+        "schema_retries": 0,
+        "questions": 3,
+        "first_plan_error_codes": [],
+        "input_tokens": 21311,
+        "output_tokens": 3079,
+        "cached_input_tokens": 16494,
+        "cache_write_tokens": 4808,
+        "cost": 0.00230634,
+        "qa": [
+          {
+            "question": "Should `2016_gross_pay_received` be used to predict `current_annual_salary`?",
+            "answer": "Drop `2016_gross_pay_received`"
+          },
+          {
+            "question": "Should `underfilled_job_title` be retained despite being missing in about 88.2% of rows?",
+            "answer": "Keep it and treat missing values as a category"
+          },
+          {
+            "question": "Should `employee_position_title` be used to predict `current_annual_salary`?",
+            "answer": "Drop `employee_position_title`"
+          }
+        ]
+      },
+      "plan": {
+        "target": "current_annual_salary",
+        "task_type": "regression",
+        "model_family": "any",
+        "steps": [
+          {
+            "reason": "Remove full_name because it is identifying personal information. Drop 2016_gross_pay_received and employee_position_title as requested; department_name duplicates department, and date_first_hired is a datetime column that this tool cannot use.",
+            "op": "drop_columns",
+            "columns": [
+              "full_name",
+              "2016_gross_pay_received",
+              "employee_position_title",
+              "department_name",
+              "date_first_hired"
+            ]
+          },
+          {
+            "reason": "Use a held-out test set to evaluate salary predictions. The remaining features describe employee or job information that can be available before predicting salary.",
+            "op": "split",
+            "test_size": 0.2,
+            "stratify": false,
+            "random_state": 42
+          },
+          {
+            "reason": "Fill the small number of missing gender values with the most frequent category so the column can be encoded.",
+            "op": "impute",
+            "columns": [
+              "gender"
+            ],
+            "strategy": "most_frequent",
+            "fill_value": null,
+            "add_indicator": false
+          },
+          {
+            "reason": "Keep underfilled_job_title as requested and represent its missing values as an explicit category.",
+            "op": "impute",
+            "columns": [
+              "underfilled_job_title"
+            ],
+            "strategy": "constant",
+            "fill_value": "Not specified",
+            "add_indicator": false
+          },
+          {
+            "reason": "The overtime values are strongly skewed and have many outliers, so use the median for the missing values and add an indicator to preserve information about missingness.",
+            "op": "impute",
+            "columns": [
+              "2016_overtime_pay"
+            ],
+            "strategy": "median",
+            "fill_value": null,
+            "add_indicator": true
+          },
+          {
+            "reason": "One-hot encode the text categories so they can be used by linear as well as tree models.",
+            "op": "encode",
+            "columns": [
+              "gender",
+              "department",
+              "division",
+              "assignment_category",
+              "underfilled_job_title"
+            ],
+            "method": "onehot",
+            "max_categories": null
+          },
+          {
+            "reason": "Robust scaling is suitable for 2016_overtime_pay because its profile shows many outliers.",
+            "op": "scale",
+            "columns": [
+              "2016_overtime_pay"
+            ],
+            "method": "robust"
+          },
+          {
+            "reason": "Scale the numeric hiring year so a linear model can use it without depending on its original range.",
+            "op": "scale",
+            "columns": [
+              "year_first_hired"
+            ],
+            "method": "standard"
+          }
+        ]
+      },
+      "leaky_columns": [
+        "2016_gross_pay_received"
+      ],
+      "kept_leaky_columns": [],
+      "leaky_columns_kept": 0,
+      "n_train": 7382,
+      "n_test": 1846,
+      "n_features": 797,
+      "baseline": {
+        "task_type": "regression",
+        "n_rows": 7382,
+        "random_state": 42,
+        "n_folds": 5,
+        "metrics": [
+          "r2",
+          "rmse",
+          "mae"
+        ],
+        "models": [
+          {
+            "name": "dummy_mean",
+            "scores": {
+              "r2": {
+                "mean": -0.0020597418935011545,
+                "std": 0.0018901411882165505,
+                "folds": [
+                  -0.0017021552909317617,
+                  -0.0005629206070369985,
+                  -0.005357508754022966,
+                  -5.427652152167894e-7,
+                  -0.0026755820502988303
+                ]
+              },
+              "rmse": {
+                "mean": 29065.15280830061,
+                "std": 624.6689487690725,
+                "folds": [
+                  30175.342457753577,
+                  28389.043513570196,
+                  28823.064864631753,
+                  28665.53304786817,
+                  29272.780157679335
+                ]
+              },
+              "mae": {
+                "mean": 22779.382659093215,
+                "std": 309.8707120910479,
+                "folds": [
+                  23348.171575551056,
+                  22414.512718525148,
+                  22754.6790393789,
+                  22631.55537403284,
+                  22747.99458797814
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          },
+          {
+            "name": "ridge",
+            "scores": {
+              "r2": {
+                "mean": 0.6530545486714802,
+                "std": 0.014314519175183135,
+                "folds": [
+                  0.6682520842851061,
+                  0.6380919981725778,
+                  0.6491239976669682,
+                  0.6383583530274463,
+                  0.671446310205303
+                ]
+              },
+              "rmse": {
+                "mean": 17092.408657623095,
+                "std": 206.48759238660907,
+                "folds": [
+                  17365.48850866222,
+                  17073.700187060553,
+                  17027.728984746107,
+                  17238.486116398326,
+                  16756.639491248265
+                ]
+              },
+              "mae": {
+                "mean": 11263.241187540414,
+                "std": 156.9271505792199,
+                "folds": [
+                  11498.115907655225,
+                  11372.07774022232,
+                  11153.160302040053,
+                  11055.021006858684,
+                  11237.83098092579
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          },
+          {
+            "name": "random_forest",
+            "scores": {
+              "r2": {
+                "mean": 0.6301062431549865,
+                "std": 0.021380517277323208,
+                "folds": [
+                  0.6175809300427548,
+                  0.5972580083932811,
+                  0.6412298901599318,
+                  0.6342027780631893,
+                  0.6602596091157756
+                ]
+              },
+              "rmse": {
+                "mean": 17650.14656232488,
+                "std": 596.0847545542814,
+                "folds": [
+                  18644.582976688274,
+                  18011.17371307205,
+                  17218.210895528275,
+                  17337.245767673172,
+                  17039.51945866263
+                ]
+              },
+              "mae": {
+                "mean": 10600.470015593595,
+                "std": 378.6101637523564,
+                "folds": [
+                  11034.878308118265,
+                  11051.750994984737,
+                  10263.809386104702,
+                  10152.308654442691,
+                  10499.60273431758
+                ]
+              }
+            },
+            "skipped_reason": null,
+            "note": null
+          }
+        ],
+        "skipped_reason": null
+      },
+      "plan_seconds": 43.077656899999965,
+      "baseline_seconds": 32.441509899999915
+    }
+  ]
+}
