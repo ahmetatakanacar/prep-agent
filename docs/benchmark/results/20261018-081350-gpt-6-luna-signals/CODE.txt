@@ -1,0 +1,1 @@
+Product code: commit d584967 (branch profile-leak-signals). The OpenML benchmark of 9 datasets with gpt-6-luna, 3 repeats, run after the profile signals were added. Compare with docs/benchmark/results/20261016-115230-gpt-6-luna (before).
