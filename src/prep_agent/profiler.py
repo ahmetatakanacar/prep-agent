@@ -242,6 +242,14 @@ class ProfilerConfig:
     # - 5,000 rows: a copy agrees on any subset of rows, so a sample decides as well as the
     #   whole column and bounds the cost of comparing many columns.
     duplicate_min_abs_corr: float = 0.9999
+    # - 0.99 for a copy that was rounded: a column rounded to a step u is off by at most u / 2,
+    #   so with a spread of s it loses about u^2 / (12 s^2) of its variance. At a correlation of
+    #   0.99 the loss is at most 2% (u up to about s / 2); a coarser grid has thrown away so much
+    #   that it is no longer a copy in any practical sense. Within that band, a column is a copy
+    #   only if every value lies within one step of the straight line through the other column
+    #   (see `prep_agent.signals.find_duplicates`), which a different measurement of the same
+    #   thing, with errors of its own, does not.
+    duplicate_rounded_min_abs_corr: float = 0.99
     duplicate_corr_rows: int = 5_000
 
 
@@ -537,6 +545,7 @@ def _add_duplicates(
         df,
         comparable,
         min_abs_corr=config.duplicate_min_abs_corr,
+        rounded_min_abs_corr=config.duplicate_rounded_min_abs_corr,
         corr_rows=config.duplicate_corr_rows,
     )
     for column in columns:

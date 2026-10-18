@@ -250,7 +250,7 @@ def test_the_old_faults_take_their_less_obvious_forms(dev):
             assert frame[fault.name].str.fullmatch(r"[a-z]+\d*@[a-z.]+").all()
 
 
-def test_a_coarse_scaled_copy_is_a_copy_to_a_person_but_not_to_the_profile_threshold(dev):
+def test_a_coarse_scaled_copy_has_a_correlation_between_the_two_duplicate_bands(dev):
     recipe, made = dev
     frame, _ = made["named"]
     for fault in recipe.faults:

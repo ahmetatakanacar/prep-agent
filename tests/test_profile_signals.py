@@ -649,3 +649,73 @@ def test_the_lower_tier_marks_a_legitimate_strong_feature_too():
 def test_nothing_is_marked_without_a_target():
     df = shifted_frame(4.0).drop(columns="y")
     assert all(tier(c) == () for c in profile(df, target=None).values())
+
+
+# --- copies that were rounded ---
+
+
+def rounded_to(values: pd.Series, spread_fraction: float) -> pd.Series:
+    """`values` rounded to a grid of `spread_fraction` standard deviations."""
+    unit = spread_fraction * float(values.std())
+    return pd.Series(np.round(values / unit) * unit, index=values.index)
+
+
+@pytest.mark.parametrize("fraction", [0.1, 0.2, 0.3])
+def test_a_converted_copy_rounded_to_a_fraction_of_its_spread_is_found(fraction):
+    df = base()
+    df["x_conv"] = rounded_to(df["x"] * 0.79, fraction)
+    corr = df["x"].corr(df["x_conv"])
+    assert 0.99 <= corr < 0.9999
+    assert duplicates(df) == {"x_conv": "x"}
+
+
+def test_a_rounded_original_is_found_from_either_side():
+    df = base()
+    df["x_back"] = df["x"]
+    df["x"] = rounded_to(df["x"], 0.2)
+    assert duplicates(df) == {"x_back": "x"}
+
+
+def test_a_copy_rounded_so_coarsely_that_it_loses_more_than_a_few_percent_is_not_found():
+    df = base()
+    df["x_coarse"] = rounded_to(df["x"], 0.9)
+    assert df["x"].corr(df["x_coarse"]) < 0.99
+    assert duplicates(df) == {}
+
+
+def test_a_different_measurement_of_the_same_thing_is_not_a_rounded_copy():
+    """Correlated at 0.995 with a resolution much finer than the errors between them."""
+    df = base()
+    df["x_other"] = np.round(df["x"] + rng(50).normal(0, 1.4, len(df)), 4)
+    assert 0.99 < df["x"].corr(df["x_other"]) < 0.9999
+    assert duplicates(df) == {}
+
+
+def test_a_whole_number_column_with_errors_of_a_step_is_not_a_rounded_copy():
+    """Rounding is off by half a step at most; a value that is a whole step away is an error."""
+    df = base()
+    df["n"] = (np.arange(len(df)) * 7) % 23
+    df["n_noisy"] = df["n"] + rng(51).choice([-2, 2], len(df), p=[0.5, 0.5])
+    df["n_close"] = df["n"] + rng(52).choice([-1, 0, 1], len(df), p=[0.01, 0.98, 0.01])
+    assert df["n"].corr(df["n_close"]) > 0.99
+    assert duplicates(df) == {}
+
+
+def test_a_binary_column_is_not_a_rounded_copy_of_a_continuous_one():
+    df = base()
+    df["flag"] = (df["x"] + rng(53).normal(0, 20, len(df)) > 100).astype(int)
+    assert duplicates(df) == {}
+
+
+def test_a_column_with_two_or_three_values_is_left_to_the_one_to_one_rule():
+    df = base()
+    df["tiny"] = rng(54).choice([0.0, 1.0], len(df))
+    df["tiny_more"] = df["tiny"] * 2 + 1
+    assert duplicates(df) == {"tiny_more": "tiny"}
+
+
+def test_the_rounded_band_comes_from_the_config():
+    df = base()
+    df["x_conv"] = rounded_to(df["x"] * 0.79, 0.3)
+    assert duplicates_with(df, duplicate_rounded_min_abs_corr=0.9999) == {}
+    assert duplicates_with(df) == {"x_conv": "x"}

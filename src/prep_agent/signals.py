@@ -154,8 +154,29 @@ def _skill(y: np.ndarray, predicted: np.ndarray, task: str) -> float:
     return min(max(skill, 0.0), 1.0)
 
 
+def _is_rounded_image(x: np.ndarray, y: np.ndarray, y_full: pd.Series) -> bool:
+    """Whether `y` is the straight line through `x`, rounded to the resolution of `y`.
+
+    The resolution is the smallest gap between two different values of `y_full` (the whole
+    column; the samples `x` and `y` are rows of it). A value rounded to a grid is at most half a
+    step from the exact value; a step is allowed, to cover the error of fitting the line.
+    """
+    values = np.unique(np.round(y_full.dropna().to_numpy(dtype=float), 9))
+    values = values[np.isfinite(values)]
+    if len(values) < 3:
+        return False
+    step = float(np.diff(values).min())
+    slope, intercept = np.polyfit(x, y, 1)
+    return float(np.abs(y - (slope * x + intercept)).max()) <= step
+
+
 def find_duplicates(
-    df: pd.DataFrame, columns: list[str], *, min_abs_corr: float, corr_rows: int
+    df: pd.DataFrame,
+    columns: list[str],
+    *,
+    min_abs_corr: float,
+    rounded_min_abs_corr: float,
+    corr_rows: int,
 ) -> dict[str, str]:
     """Map each column of `columns` that copies an earlier one to that original.
 
@@ -166,6 +187,13 @@ def find_duplicates(
     - its values are equal to the original's;
     - both are numeric and the absolute Pearson correlation is at least `min_abs_corr`, on a
       fixed sample of at most `corr_rows` rows, which is a scaled and shifted copy up to rounding;
+    - both are numeric, the correlation is at least `rounded_min_abs_corr`, and one column is the
+      other's straight-line image rounded to the first column's own resolution: every value is
+      within one smallest step of that column of where the line puts it. A copy that was
+      converted and then rounded coarsely (a price in another currency to the cent, a length to
+      a tenth) has a correlation below `min_abs_corr` only because of the rounding, and the
+      rounding error is bounded by the step, which a different measurement of the same thing is
+      not;
     - values repeat (fewer distinct values than half of the non-missing ones) and the two
       columns match one to one: every value of one goes with exactly one value of the other. The
       repeat condition matters, since two independent columns with a value for every row also
@@ -182,7 +210,7 @@ def find_duplicates(
         mask = column.isna().to_numpy()
         bucket = originals.setdefault(mask.tobytes(), [])
         for original in bucket:
-            if _is_copy(df[original], column, mask, sample, min_abs_corr):
+            if _is_copy(df[original], column, mask, sample, min_abs_corr, rounded_min_abs_corr):
                 found[name] = original
                 break
         else:
@@ -196,6 +224,7 @@ def _is_copy(
     mask: np.ndarray,
     sample: np.ndarray,
     min_abs_corr: float,
+    rounded_min_abs_corr: float,
 ) -> bool:
     if original.equals(column):
         return True
@@ -207,7 +236,13 @@ def _is_copy(
         b = column.to_numpy(dtype=float)[sample]
         usable = np.isfinite(a) & np.isfinite(b)
         if usable.sum() >= 3 and a[usable].std() > 0 and b[usable].std() > 0:
-            if abs(np.corrcoef(a[usable], b[usable])[0, 1]) >= min_abs_corr:
+            corr = abs(np.corrcoef(a[usable], b[usable])[0, 1])
+            if corr >= min_abs_corr:
+                return True
+            if corr >= rounded_min_abs_corr and (
+                _is_rounded_image(a[usable], b[usable], column)
+                or _is_rounded_image(b[usable], a[usable], original)
+            ):
                 return True
     present = ~mask
     a_codes, a_uniques = pd.factorize(original[present])
