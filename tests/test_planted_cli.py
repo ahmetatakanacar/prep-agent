@@ -105,3 +105,11 @@ def test_summarize_reports_an_unreadable_file(cli, tmp_path):
     bad.write_text("not json", encoding="utf-8")
     result, output = cli("--summarize", str(bad))
     assert result.exit_code == 1 and "cannot read results" in output
+
+
+def test_the_held_out_test_recipes_need_the_final_test_flag(cli):
+    result, output = cli("--models", "m", "--datasets", "planted-t01", "--dry-run")
+    assert result.exit_code == 1 and "held-out test data" in output and "--final-test" in output
+    result, output = cli("--models", "m", "--datasets", "planted-t01", "--dry-run", "--final-test")
+    assert result.exit_code == 1 and "data files not found" in output
+    assert cli.built == []

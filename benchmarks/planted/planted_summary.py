@@ -16,6 +16,9 @@ from planted_scorer import Score, combine
 from planted_truth import FAULT_TYPES, UNMEASURABLE_FAULTS, VARIANTS
 
 NA = "n/a"
+# The fault types with a column in the table of detection by type; the legitimate strong
+# features are not faults and have a table of their own.
+COLUMNS_OF_TYPES = (*FAULT_TYPES, "leak_partial")
 
 
 @dataclass
@@ -111,6 +114,7 @@ def render_summary(results: PlantedResults) -> str:
                 "drop precision",
                 "drop recall",
                 "must_keep dropped",
+                "legit strong dropped",
                 "avoided_op violations",
                 "questions/run",
                 "calls/run",
@@ -125,10 +129,11 @@ def render_summary(results: PlantedResults) -> str:
         "Handled columns out of planted columns, over all ok runs of the group.",
         "",
         *_table(
-            ["model", "variant", "mode", *FAULT_TYPES],
+            ["model", "variant", "mode", *COLUMNS_OF_TYPES],
             [_fault_row(group) for group in by_group],
         ),
     ]
+    lines += _level_tables(by_group)
     comparison = _variant_comparison(by_group)
     if comparison:
         lines += [
@@ -171,6 +176,7 @@ def _headline_row(group: Group) -> list[str]:
         _rate(score.precision),
         _rate(score.recall),
         _count(len(score.over_dropped), n_ok),
+        _legit(score),
         _count(len(score.avoided_op_violations), n_ok),
         _number(group.questions),
         _number(group.calls),
@@ -179,10 +185,72 @@ def _headline_row(group: Group) -> list[str]:
     ]
 
 
+def _legit(score: Score) -> str:
+    total = sum(score.legit_planted.values())
+    if not total:
+        return NA
+    return f"{sum(score.legit_dropped.values())} of {total}"
+
+
+def _level_tables(by_group: list[Group]) -> list[str]:
+    """Two tables for set D: the leaks of partial strength found, and the legitimate strong
+    features dropped, by the association they were made to have. Empty for other sets."""
+    scores = [(g, g.score) for g in by_group]
+    leak_levels = sorted({lv for _, sc in scores for lv in sc.levels_planted})
+    legit_levels = sorted({lv for _, sc in scores for lv in sc.legit_planted})
+    lines: list[str] = []
+    if leak_levels:
+        lines += [
+            "",
+            "## Leaks of partial strength found, by level of association",
+            "",
+            "Found out of planted, over all ok runs of the group. The level is the association "
+            "the column was made to have; what makes the column a leak is what it means.",
+            "",
+            *_table(
+                ["model", "variant", "mode", *leak_levels],
+                [
+                    [
+                        g.model,
+                        g.variant,
+                        g.mode,
+                        *_by_level(sc.levels_found, sc.levels_planted, leak_levels),
+                    ]
+                    for g, sc in scores
+                ],
+            ),
+        ]
+    if legit_levels:
+        lines += [
+            "",
+            "## Legitimate strong features dropped, by level of association",
+            "",
+            "Dropped out of planted, over all ok runs of the group. Every drop is a false alarm.",
+            "",
+            *_table(
+                ["model", "variant", "mode", *legit_levels],
+                [
+                    [
+                        g.model,
+                        g.variant,
+                        g.mode,
+                        *_by_level(sc.legit_dropped, sc.legit_planted, legit_levels),
+                    ]
+                    for g, sc in scores
+                ],
+            ),
+        ]
+    return lines
+
+
+def _by_level(hit, planted, levels: list[str]) -> list[str]:
+    return [f"{hit[lv]}/{planted[lv]}" if planted[lv] else NA for lv in levels]
+
+
 def _fault_row(group: Group) -> list[str]:
     by_type = group.score.by_type
     cells = []
-    for fault in FAULT_TYPES:
+    for fault in COLUMNS_OF_TYPES:
         if fault in UNMEASURABLE_FAULTS:
             cells.append("not scored")
         elif fault not in by_type:

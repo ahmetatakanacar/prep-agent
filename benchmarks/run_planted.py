@@ -81,6 +81,10 @@ def main(
         bool, typer.Option("--dry-run", help="List the jobs and the cost estimate, run nothing.")
     ] = False,
     yes: Annotated[bool, typer.Option("--yes", help="Do not ask before running.")] = False,
+    final_test: Annotated[
+        bool,
+        typer.Option("--final-test", help="Allow the held-out test recipes of set D (run once)."),
+    ] = False,
     prices: Annotated[Path, typer.Option(help="Model price file.")] = DEFAULT_PRICES,
     data_dir: Annotated[Path, typer.Option(help="Directory with the planted data.")] = DATA_DIR,
 ) -> None:
@@ -98,7 +102,14 @@ def main(
     try:
         table = load_prices(prices)
         run_plan = plan_run(
-            dataset_list, variant_list, mode_list, model_list, repeats, table.models, data_dir
+            dataset_list,
+            variant_list,
+            mode_list,
+            model_list,
+            repeats,
+            table.models,
+            data_dir,
+            final_test,
         )
         require_prices(table, model_list, prices)
     except (PriceError, PlantedRunError) as exc:
@@ -132,6 +143,7 @@ def main(
             currency=table.currency,
             client_factory=create_client,
             data_dir=data_dir,
+            final_test=final_test,
             estimated_max_cost=ceiling,
             progress=lambda run, index, total: _print_progress(console, run, index, total),
         )

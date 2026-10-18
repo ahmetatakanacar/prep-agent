@@ -161,7 +161,7 @@ def test_the_fault_table_has_counts_per_type_and_marks_what_is_not_scored(sample
     assert row["id_sequential"] == "100% (2/2)"
     assert row["leak_linear"] == "n/a"
     assert row["sentinel"] == "not scored"
-    assert list(row)[3:] == list(FAULT_TYPES)
+    assert list(row)[3:] == [*FAULT_TYPES, "leak_partial"]
 
 
 def test_the_variants_are_compared_for_the_same_model_and_mode(sample):

@@ -5,6 +5,7 @@ import json
 import pandas as pd
 
 from planted_generate import RECIPES, load
+from planted_recipes_d import DEV
 from planted_truth import DatasetTruth
 from prep_agent.llm.base import LLMResult, TokenUsage
 from prep_agent.plan import Plan
@@ -114,7 +115,7 @@ class RoutedLLM:
         self.users: list[str] = []
         self._sets = {
             (len(frame), tuple(frame.columns)): (frame, truth)
-            for name in (r.name for r in RECIPES)
+            for name in [*(r.name for r in RECIPES), *(r.name for r in DEV)]
             for frame, truth in (load(name, "anonymous"), load(name, "named"))
         }
 
@@ -145,3 +146,19 @@ class RoutedLLM:
             plan = build_plan(frame, truth, [n for n in drop if n not in kept], cast)
             reply = {"language": "English", "kind": "plan", "plan": plan, "questions": None}
         return LLMResult(parsed=schema.model_validate(reply), model="routed", usage=self.USAGE)
+
+
+def run_through_agent(frame: pd.DataFrame, truth: DatasetTruth, plan: Plan):
+    """Run a plan through the agent with a planner that answers with exactly that plan."""
+    from prep_agent.agent import run_agent
+    from prep_agent.llm.fake import FakeLLM
+
+    reply = {"language": "English", "kind": "plan", "plan": plan.model_dump(), "questions": None}
+
+    def no_questions(questions):
+        raise AssertionError("the scripted planner does not ask")
+
+    return run_agent(
+        frame, "prepare for modelling", FakeLLM([reply]), no_questions,
+        target=truth.target, model_family="any",
+    )  # fmt: skip

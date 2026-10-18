@@ -142,3 +142,15 @@ The old faults come in less obvious forms: identifiers that are not dense (`spar
 The twelve recipes are split in two, with different domains: `planted-d01` to `planted-d06` (dev, for looking at results) and `planted-t01` to `planted-t06` (test). Both halves have the same level distribution: three leaks at each of the four levels and nine legitimate strong features.
 
 **The test half is run once, at the end.** Only its recipes and its ground truth are in the repository: its CSV files are git-ignored and are not written unless `planted_generate_d.py --with-test-data` is given, and nothing was run on them or profiled before that run. The runner refuses the test datasets unless the run is given `--final-test`. The dev half's data is committed like the other sets.
+
+### What set D adds to the scoring
+
+- **False alarm rate**: the share of `legit_strong` columns a plan dropped, with the same count by level. Dropping one is also a wrong drop (`must_keep dropped`, precision), so it counts there too.
+- **Leaks found by level**: for `leak_partial`, found out of planted at each level (0.60, 0.75, 0.85, 0.95), next to the detection by type.
+- `summary.md` has a `legit strong dropped` column in the main table and two tables by level (leaks found, legitimate features dropped). They appear only for runs that have such columns.
+- The runner refuses the test recipes unless the run is given `--final-test`, and refuses any run whose data files are missing before it calls a model.
+
+```powershell
+uv run python benchmarks/planted/planted_generate_d.py          # dev data and all ground truth
+uv run python benchmarks/run_planted.py --models gpt-6-luna --datasets planted-d01,planted-d02,planted-d03,planted-d04,planted-d05,planted-d06
+```

@@ -9,6 +9,9 @@ which columns `cast_to_category` converts. A column is looked at by its role in 
   of the column is lost; it is listed in `pairs_dropped_both`.
 - `must_keep` columns that are dropped are wrong drops. A `numeric_category` column is `must_keep`
   and counts as found when `cast_to_category` converts it and it is not dropped.
+- A `legit_strong` column is `must_keep`: dropping it is a wrong drop like any other, and it is
+  also counted on its own (`false_alarm_rate`) with the level of association it was made to have,
+  next to the leaks of partial strength (`leak_partial`) found at each level.
 - `either` columns are neutral when dropped. Columns of a type that cannot be scored
   (`measurable=False`) are listed in `unmeasurable` and left out of every rate.
 
@@ -60,6 +63,18 @@ class Score(BaseModel):
     avoided_op_violations: list[str] = Field(default_factory=list)
     unmeasurable: list[str] = Field(default_factory=list)
     unknown_dropped: list[str] = Field(default_factory=list)
+    # Set D. Leaks of partial strength (`leak_partial`) found, and legitimate strong features
+    # (`legit_strong`) dropped, by the level of association they were made to have ("0.85").
+    levels_planted: Counter[str] = Field(default_factory=Counter)
+    levels_found: Counter[str] = Field(default_factory=Counter)
+    legit_planted: Counter[str] = Field(default_factory=Counter)
+    legit_dropped: Counter[str] = Field(default_factory=Counter)
+
+    @property
+    def false_alarm_rate(self) -> float | None:
+        """The share of legitimate strong features the plan dropped; None if there were none."""
+        total = sum(self.legit_planted.values())
+        return sum(self.legit_dropped.values()) / total if total else None
 
     @property
     def by_type(self) -> dict[str, TypeScore]:
@@ -108,6 +123,13 @@ def score_plan(plan: Plan, truth: DatasetTruth) -> Score:
             score.unmeasurable.append(f"{label} ({column.fault})")
             continue
         is_dropped = column.name in dropped
+        level = f"{column.level:.2f}" if column.level is not None else None
+        if column.fault == "leak_partial" and level is not None:
+            score.levels_planted[level] += 1
+            score.levels_found[level] += is_dropped
+        if column.fault == "legit_strong" and level is not None:
+            score.legit_planted[level] += 1
+            score.legit_dropped[level] += is_dropped
         if column.fault in DROP_FAULTS:
             score.planted[column.fault] += 1
             score.required_drops += 1
@@ -150,6 +172,10 @@ def combine(scores: list[Score]) -> Score:
         total.datasets.extend(score.datasets)
         total.found.update(score.found)
         total.planted.update(score.planted)
+        total.levels_planted.update(score.levels_planted)
+        total.levels_found.update(score.levels_found)
+        total.legit_planted.update(score.legit_planted)
+        total.legit_dropped.update(score.legit_dropped)
         total.correct_drops += score.correct_drops
         total.wrong_drops += score.wrong_drops
         total.required_drops += score.required_drops

@@ -28,8 +28,9 @@ from bench_cost import (
     price_of_usage,
 )
 from bench_runner import ModelEstimate
-from planted_generate import ALL_RECIPES, DATA_DIR, RECIPES, load
+from planted_generate import ALL_RECIPES, DATA_DIR, RECIPES, file_stem, load
 from planted_modes import MODES, Answerer, question_rounds
+from planted_recipes_d import ALL_D, TEST
 from planted_results import AgentRecord, PlantedResults, RunConfig, RunResult
 from planted_scorer import score_plan
 from planted_summary import render_summary
@@ -44,7 +45,10 @@ RESULTS_FILE = "results.json"
 SUMMARY_FILE = "summary.md"
 # The default run uses the first set; the second one is named explicitly.
 DATASETS: tuple[str, ...] = tuple(recipe.name for recipe in RECIPES)
-KNOWN_DATASETS: tuple[str, ...] = tuple(recipe.name for recipe in ALL_RECIPES)
+KNOWN_DATASETS: tuple[str, ...] = tuple(r.name for r in ALL_RECIPES) + tuple(r.name for r in ALL_D)
+# Set D's test recipes are run once, at the end. They are refused unless the run says it is that
+# run, so that a routine run cannot use them up.
+TEST_DATASETS: tuple[str, ...] = tuple(recipe.name for recipe in TEST)
 
 ClientFactory = Callable[[str], LLMClient]
 Progress = Callable[[RunResult, int, int], None]
@@ -76,7 +80,15 @@ def goal_for(truth: DatasetTruth) -> str:
     return f"Prepare this table for predicting the column {truth.target}."
 
 
-def check_selection(datasets: list[str], variants: list[str], modes: list[str]) -> None:
+def check_selection(
+    datasets: list[str], variants: list[str], modes: list[str], final_test: bool = False
+) -> None:
+    held_out = [name for name in datasets if name in TEST_DATASETS]
+    if held_out and not final_test:
+        raise PlantedRunError(
+            f"{', '.join(held_out)} is held-out test data and is run once, at the end: "
+            "pass --final-test for that run"
+        )
     for kind, chosen, known in (
         ("dataset", datasets, KNOWN_DATASETS),
         ("variant", variants, VARIANTS),
@@ -89,6 +101,21 @@ def check_selection(datasets: list[str], variants: list[str], modes: list[str]) 
             )
         if not chosen:
             raise PlantedRunError(f"no {kind} selected")
+
+
+def check_data(datasets: list[str], variants: list[str], data_dir: Path) -> None:
+    """Refuse a run whose data files are missing, before any model is called."""
+    missing = [
+        f"{file_stem(name, variant)}.csv"  # type: ignore[arg-type]
+        for name in datasets
+        for variant in variants
+        if not (data_dir / f"{file_stem(name, variant)}.csv").is_file()  # type: ignore[arg-type]
+    ]
+    if missing:
+        raise PlantedRunError(
+            f"data files not found in {data_dir}: {', '.join(missing[:4])}"
+            f"{' ...' if len(missing) > 4 else ''}; generate them with planted_generate_d.py"
+        )
 
 
 def plan_jobs(
@@ -113,13 +140,15 @@ def plan_run(
     repeats: int,
     prices: dict[str, ModelPrice],
     data_dir: Path = DATA_DIR,
+    final_test: bool = False,
 ) -> RunPlan:
     """The jobs of a run and the most the agent runs can use. Nothing is executed.
 
     The bound counts every run with the benchmark's full limits, `no_questions` runs included,
     which cannot use all of them; it is an upper bound, not a prediction.
     """
-    check_selection(datasets, variants, modes)
+    check_selection(datasets, variants, modes, final_test)
+    check_data(datasets, variants, data_dir)
     per_pass_input = per_pass_output = 0
     for dataset in datasets:
         for variant in variants:
@@ -161,6 +190,7 @@ def run_planted(
     data_dir: Path = DATA_DIR,
     estimated_max_cost: dict[str, float | None] | None = None,
     progress: Progress | None = None,
+    final_test: bool = False,
 ) -> PlantedResults:
     """Run every job and write results.json and summary.md to `out_dir`.
 
@@ -168,7 +198,8 @@ def run_planted(
     selection is wrong. The clients are built first, one per model, so a missing API key stops
     the run before it starts.
     """
-    check_selection(datasets, variants, modes)
+    check_selection(datasets, variants, modes, final_test)
+    check_data(datasets, variants, data_dir)
     out_dir = Path(out_dir)
     if (out_dir / RESULTS_FILE).exists():
         raise PlantedRunError(
