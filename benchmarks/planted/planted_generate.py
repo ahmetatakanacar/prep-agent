@@ -19,11 +19,13 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 
-from planted_truth import ColumnTruth, DatasetTruth, FaultType
+from planted_names import DUPLICATE_SUFFIX, NAMES
+from planted_truth import VARIANTS, ColumnTruth, DatasetTruth, FaultType, Variant
 
 DATA_DIR = Path(__file__).parent / "data"
 TARGET = "y"
 DECIMALS = 4
+NEWLINE = chr(10)
 
 # A plain informative integer column that really is a count (rooms, children). It is no fault:
 # it is there to see whether a plan casts every small integer column to a category.
@@ -84,8 +86,14 @@ RECIPES: tuple[Recipe, ...] = (
 )  # fmt: skip
 
 
-def generate(recipe: Recipe) -> tuple[pd.DataFrame, DatasetTruth]:
-    return _Builder(recipe).build()
+def generate(recipe: Recipe, variant: Variant = "anonymous") -> tuple[pd.DataFrame, DatasetTruth]:
+    """The data and its truth. The two variants hold the same values and the same faults in the
+    same order; only the column names differ."""
+    return _Builder(recipe, variant).build()
+
+
+def file_stem(name: str, variant: Variant) -> str:
+    return name if variant == "anonymous" else f"{name}.{variant}"
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
@@ -101,14 +109,17 @@ def _ascii(text: str) -> str:
 
 
 class _Builder:
-    def __init__(self, recipe: Recipe) -> None:
+    def __init__(self, recipe: Recipe, variant: Variant) -> None:
         self.recipe = recipe
+        self.variant = variant
         self.rng = np.random.default_rng(recipe.seed)
         self.n = recipe.n_rows
         # Columns are collected under internal keys; the public names come after the shuffle.
         self.columns: dict[str, pd.Series] = {}
         self.truth: dict[str, ColumnTruth] = {}
         self.score = np.zeros(self.n)
+        self.numeric_keys: list[str] = []
+        self.categorical_keys: list[str] = []
 
     def build(self) -> tuple[pd.DataFrame, DatasetTruth]:
         items = self.recipe.items
@@ -161,12 +172,12 @@ class _Builder:
             else:
                 values = rng.uniform(0, 1000, n)
             self.score += rng.normal(0, 0.8) * _standardize(values)
-            self._put(np.round(values, DECIMALS))
+            self.numeric_keys.append(self._put(np.round(values, DECIMALS)))
         for _ in range(self.recipe.n_categorical):
             levels = np.array([f"k{j}" for j in range(rng.integers(3, 7))], dtype=object)
             codes = rng.choice(len(levels), n, p=rng.dirichlet(np.ones(len(levels)) * 2))
             self.score += rng.normal(0, 0.6, len(levels))[codes]
-            self._put(levels[codes])
+            self.categorical_keys.append(self._put(levels[codes]))
 
     def _numeric_category(self) -> None:
         rng = self.rng
@@ -299,9 +310,10 @@ class _Builder:
     def _finish(self, target: np.ndarray) -> tuple[pd.DataFrame, DatasetTruth]:
         keys = list(self.columns)
         order = [keys[i] for i in self.rng.permutation(len(keys))]
-        rename = {key: f"c{i + 1:02d}" for i, key in enumerate(order)}
+        rename = self._public_names(order)
+        target_name = TARGET if self.variant == "anonymous" else NAMES[self.recipe.name].target
         frame = pd.DataFrame({rename[key]: self.columns[key] for key in order})
-        frame[TARGET] = target
+        frame[target_name] = target
         columns = [
             self.truth[key].model_copy(
                 update={
@@ -313,31 +325,52 @@ class _Builder:
         ]
         truth = DatasetTruth(
             dataset=self.recipe.name,
+            variant=self.variant,
             seed=self.recipe.seed,
-            target=TARGET,
+            target=target_name,
             task_type=self.recipe.task,
             n_rows=self.n,
             columns=columns,
         )
         return frame, truth
 
+    def _public_names(self, order: list[str]) -> dict[str, str]:
+        if self.variant == "anonymous":
+            return {key: f"c{i + 1:02d}" for i, key in enumerate(order)}
+        domain = NAMES[self.recipe.name]
+        names = {key: domain.numeric[i] for i, key in enumerate(self.numeric_keys)}
+        names |= {key: domain.categorical[i] for i, key in enumerate(self.categorical_keys)}
+        for key, truth in self.truth.items():
+            if key in names or truth.fault in DUPLICATE_SUFFIX:
+                continue
+            names[key] = domain.faults["count_decoy" if truth.avoid_op else str(truth.fault)]
+        for key, truth in self.truth.items():
+            if truth.fault in DUPLICATE_SUFFIX:
+                names[key] = names[str(truth.duplicate_of)] + DUPLICATE_SUFFIX[truth.fault]
+        return names
+
 
 def write_all(out_dir: Path = DATA_DIR) -> list[str]:
     out_dir.mkdir(parents=True, exist_ok=True)
     for recipe in RECIPES:
-        frame, truth = generate(recipe)
-        frame.to_csv(out_dir / f"{recipe.name}.csv", index=False, lineterminator="\n")
-        (out_dir / f"{recipe.name}.truth.json").write_text(
-            truth.model_dump_json(indent=2, exclude_none=True) + "\n", encoding="utf-8"
-        )
+        for variant in VARIANTS:
+            frame, truth = generate(recipe, variant)
+            stem = file_stem(recipe.name, variant)
+            frame.to_csv(out_dir / f"{stem}.csv", index=False, lineterminator=NEWLINE)
+            (out_dir / f"{stem}.truth.json").write_text(
+                truth.model_dump_json(indent=2, exclude_none=True) + NEWLINE, encoding="utf-8"
+            )
     return [recipe.name for recipe in RECIPES]
 
 
-def load(name: str, data_dir: Path = DATA_DIR) -> tuple[pd.DataFrame, DatasetTruth]:
+def load(
+    name: str, variant: Variant = "anonymous", data_dir: Path = DATA_DIR
+) -> tuple[pd.DataFrame, DatasetTruth]:
     """Read a committed dataset and its ground truth."""
-    frame = pd.read_csv(data_dir / f"{name}.csv")
+    stem = file_stem(name, variant)
+    frame = pd.read_csv(data_dir / f"{stem}.csv")
     truth = DatasetTruth.model_validate_json(
-        (data_dir / f"{name}.truth.json").read_text(encoding="utf-8")
+        (data_dir / f"{stem}.truth.json").read_text(encoding="utf-8")
     )
     return frame, truth
 

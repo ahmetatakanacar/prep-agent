@@ -24,6 +24,8 @@ FaultType = Literal[
     "constant",
     "sentinel",
 ]
+Variant = Literal["anonymous", "named"]
+VARIANTS: tuple[str, ...] = get_args(Variant)
 Role = Literal["must_drop", "must_keep", "either"]
 OpName = Literal["cast_to_category"]
 
@@ -96,6 +98,7 @@ class DatasetTruth(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dataset: str
+    variant: Variant = "anonymous"
     seed: int
     target: str
     task_type: Literal["classification", "regression"]

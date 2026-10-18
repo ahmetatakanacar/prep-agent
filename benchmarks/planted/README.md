@@ -1,6 +1,6 @@
 # Planted-fault datasets
 
-Eight small synthetic datasets with faults planted on purpose, a ground truth for every column, and a scorer that judges a plan against that truth. They sit next to the real-data benchmark (`benchmarks/`, `docs/benchmark.md`) and change nothing in it.
+Eight small synthetic datasets, each in an anonymous and a named variant, with faults planted on purpose, a ground truth for every column, and a scorer that judges a plan against that truth. They sit next to the real-data benchmark (`benchmarks/`, `docs/benchmark.md`) and change nothing in it.
 
 ## Held-out: do not tune on this set
 
@@ -8,7 +8,14 @@ Eight small synthetic datasets with faults planted on purpose, a ground truth fo
 
 ## What is in a dataset
 
-A realistic base table (4 to 7 numeric and 2 to 3 categorical features, some of them with missing values, and a target that depends on them) plus faults. Feature names are `c01`, `c02`, ... in shuffled order and the target is `y`. Names carry no meaning on purpose: a model cannot recognise a fault from `email` or `customer_id`, and the profiler's name rules (for identifiers and personal data) are not exercised. What is left to decide on is the content of the column.
+A realistic base table (4 to 7 numeric and 2 to 3 categorical features, some of them with missing values, and a target that depends on them) plus faults. Each dataset exists in two variants with the same values, the same faults and the same ground truth; only the column names differ:
+
+- **anonymous** (`planted-01.csv`): features are `c01`, `c02`, ... in shuffled order and the target is `y`. Names carry no meaning on purpose: a model cannot recognise a fault from `email` or `customer_id`, and the profiler's name rules (for identifiers and personal data) are not exercised. What is left to decide on is the content of the column.
+- **named** (`planted-01.named.csv`): the same columns with realistic names, in Turkish, English or a mix (`musteri_no`, `email`, `applicant_name`, `toplam_odeme`). The names come from `planted_names.py`, one small domain per dataset (telecom, loans, housing, insurance, retail, staff turnover, used cars, hospital stays). Leaks get names that are plausible and do not announce themselves (`son_donem_risk_skoru`, `collections_status`, `claim_risk_index`), and a duplicate is named after its original (`egitim_saati_v2`). A test checks that no name contains words like "leak" or "target".
+
+The difference between the two variants is what the names add. Because the columns are the same, a result on one variant can be set directly against the other. One limit: the numeric columns come from four fixed shapes (around 100, skewed, whole numbers 18 to 79, 0 to 1000), and the names were ordered to fit them, but a value range can still look odd for a domain.
+
+The fault types below are planted in both variants.
 
 | fault type | what is planted | right decision |
 | --- | --- | --- |
@@ -34,7 +41,7 @@ A realistic base table (4 to 7 numeric and 2 to 3 categorical features, some of 
 
 ## Ground truth
 
-`data/<name>.truth.json` has, for every feature column:
+`data/<name>.truth.json` and `data/<name>.named.truth.json` have, for every feature column:
 
 - `role`: `must_drop`, `must_keep` or `either`.
 - `fault`: the fault type, or nothing for a plain column.
@@ -51,7 +58,7 @@ The truth is written by the same code that plants the fault, so the two cannot d
 uv run python benchmarks/planted/planted_generate.py
 ```
 
-The recipes (seed, task, size and faults of each dataset) are in `planted_generate.py`. A test regenerates every dataset and fails if the result differs from the committed files, so the files and the code cannot drift apart.
+The recipes (seed, task, size and faults of each dataset) are in `planted_generate.py`. A test regenerates every dataset in both variants and fails if the result differs from the committed files, so the files and the code cannot drift apart.
 
 ## Scoring a plan
 

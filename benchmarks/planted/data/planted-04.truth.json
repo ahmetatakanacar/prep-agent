@@ -1,5 +1,6 @@
 {
   "dataset": "planted-04",
+  "variant": "anonymous",
   "seed": 104,
   "target": "y",
   "task_type": "classification",

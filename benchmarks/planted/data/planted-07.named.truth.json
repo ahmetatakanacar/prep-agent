@@ -1,0 +1,88 @@
+{
+  "dataset": "planted-07",
+  "variant": "named",
+  "seed": 107,
+  "target": "sale_price",
+  "task_type": "regression",
+  "n_rows": 650,
+  "columns": [
+    {
+      "name": "mileage_1000km",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "horsepower",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "mileage_1000km_alt",
+      "role": "either",
+      "fault": "duplicate_scaled",
+      "duplicate_of": "mileage_1000km",
+      "measurable": true
+    },
+    {
+      "name": "seller_email",
+      "role": "must_drop",
+      "fault": "pii_email",
+      "measurable": true
+    },
+    {
+      "name": "listing_uuid",
+      "role": "must_drop",
+      "fault": "id_uuid",
+      "measurable": true
+    },
+    {
+      "name": "top_speed_kmh",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "satici_ad_soyad",
+      "role": "must_drop",
+      "fault": "pii_name",
+      "measurable": true
+    },
+    {
+      "name": "listing_views",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "market_value_index",
+      "role": "must_drop",
+      "fault": "leak_nonlinear",
+      "measurable": true
+    },
+    {
+      "name": "fuel_type",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "owner_age",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "brand",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "price_bracket",
+      "role": "must_drop",
+      "fault": "leak_categorical",
+      "measurable": true
+    },
+    {
+      "name": "listing_source",
+      "role": "must_drop",
+      "fault": "constant",
+      "measurable": true
+    }
+  ]
+}

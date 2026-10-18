@@ -1,0 +1,74 @@
+{
+  "dataset": "planted-08",
+  "variant": "named",
+  "seed": 108,
+  "target": "yeniden_yatis",
+  "task_type": "classification",
+  "n_rows": 700,
+  "columns": [
+    {
+      "name": "tani_grubu",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "ameliyat_sayisi",
+      "role": "must_keep",
+      "avoid_op": "cast_to_category",
+      "measurable": true
+    },
+    {
+      "name": "hastane_kodu",
+      "role": "must_drop",
+      "fault": "constant",
+      "measurable": true
+    },
+    {
+      "name": "kan_sekeri",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "ilac_dozu_mg",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "trigliserid",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "protokol_no",
+      "role": "must_drop",
+      "fault": "id_sequential",
+      "measurable": true
+    },
+    {
+      "name": "lab_test_sayisi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "sigorta_tipi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "sistolik_tansiyon",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "hasta_yasi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "hasta_ad_soyad",
+      "role": "must_drop",
+      "fault": "pii_name",
+      "measurable": true
+    }
+  ]
+}

@@ -5,8 +5,9 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from planted_generate import DATA_DIR, RECIPES, TARGET, generate, load
-from planted_truth import FAULT_TYPES, UNMEASURABLE_FAULTS, ColumnTruth, DatasetTruth
+from planted_generate import DATA_DIR, RECIPES, TARGET, file_stem, generate, load
+from planted_names import NAMES as DOMAINS
+from planted_truth import FAULT_TYPES, UNMEASURABLE_FAULTS, VARIANTS, ColumnTruth, DatasetTruth
 
 NAMES = [recipe.name for recipe in RECIPES]
 PHONE = re.compile(r"^(\+90 5|05)\d{2} \d{3} \d{2} \d{2}$|^\+905\d{9}$")
@@ -214,8 +215,10 @@ def test_every_dataset_keeps_informative_columns(dataset):
 
 def test_all_files_are_in_the_data_dir():
     for name in NAMES:
-        assert (DATA_DIR / f"{name}.csv").is_file()
-        assert (DATA_DIR / f"{name}.truth.json").is_file()
+        for variant in VARIANTS:
+            stem = file_stem(name, variant)
+            assert (DATA_DIR / f"{stem}.csv").is_file()
+            assert (DATA_DIR / f"{stem}.truth.json").is_file()
 
 
 @pytest.mark.parametrize(
@@ -260,3 +263,78 @@ def test_dataset_truth_rejects_the_target_among_the_features():
 def test_numpy_seed_streams_are_not_shared_between_recipes():
     firsts = {np.random.default_rng(r.seed).random() for r in RECIPES}
     assert len(firsts) == len(RECIPES)
+
+
+# --- the named variant ---
+
+
+@pytest.fixture(scope="module", params=NAMES)
+def pair(request):
+    recipe = next(r for r in RECIPES if r.name == request.param)
+    return generate(recipe, "anonymous"), generate(recipe, "named")
+
+
+def test_the_committed_named_files_are_what_the_generator_writes(pair):
+    _, (frame, truth) = pair
+    committed_frame, committed_truth = load(truth.dataset, "named")
+    assert committed_truth == truth
+    pd.testing.assert_frame_equal(committed_frame, frame, check_dtype=False, rtol=1e-9)
+
+
+def test_the_named_variant_has_the_same_data_in_the_same_order(pair):
+    (anonymous, _), (named, _) = pair
+    pd.testing.assert_frame_equal(named.set_axis(anonymous.columns, axis=1), anonymous)
+
+
+def test_the_named_truth_is_the_anonymous_truth_with_other_names(pair):
+    (_, anonymous), (named_frame, named) = pair
+    assert named.variant == "named" and anonymous.variant == "anonymous"
+    mapping = {a.name: n.name for a, n in zip(anonymous.columns, named.columns, strict=True)}
+    mapping[anonymous.target] = named.target
+    renamed = anonymous.model_copy(
+        update={
+            "variant": "named",
+            "target": named.target,
+            "columns": [
+                c.model_copy(
+                    update={
+                        "name": mapping[c.name],
+                        "duplicate_of": mapping.get(c.duplicate_of or ""),
+                    }
+                )
+                for c in anonymous.columns
+            ],
+        }
+    )
+    assert renamed == named
+    assert list(named_frame.columns) == [*(c.name for c in named.columns), named.target]
+
+
+def test_named_columns_are_distinct_plain_words(pair):
+    _, (frame, truth) = pair
+    names = [*frame.columns]
+    assert len(set(names)) == len(names)
+    assert all(re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in names)
+    assert not any(re.fullmatch(r"c\d{2}", name) for name in names)
+    assert truth.target != TARGET
+
+
+def test_no_name_announces_its_fault(pair):
+    _, (_, truth) = pair
+    for column in truth.columns:
+        assert not re.search(r"leak|sizinti|target|hedef|fault|planted", column.name)
+
+
+def test_every_domain_has_enough_names_for_its_recipe():
+    for recipe in RECIPES:
+        domain = DOMAINS[recipe.name]
+        assert len(domain.numeric) >= recipe.n_numeric
+        assert len(domain.categorical) >= recipe.n_categorical
+        planted = {i for i in recipe.items if not i.startswith("duplicate_")}
+        assert planted <= set(domain.faults)
+        assert set(domain.faults) <= planted
+
+
+def test_the_named_set_mixes_turkish_and_english():
+    words = {n for d in DOMAINS.values() for n in (*d.numeric, *d.categorical)}
+    assert {"yas", "applicant_age"} <= words

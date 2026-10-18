@@ -1,0 +1,75 @@
+{
+  "dataset": "planted-04",
+  "variant": "named",
+  "seed": 104,
+  "target": "claim_filed",
+  "task_type": "classification",
+  "n_rows": 600,
+  "columns": [
+    {
+      "name": "policy_guid",
+      "role": "must_drop",
+      "fault": "id_uuid",
+      "measurable": true
+    },
+    {
+      "name": "vehicle_value",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "region",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "holder_name",
+      "role": "must_drop",
+      "fault": "pii_name",
+      "measurable": true
+    },
+    {
+      "name": "premium_amount",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "annual_mileage",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "horsepower",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "driver_age",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "contact_email",
+      "role": "must_drop",
+      "fault": "pii_email",
+      "measurable": true
+    },
+    {
+      "name": "vehicle_type",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "product_line",
+      "role": "must_drop",
+      "fault": "constant",
+      "measurable": true
+    },
+    {
+      "name": "claim_risk_index",
+      "role": "must_drop",
+      "fault": "leak_nonlinear",
+      "measurable": true
+    }
+  ]
+}

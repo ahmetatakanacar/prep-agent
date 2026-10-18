@@ -1,5 +1,6 @@
 {
   "dataset": "planted-03",
+  "variant": "anonymous",
   "seed": 103,
   "target": "y",
   "task_type": "regression",
