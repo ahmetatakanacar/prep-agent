@@ -508,3 +508,10 @@ def test_the_prompt_says_when_no_question_may_be_asked(signal_profile):
     prompt = user_prompt(signal_profile, question_rounds_left=0)
     assert "Do not ask any more questions" in prompt
     assert "You may still ask" not in prompt
+
+
+def test_the_system_prompt_explains_leakage_through_missing_values():
+    prompt = build_system_prompt()
+    for marker in ("`missing_association`", "`leakage_via`", "`missingness`"):
+        assert marker in prompt
+    assert "whether the field is filled in" in prompt

@@ -462,3 +462,115 @@ def test_a_value_that_is_not_hex_keeps_the_column_out():
 def test_unique_long_text_is_still_text():
     values = [f"a sentence of free text, number {i}, that goes on for a while" for i in range(50)]
     assert type_of(values) == "text"
+
+
+# --- leakage through missing values ---
+
+
+def gappy_frame(kind="numeric") -> pd.DataFrame:
+    """A classification frame with a column that exists only for one class."""
+    df = classification_frame()
+    present = df["y"].to_numpy() == 0
+    if kind == "numeric":
+        df["gap"] = np.where(present, rng(30).normal(size=len(df)), np.nan)
+    elif kind == "category":
+        df["gap"] = np.where(present, rng(30).choice(["p", "q", "r"], len(df)), None)
+    elif kind == "text":
+        df["gap"] = np.where(
+            present, [f"a note written by hand, number {i}" for i in range(len(df))], None
+        )
+    else:
+        dates = pd.date_range("2024-01-01", periods=len(df)).strftime("%Y-%m-%d")
+        df["gap"] = np.where(present, dates, None)
+    return df
+
+
+@pytest.mark.parametrize("kind", ["numeric", "category", "text", "date"])
+def test_a_column_that_has_a_value_only_for_one_class_is_flagged_through_missingness(kind):
+    column = profile(gappy_frame(kind))["gap"]
+    assert column.missing_association >= 0.9
+    assert "suspected_target_leakage" in column.warnings
+    assert column.leakage_via in ("missingness", "both")
+
+
+@pytest.mark.parametrize("kind", ["text", "date"])
+def test_missingness_is_the_only_way_for_kinds_the_value_score_leaves_out(kind):
+    column = profile(gappy_frame(kind))["gap"]
+    assert column.target_association is None
+    assert column.leakage_via == "missingness"
+
+
+def test_a_numeric_column_missing_for_one_class_is_reached_by_both_ways():
+    column = profile(gappy_frame("numeric"))["gap"]
+    assert column.target_association >= 0.9 and column.missing_association >= 0.9
+    assert column.leakage_via == "both"
+
+
+def test_the_value_alone_is_reported_as_value():
+    df = classification_frame()
+    df["leak"] = 2 * df["y"] + rng(3).normal(0, 0.1, len(df))
+    column = profile(df)["leak"]
+    assert column.leakage_via == "value" and column.missing_association is None
+
+
+def test_values_missing_at_random_are_not_flagged():
+    df = classification_frame()
+    df["a"] = df["a"].where(rng(31).random(len(df)) > 0.3)
+    column = profile(df)["a"]
+    assert column.missing_association is not None and column.missing_association <= 0.1
+    assert column.leakage_via is None and "suspected_target_leakage" not in column.warnings
+
+
+def test_missingness_that_follows_a_legitimate_feature_is_not_flagged():
+    """Missing when the feature is large: a real pattern, but nowhere near the target alone."""
+    df = classification_frame()
+    df["b"] = df["b"].where(df["a"] < 0.5)
+    column = profile(df)["b"]
+    assert 0 < column.missing_association < 0.9
+    assert "suspected_target_leakage" not in column.warnings
+
+
+def test_missingness_that_covers_only_part_of_a_class_is_not_flagged():
+    """Present only for class 0, but also missing for half of class 0: the marker cannot tell."""
+    df = gappy_frame("numeric")
+    df.loc[(df["y"] == 0) & (rng(32).random(len(df)) < 0.5), "gap"] = np.nan
+    column = profile(df)["gap"]
+    assert column.missing_association < 0.9
+    assert column.leakage_via is None
+
+
+def test_a_column_with_few_missing_values_gets_no_marker_score():
+    df = classification_frame()
+    df.loc[df.index < len(df) * 0.04, "a"] = np.nan
+    assert profile(df)["a"].missing_association is None
+    df.loc[df.index < len(df) * 0.06, "a"] = np.nan
+    assert profile(df)["a"].missing_association is not None
+
+
+def test_the_missing_ratio_limit_and_the_threshold_come_from_the_config():
+    df = classification_frame()
+    df.loc[df.index < len(df) * 0.03, "a"] = np.nan
+    assert profile(df, leakage_min_missing_ratio=0.02)["a"].missing_association is not None
+    assert profile(gappy_frame("numeric"), leakage_min_score=1.1)["gap"].leakage_via is None
+
+
+def test_a_column_with_nothing_present_has_no_marker_score():
+    df = classification_frame()
+    df["empty"] = np.nan
+    assert profile(df)["empty"].missing_association is None
+
+
+def test_the_target_has_no_marker_score_and_missing_target_rows_are_left_out():
+    df = gappy_frame("numeric")
+    df.loc[rng(33).random(len(df)) < 0.1, "y"] = np.nan
+    columns = profile(df)
+    assert columns["y"].missing_association is None
+    assert columns["gap"].leakage_via in ("missingness", "both")
+
+
+def test_a_leak_through_missing_values_shows_in_the_profile_json():
+    dumped = profile_dataframe(gappy_frame("text"), target="y").model_dump(exclude_none=True)
+    by_name = {c["name"]: c for c in dumped["columns"]}
+    assert by_name["gap"]["leakage_via"] == "missingness"
+    assert "target_association" not in by_name["gap"]
+    assert "missing_association" in by_name["gap"]

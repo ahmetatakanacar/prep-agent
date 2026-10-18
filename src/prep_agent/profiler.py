@@ -70,6 +70,17 @@ nearly determines the target alone, which in tabular data is far more often a co
 from the target, or recorded after it, than a good predictor. The warning is a suspicion for the
 planner to put to the user, not a verdict.
 
+A column can also give the target away by having a value or not, with the values themselves
+useless. A column with more than `leakage_min_missing_ratio` of its rows missing therefore also
+gets `missing_association`: the same score, computed the same way, for the 0/1 marker "is
+missing". It is judged by the same threshold, and `leakage_via` says what reached it: `value`,
+`missingness` or `both` (a numeric or categorical column that is missing exactly for one class
+is reached by both, since the value score already sees missing values as a value of their own;
+only a column of a kind the value score leaves out, such as text or dates, is reached by
+missingness alone). Like the value score, the marker must nearly determine the target in both
+directions: a column that is always missing for one class and missing for part of the other too
+does not reach the threshold.
+
 This is computed on all the rows before any split, with the target, so the choice of what to
 drop is informed by labels of rows that will land in the test set. The risk is small and bounded,
 and the design keeps it that way: the score is out of fold, so it does not reward fitting;
@@ -204,6 +215,11 @@ class ProfilerConfig:
     # - depth 4: 16 leaves follow a stepped or curved relation and separate a few groups of
     #   codes along the axis, and are too few to memorise noise.
     leakage_min_score: float = 0.9
+    # - 5% missing: a column can give the target away by whether it has a value at all (a field
+    #   filled in only after the outcome). The same score and the same threshold judge the 0/1
+    #   marker "is missing" as a column. Under 5% of the rows the marker has so few ones that
+    #   the score out of fold rests on a handful of rows; at the 100-row minimum, 5% is five.
+    leakage_min_missing_ratio: float = 0.05
     leakage_max_rows: int = 20_000
     leakage_min_rows: int = 100
     leakage_folds: int = 5
@@ -266,8 +282,12 @@ class ColumnProfile(BaseModel):
     max_length: int | None = None
 
     # Relations to other columns. `target_association` is set only when the profile has a target
-    # and enough rows; `duplicate_of` names the earlier column this one copies.
+    # and enough rows; `missing_association` is the same score for the marker "is missing", only
+    # for a column with enough missing values; `leakage_via` says which of the two reached the
+    # leakage threshold. `duplicate_of` names the earlier column this one copies.
     target_association: float | None = None
+    missing_association: float | None = None
+    leakage_via: Literal["value", "missingness", "both"] | None = None
     duplicate_of: str | None = None
 
 
@@ -526,21 +546,39 @@ def _add_target_association(
         for c in columns
         if c.name != target and c.inferred_type in ("numeric", "categorical", "binary")
     ]
-    scores = target_association(
-        df,
-        target,
-        candidates,
-        task=task,
-        max_rows=config.leakage_max_rows,
-        min_rows=config.leakage_min_rows,
-        folds=config.leakage_folds,
-        tree_depth=config.leakage_tree_depth,
+    options = {
+        "task": task,
+        "max_rows": config.leakage_max_rows,
+        "min_rows": config.leakage_min_rows,
+        "folds": config.leakage_folds,
+        "tree_depth": config.leakage_tree_depth,
+    }
+    scores = target_association(df, target, candidates, **options)
+
+    # The marker of every column with enough missing values, scored like a column of its own.
+    gappy = [
+        c.name
+        for c in columns
+        if c.name != target and config.leakage_min_missing_ratio < c.missing_ratio < 1
+    ]
+    markers = pd.concat(
+        [pd.DataFrame({name: df[name].isna().astype(float) for name in gappy}), df[[target]]],
+        axis=1,
     )
+    gaps = target_association(markers, target, gappy, **options) if gappy else {}
+
     for column in columns:
-        if column.name in scores:
-            column.target_association = round(scores[column.name], 2)
-            if column.target_association >= config.leakage_min_score:
-                column.warnings.append("suspected_target_leakage")
+        value = round(scores[column.name], 2) if column.name in scores else None
+        gap = round(gaps[column.name], 2) if column.name in gaps else None
+        column.target_association = value
+        column.missing_association = gap
+        by_value = value is not None and value >= config.leakage_min_score
+        by_gap = gap is not None and gap >= config.leakage_min_score
+        if by_value or by_gap:
+            column.leakage_via = (
+                "both" if by_value and by_gap else "value" if by_value else "missingness"
+            )
+            column.warnings.append("suspected_target_leakage")
 
 
 def _profile_column(
