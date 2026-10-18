@@ -1,0 +1,2 @@
+Product code: commit 25418da (branch profile-leak-signals), the final code: profile signals, missing-value marker and the prompt principle that a missing mark does not make a column safe.
+Benchmark code and data: the same commit, set C (planted-c01 to planted-c08), both variants, 3 modes, 3 repeats. Set C was not looked at before this run.
