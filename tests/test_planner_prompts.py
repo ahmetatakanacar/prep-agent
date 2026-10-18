@@ -1,6 +1,7 @@
 import json
 from importlib import resources
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -466,3 +467,44 @@ def test_the_language_section_points_to_the_language_field_of_the_answer():
     section = prompt.split("\n## Language\n", 1)[1].split("\n## ", 1)[0]
     assert "`language` field" in section
     assert "first" in section
+
+
+# --- relations between columns ---
+
+
+@pytest.fixture
+def signal_profile():
+    r = np.random.default_rng(0)
+    a = r.normal(size=300)
+    y = 5 * a + r.normal(size=300)
+    df = pd.DataFrame({"a": a, "a_copy": a * 2.5, "leaked": y * 3 + 1, "y": y})
+    return profile_dataframe(df, target="y")
+
+
+def test_the_system_prompt_explains_the_leakage_and_duplicate_signals():
+    prompt = build_system_prompt()
+    for marker in ("`suspected_target_leakage`", "`target_association`", "`duplicate_of`"):
+        assert marker in prompt
+    assert "Drop the copy and keep the original" in prompt
+    assert "so do not ask" in prompt
+
+
+def test_the_system_prompt_sends_suspected_leakage_to_the_user_and_recommends_dropping():
+    prompt = build_system_prompt()
+    asking = prompt.split("## When to ask")[1].split("## Language")[0]
+    assert "a column has the warning `suspected_target_leakage`" in asking
+    assert "to drop it (recommended)" in asking
+    assert "drop every column marked `suspected_target_leakage` yourself" in asking
+
+
+def test_the_user_prompt_carries_the_signals_of_the_profile(signal_profile):
+    prompt = user_prompt(signal_profile)
+    assert '"suspected_target_leakage"' in prompt
+    assert '"duplicate_of":"a"' in prompt
+    assert '"target_association":' in prompt
+
+
+def test_the_prompt_says_when_no_question_may_be_asked(signal_profile):
+    prompt = user_prompt(signal_profile, question_rounds_left=0)
+    assert "Do not ask any more questions" in prompt
+    assert "You may still ask" not in prompt
