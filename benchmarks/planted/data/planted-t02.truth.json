@@ -1,0 +1,96 @@
+{
+  "dataset": "planted-t02",
+  "variant": "anonymous",
+  "seed": 4202,
+  "target": "y",
+  "task_type": "classification",
+  "n_rows": 2000,
+  "columns": [
+    {
+      "name": "c01",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c02",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "the app shows the driver arrival estimate when the ride is requested"
+    },
+    {
+      "name": "c03",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "c04",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c05",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.6,
+      "reason": "minutes spent on a support ticket opened after the cancellation"
+    },
+    {
+      "name": "c06",
+      "role": "must_drop",
+      "fault": "pii_phone",
+      "measurable": true
+    },
+    {
+      "name": "c07",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "a reason the driver app records only when the ride was cancelled"
+    },
+    {
+      "name": "c08",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.97,
+      "reason": "the kind of pickup point is chosen in the request, before it is cancelled"
+    },
+    {
+      "name": "c09",
+      "role": "must_drop",
+      "fault": "id_sequential",
+      "measurable": true
+    },
+    {
+      "name": "c10",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c11",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c12",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c13",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c14",
+      "role": "either",
+      "fault": "duplicate_exact",
+      "duplicate_of": "c03",
+      "measurable": true
+    }
+  ]
+}

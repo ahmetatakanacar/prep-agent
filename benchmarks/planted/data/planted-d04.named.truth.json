@@ -1,0 +1,115 @@
+{
+  "dataset": "planted-d04",
+  "variant": "named",
+  "seed": 4104,
+  "target": "gecikme_saat",
+  "task_type": "regression",
+  "n_rows": 2200,
+  "columns": [
+    {
+      "name": "carrier_code",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "carrier_name",
+      "role": "either",
+      "fault": "duplicate_exact",
+      "duplicate_of": "carrier_code",
+      "measurable": true
+    },
+    {
+      "name": "actual_transit_hours",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "measured on delivery, so it is the delay plus the planned time"
+    },
+    {
+      "name": "pickup_hour",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "vehicle_age_years",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "delay_reason_code",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.6,
+      "reason": "a code the dispatcher enters after a shipment turned out late"
+    },
+    {
+      "name": "weather_flag",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "destination_region",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "stops_count",
+      "role": "must_keep",
+      "avoid_op": "cast_to_category",
+      "measurable": true
+    },
+    {
+      "name": "route_distance_km",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.93,
+      "reason": "the planned route is known when the shipment is booked"
+    },
+    {
+      "name": "driver_experience_years",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "package_weight_kg",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "consignment_guid",
+      "role": "must_drop",
+      "fault": "id_uuid",
+      "measurable": true
+    },
+    {
+      "name": "customs_checks",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "service_level_code",
+      "role": "must_keep",
+      "fault": "numeric_category",
+      "expected_op": "cast_to_category",
+      "measurable": true
+    },
+    {
+      "name": "fuel_price_index",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "origin_region",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "cargo_class",
+      "role": "must_keep",
+      "measurable": true
+    }
+  ]
+}

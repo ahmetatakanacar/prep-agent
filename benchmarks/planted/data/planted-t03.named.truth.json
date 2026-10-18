@@ -1,0 +1,106 @@
+{
+  "dataset": "planted-t03",
+  "variant": "named",
+  "seed": 4203,
+  "target": "stockout",
+  "task_type": "classification",
+  "n_rows": 1300,
+  "columns": [
+    {
+      "name": "promo_active",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "shelf_life_days",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "buyer_contact",
+      "role": "must_drop",
+      "fault": "pii_name",
+      "measurable": true
+    },
+    {
+      "name": "units_on_hand",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "weekly_demand",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "restock_priority",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.75,
+      "reason": "a priority label the planner sets after a stockout is reported"
+    },
+    {
+      "name": "warehouse_id",
+      "role": "must_drop",
+      "fault": "constant",
+      "measurable": true
+    },
+    {
+      "name": "emergency_order_qty",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.95,
+      "reason": "units ordered in a rush, which is done only once the shelf is empty"
+    },
+    {
+      "name": "supplier_reliability",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "sku_guid",
+      "role": "must_drop",
+      "fault": "id_uuid",
+      "measurable": true
+    },
+    {
+      "name": "storage_zone",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "category",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "days_of_cover",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.93,
+      "reason": "stock divided by demand is known every day, before a stockout"
+    },
+    {
+      "name": "reorder_gap",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.6,
+      "reason": "how far stock is under the reorder point, known in advance"
+    },
+    {
+      "name": "lead_time_days",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "last_audit_days",
+      "role": "either",
+      "fault": "sentinel",
+      "measurable": false
+    }
+  ]
+}

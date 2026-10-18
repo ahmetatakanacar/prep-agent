@@ -1,0 +1,96 @@
+{
+  "dataset": "planted-t02",
+  "variant": "named",
+  "seed": 4202,
+  "target": "yolcu_iptal",
+  "task_type": "classification",
+  "n_rows": 2000,
+  "columns": [
+    {
+      "name": "talep_saati",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "tahmini_varis_dk",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "the app shows the driver arrival estimate when the ride is requested"
+    },
+    {
+      "name": "talep_semti",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "tahmini_sure_dk",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "destek_bileti_suresi",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.6,
+      "reason": "minutes spent on a support ticket opened after the cancellation"
+    },
+    {
+      "name": "yolcu_telefon",
+      "role": "must_drop",
+      "fault": "pii_phone",
+      "measurable": true
+    },
+    {
+      "name": "surucu_iptal_nedeni",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "a reason the driver app records only when the ride was cancelled"
+    },
+    {
+      "name": "alim_noktasi_tipi",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.97,
+      "reason": "the kind of pickup point is chosen in the request, before it is cancelled"
+    },
+    {
+      "name": "talep_no",
+      "role": "must_drop",
+      "fault": "id_sequential",
+      "measurable": true
+    },
+    {
+      "name": "surucu_puani",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "yolcu_gecmis_yolculuk",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "odeme_tipi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "mesafe_km",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "bolge_adi",
+      "role": "either",
+      "fault": "duplicate_exact",
+      "duplicate_of": "talep_semti",
+      "measurable": true
+    }
+  ]
+}

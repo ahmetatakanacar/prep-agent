@@ -123,3 +123,22 @@ The planner sees only the profile (`profile.json`), never the data. Profiling th
 - **A sequential id with a step above 1 is typed `numeric`.** The dense-span rule only catches steps of 1, so `id_sequential` with a step of 3 has no `possible_id` warning in the anonymous variant. In the named variant all four id columns are flagged, by name.
 
 In the named variant the profile flags the id columns, the person names, the e-mail addresses and the phone numbers, and still shows nothing for the leaks and the UUIDs (the `uuid` in a name does not make a 36-character string an identifier). Differences between the two variants therefore show how much the agent relies on what the profile flags.
+
+## Set D: partial leaks and legitimate strong features
+
+Sets A, B and C are the same eight recipes with three sets of seeds. Their leaks give themselves away (an association of 0.95 to 1.00) and the legitimate columns are weak (at most about 0.44), so a threshold on the association separates them by construction. Set D asks a harder question and is independent of the others: new domains, column names, column counts and row counts, mixed classification and regression, and the old fault types in less obvious forms.
+
+What it adds are columns that carry part of the target, at a chosen **level** of association with it, with the label set by what the column **means** and not by the number:
+
+- `leak_partial` (must drop): information that exists only after the outcome, such as a status written afterwards, a cost computed from the result, or a date that is filled in only when the event happened. Levels 0.6, 0.75, 0.85 and 0.95.
+- `legit_strong` (must keep): a real property that is known before the outcome and predicts it well, like the odor of a mushroom or the floor area of a building. Levels 0.6, 0.75, 0.85, 0.93 and 0.97, so some are as strong as a leak and above the profile's 0.9 threshold.
+
+At each level there are both kinds, made the same way from the target, so nothing in the numbers tells them apart. Each such column has a `level` and a `reason` in the ground truth. The forms are a number, a category, or (for classification) a gap: a value that exists only for part of the positive rows. `planted_generate_d.py` explains how a column is made to have a level, and a test checks the mechanism on targets made for that purpose (within 0.1 of the level, for every task, form and level).
+
+The old faults come in less obvious forms: identifiers that are not dense (`sparse` gaps, a `prefixed` string), a UUID without hyphens (`hex32`), an e-mail address built from an initial, a phone number stored as a 10-digit integer, names written surname first or as an initial, a unit-converted copy rounded so coarsely that its correlation stays under 0.9999 (`coarse`), and a categorical copy under other labels (`relabel`).
+
+### Dev and test
+
+The twelve recipes are split in two, with different domains: `planted-d01` to `planted-d06` (dev, for looking at results) and `planted-t01` to `planted-t06` (test). Both halves have the same level distribution: three leaks at each of the four levels and nine legitimate strong features.
+
+**The test half is run once, at the end.** Only its recipes and its ground truth are in the repository: its CSV files are git-ignored and are not written unless `planted_generate_d.py --with-test-data` is given, and nothing was run on them or profiled before that run. The runner refuses the test datasets unless the run is given `--final-test`. The dev half's data is committed like the other sets.

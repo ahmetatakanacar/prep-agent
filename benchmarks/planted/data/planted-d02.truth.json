@@ -1,0 +1,109 @@
+{
+  "dataset": "planted-d02",
+  "variant": "anonymous",
+  "seed": 4102,
+  "target": "y",
+  "task_type": "regression",
+  "n_rows": 1200,
+  "columns": [
+    {
+      "name": "c01",
+      "role": "must_drop",
+      "fault": "id_uuid",
+      "measurable": true
+    },
+    {
+      "name": "c02",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "c03",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.95,
+      "reason": "the energy bill, which is the consumption times a tariff"
+    },
+    {
+      "name": "c04",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c05",
+      "role": "must_drop",
+      "fault": "pii_name",
+      "measurable": true
+    },
+    {
+      "name": "c06",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c07",
+      "role": "must_drop",
+      "fault": "constant",
+      "measurable": true
+    },
+    {
+      "name": "c08",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c09",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.75,
+      "reason": "a label an auditor assigns after reading the meter"
+    },
+    {
+      "name": "c10",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c11",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c12",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c13",
+      "role": "either",
+      "fault": "duplicate_scaled",
+      "duplicate_of": "c02",
+      "measurable": true
+    },
+    {
+      "name": "c14",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.93,
+      "reason": "the size of the building is a plan fact, known before any consumption"
+    },
+    {
+      "name": "c15",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c16",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c17",
+      "role": "must_keep",
+      "measurable": true
+    }
+  ]
+}

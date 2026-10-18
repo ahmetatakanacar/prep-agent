@@ -1,0 +1,100 @@
+{
+  "dataset": "planted-t01",
+  "variant": "anonymous",
+  "seed": 4201,
+  "target": "y",
+  "task_type": "regression",
+  "n_rows": 1400,
+  "columns": [
+    {
+      "name": "c01",
+      "role": "either",
+      "fault": "duplicate_exact",
+      "duplicate_of": "c03",
+      "measurable": true
+    },
+    {
+      "name": "c02",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c03",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "c04",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.93,
+      "reason": "the price when the phone was released is public history"
+    },
+    {
+      "name": "c05",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c06",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c07",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c08",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c09",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.75,
+      "reason": "the discount the buyer got, agreed while the sale closed"
+    },
+    {
+      "name": "c10",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c11",
+      "role": "must_drop",
+      "fault": "id_uuid",
+      "measurable": true
+    },
+    {
+      "name": "c12",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.95,
+      "reason": "a price bracket assigned from the final sale price"
+    },
+    {
+      "name": "c13",
+      "role": "must_drop",
+      "fault": "pii_email",
+      "measurable": true
+    },
+    {
+      "name": "c14",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c15",
+      "role": "must_keep",
+      "fault": "numeric_category",
+      "expected_op": "cast_to_category",
+      "measurable": true
+    }
+  ]
+}

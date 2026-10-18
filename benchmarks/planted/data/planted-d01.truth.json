@@ -1,0 +1,105 @@
+{
+  "dataset": "planted-d01",
+  "variant": "anonymous",
+  "seed": 4101,
+  "target": "y",
+  "task_type": "classification",
+  "n_rows": 1800,
+  "columns": [
+    {
+      "name": "c01",
+      "role": "must_keep",
+      "fault": "numeric_category",
+      "expected_op": "cast_to_category",
+      "measurable": true
+    },
+    {
+      "name": "c02",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c03",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c04",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.97,
+      "reason": "the deposit terms are agreed at booking, before any cancellation"
+    },
+    {
+      "name": "c05",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c06",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c07",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c08",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "c09",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "a note the front desk writes after the stay or the cancellation"
+    },
+    {
+      "name": "c10",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c11",
+      "role": "must_drop",
+      "fault": "pii_email",
+      "measurable": true
+    },
+    {
+      "name": "c12",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c13",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.6,
+      "reason": "a date that exists only for cancelled bookings that were refunded"
+    },
+    {
+      "name": "c14",
+      "role": "either",
+      "fault": "duplicate_scaled",
+      "duplicate_of": "c08",
+      "measurable": true
+    },
+    {
+      "name": "c15",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c16",
+      "role": "must_drop",
+      "fault": "id_sequential",
+      "measurable": true
+    }
+  ]
+}

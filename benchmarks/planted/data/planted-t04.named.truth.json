@@ -1,0 +1,99 @@
+{
+  "dataset": "planted-t04",
+  "variant": "named",
+  "seed": 4204,
+  "target": "yillik_uretim_kwh",
+  "task_type": "regression",
+  "n_rows": 1250,
+  "columns": [
+    {
+      "name": "alarm_sayisi",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.6,
+      "reason": "alarms the monitoring system logged during the year being predicted"
+    },
+    {
+      "name": "inverter_verimi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "tesis_ili",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "egim_derece",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "montaj_tipi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "panel_yasi",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "golgelenme_orani",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "yon",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "inverter_sayisi",
+      "role": "must_keep",
+      "avoid_op": "cast_to_category",
+      "measurable": true
+    },
+    {
+      "name": "panel_yasi_ay",
+      "role": "either",
+      "fault": "duplicate_scaled",
+      "duplicate_of": "panel_yasi",
+      "measurable": true
+    },
+    {
+      "name": "tesis_no",
+      "role": "must_drop",
+      "fault": "id_sequential",
+      "measurable": true
+    },
+    {
+      "name": "panel_sayisi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "gunes_isinimi",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.93,
+      "reason": "the average irradiance of the site is a measured property of the place"
+    },
+    {
+      "name": "performans_sinifi",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "a grade given to the plant after a year of metered production"
+    },
+    {
+      "name": "sahip_eposta",
+      "role": "must_drop",
+      "fault": "pii_email",
+      "measurable": true
+    }
+  ]
+}

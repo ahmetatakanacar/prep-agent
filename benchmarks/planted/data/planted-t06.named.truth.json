@@ -1,0 +1,94 @@
+{
+  "dataset": "planted-t06",
+  "variant": "named",
+  "seed": 4206,
+  "target": "monthly_revenue",
+  "task_type": "regression",
+  "n_rows": 850,
+  "columns": [
+    {
+      "name": "currency",
+      "role": "must_drop",
+      "fault": "constant",
+      "measurable": true
+    },
+    {
+      "name": "store_ref",
+      "role": "must_drop",
+      "fault": "id_sequential",
+      "measurable": true
+    },
+    {
+      "name": "avg_ticket",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "seat_count",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.75,
+      "reason": "the capacity of the room is a fixed fact"
+    },
+    {
+      "name": "delivery_commission_total",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "a share of delivery revenue, so it is part of the revenue"
+    },
+    {
+      "name": "rating",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "rent_per_month",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "cuisine",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "staff_count",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "neighbourhood",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "owner_email",
+      "role": "must_drop",
+      "fault": "pii_email",
+      "measurable": true
+    },
+    {
+      "name": "avg_ticket_eur",
+      "role": "either",
+      "fault": "duplicate_scaled",
+      "duplicate_of": "avg_ticket",
+      "measurable": true
+    },
+    {
+      "name": "revenue_tier_label",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.6,
+      "reason": "a tier the owners association assigns after the year's revenue is reported"
+    },
+    {
+      "name": "opening_years",
+      "role": "must_keep",
+      "measurable": true
+    }
+  ]
+}

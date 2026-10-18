@@ -1,0 +1,107 @@
+{
+  "dataset": "planted-d06",
+  "variant": "named",
+  "seed": 4106,
+  "target": "hasar_tutari",
+  "task_type": "regression",
+  "n_rows": 950,
+  "columns": [
+    {
+      "name": "odeme_kademesi",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "the settlement tier is decided after the damage is known"
+    },
+    {
+      "name": "prim_tutari_usd",
+      "role": "either",
+      "fault": "duplicate_scaled",
+      "duplicate_of": "prim_tutari",
+      "measurable": true
+    },
+    {
+      "name": "prim_tutari",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "surucu_yasi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "arac_yasi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "kullanim_tipi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "ehliyet_yili",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "dosya_guid",
+      "role": "must_drop",
+      "fault": "id_uuid",
+      "measurable": true
+    },
+    {
+      "name": "kasa_tipi",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.6,
+      "reason": "the body type is on the registration, and repair costs differ by it"
+    },
+    {
+      "name": "eksper_rezervi",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.75,
+      "reason": "the reserve an appraiser sets after inspecting the damage"
+    },
+    {
+      "name": "son_hasar_ay",
+      "role": "either",
+      "fault": "sentinel",
+      "measurable": false
+    },
+    {
+      "name": "hasarsizlik_kademesi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "yillik_km",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "arac_degeri",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "the value of the car is on the policy before any accident"
+    },
+    {
+      "name": "ikamet_ili",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "hak_sahibi",
+      "role": "must_drop",
+      "fault": "pii_name",
+      "measurable": true
+    }
+  ]
+}

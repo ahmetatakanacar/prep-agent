@@ -23,13 +23,21 @@ FaultType = Literal[
     "numeric_category",
     "constant",
     "sentinel",
+    # Set D. A column that carries part of the target and is, by what it means, information
+    # that exists only after the outcome (`leak_partial`) or a real property that is known
+    # before it (`legit_strong`). Both have an intended `level` of association with the target,
+    # and the level says nothing about which of the two a column is.
+    "leak_partial",
+    "legit_strong",
 ]
 Variant = Literal["anonymous", "named"]
 VARIANTS: tuple[str, ...] = get_args(Variant)
 Role = Literal["must_drop", "must_keep", "either"]
 OpName = Literal["cast_to_category"]
 
-FAULT_TYPES: tuple[str, ...] = get_args(FaultType)
+# The fault types of the first three sets. Set D adds the two below.
+D_FAULT_TYPES: tuple[str, ...] = ("leak_partial", "legit_strong")
+FAULT_TYPES: tuple[str, ...] = tuple(t for t in get_args(FaultType) if t not in D_FAULT_TYPES)
 
 # Types whose column has to be dropped for the plan to count as having found the fault.
 DROP_FAULTS = frozenset(
@@ -43,6 +51,7 @@ DROP_FAULTS = frozenset(
         "pii_phone",
         "pii_name",
         "constant",
+        "leak_partial",
     }
 )
 DUPLICATE_FAULTS = frozenset({"duplicate_exact", "duplicate_scaled"})
@@ -73,6 +82,16 @@ class ColumnTruth(BaseModel):
         default=None, description="For a duplicate: the column it copies (the original)."
     )
     measurable: bool = True
+    level: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        description="For leak_partial and legit_strong: the association with the target that "
+        "the column was made to have (see planted_generate_d).",
+    )
+    reason: str | None = Field(
+        default=None, description="Why the column is a leak or a legitimate strong feature."
+    )
 
     @model_validator(mode="after")
     def _check(self) -> Self:
@@ -87,6 +106,13 @@ class ColumnTruth(BaseModel):
             raise ValueError("a numeric_category column expects cast_to_category")
         if self.expected_op is not None and self.role != "must_keep":
             raise ValueError("a column with an expected op must be kept")
+        if self.fault in D_FAULT_TYPES:
+            if self.level is None or not self.reason:
+                raise ValueError(f"{self.fault} needs a level and a reason")
+            if self.fault == "legit_strong" and self.role != "must_keep":
+                raise ValueError("a legit_strong column must have role must_keep")
+        elif self.level is not None:
+            raise ValueError("level is only for leak_partial and legit_strong")
         if self.fault in UNMEASURABLE_FAULTS and self.measurable:
             raise ValueError(f"{self.fault} is not measurable: {UNMEASURABLE_FAULTS[self.fault]}")
         if self.fault not in UNMEASURABLE_FAULTS and not self.measurable:

@@ -19,3 +19,6 @@ runs/
 # Benchmark data files and results
 benchmarks/datasets/
 benchmarks/results/
+
+# Set D: the data of the test recipes stays out of the repository until its one final run
+benchmarks/planted/data/planted-t*.csv

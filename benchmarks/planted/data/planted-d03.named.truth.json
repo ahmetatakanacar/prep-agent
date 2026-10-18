@@ -1,0 +1,100 @@
+{
+  "dataset": "planted-d03",
+  "variant": "named",
+  "seed": 4103,
+  "target": "gecti",
+  "task_type": "classification",
+  "n_rows": 1050,
+  "columns": [
+    {
+      "name": "final_notu",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.75,
+      "reason": "the grade of the exam whose result is the target"
+    },
+    {
+      "name": "bolum",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "ders_yuku",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "odev_teslim_sayisi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "ogrenci_yasi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "vize_notu",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "the midterm is taken before the final it predicts"
+    },
+    {
+      "name": "sertifika_tarihi",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.95,
+      "reason": "the date a certificate is issued, which only passing students get"
+    },
+    {
+      "name": "haftalik_calisma_saati",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "tekrar_gecmisi",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.93,
+      "reason": "how often the student retook courses is history before this exam"
+    },
+    {
+      "name": "son_giris_gun",
+      "role": "either",
+      "fault": "sentinel",
+      "measurable": false
+    },
+    {
+      "name": "veli_telefonu",
+      "role": "must_drop",
+      "fault": "pii_phone",
+      "measurable": true
+    },
+    {
+      "name": "onceki_not_ortalamasi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "ogrenci_no",
+      "role": "must_drop",
+      "fault": "id_sequential",
+      "measurable": true
+    },
+    {
+      "name": "devam_orani",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "burs_durumu",
+      "role": "must_keep",
+      "measurable": true
+    }
+  ]
+}

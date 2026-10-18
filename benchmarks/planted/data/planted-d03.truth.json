@@ -1,0 +1,100 @@
+{
+  "dataset": "planted-d03",
+  "variant": "anonymous",
+  "seed": 4103,
+  "target": "y",
+  "task_type": "classification",
+  "n_rows": 1050,
+  "columns": [
+    {
+      "name": "c01",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.75,
+      "reason": "the grade of the exam whose result is the target"
+    },
+    {
+      "name": "c02",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c03",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c04",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c05",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c06",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "the midterm is taken before the final it predicts"
+    },
+    {
+      "name": "c07",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.95,
+      "reason": "the date a certificate is issued, which only passing students get"
+    },
+    {
+      "name": "c08",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c09",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.93,
+      "reason": "how often the student retook courses is history before this exam"
+    },
+    {
+      "name": "c10",
+      "role": "either",
+      "fault": "sentinel",
+      "measurable": false
+    },
+    {
+      "name": "c11",
+      "role": "must_drop",
+      "fault": "pii_phone",
+      "measurable": true
+    },
+    {
+      "name": "c12",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c13",
+      "role": "must_drop",
+      "fault": "id_sequential",
+      "measurable": true
+    },
+    {
+      "name": "c14",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c15",
+      "role": "must_keep",
+      "measurable": true
+    }
+  ]
+}

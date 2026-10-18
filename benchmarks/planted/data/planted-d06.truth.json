@@ -1,0 +1,107 @@
+{
+  "dataset": "planted-d06",
+  "variant": "anonymous",
+  "seed": 4106,
+  "target": "y",
+  "task_type": "regression",
+  "n_rows": 950,
+  "columns": [
+    {
+      "name": "c01",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "the settlement tier is decided after the damage is known"
+    },
+    {
+      "name": "c02",
+      "role": "either",
+      "fault": "duplicate_scaled",
+      "duplicate_of": "c03",
+      "measurable": true
+    },
+    {
+      "name": "c03",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "c04",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c05",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c06",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c07",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c08",
+      "role": "must_drop",
+      "fault": "id_uuid",
+      "measurable": true
+    },
+    {
+      "name": "c09",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.6,
+      "reason": "the body type is on the registration, and repair costs differ by it"
+    },
+    {
+      "name": "c10",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.75,
+      "reason": "the reserve an appraiser sets after inspecting the damage"
+    },
+    {
+      "name": "c11",
+      "role": "either",
+      "fault": "sentinel",
+      "measurable": false
+    },
+    {
+      "name": "c12",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c13",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c14",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "the value of the car is on the policy before any accident"
+    },
+    {
+      "name": "c15",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c16",
+      "role": "must_drop",
+      "fault": "pii_name",
+      "measurable": true
+    }
+  ]
+}

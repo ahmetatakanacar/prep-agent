@@ -1,0 +1,100 @@
+{
+  "dataset": "planted-d05",
+  "variant": "named",
+  "seed": 4105,
+  "target": "disease_present",
+  "task_type": "classification",
+  "n_rows": 1500,
+  "columns": [
+    {
+      "name": "leaf_spot_pattern",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.97,
+      "reason": "the pattern of spots is observed in the field, like the odor of a mushroom"
+    },
+    {
+      "name": "grower_email",
+      "role": "must_drop",
+      "fault": "pii_email",
+      "measurable": true
+    },
+    {
+      "name": "rainfall_mm_30d",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "survey_round",
+      "role": "must_drop",
+      "fault": "constant",
+      "measurable": true
+    },
+    {
+      "name": "field_slope",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "soil_ph",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "plant_age_days",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "lab_confirmation_score",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.95,
+      "reason": "the lab's score, which exists only after a sample was sent for the diagnosis"
+    },
+    {
+      "name": "plot_ref",
+      "role": "must_drop",
+      "fault": "id_sequential",
+      "measurable": true
+    },
+    {
+      "name": "irrigation",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "nitrogen_ppm",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "crop_variety",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "treatment_cost",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.6,
+      "reason": "money spent after the disease was found"
+    },
+    {
+      "name": "leaf_area_cm2",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "humidity_index",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.75,
+      "reason": "measured by the field sensor before the diagnosis"
+    }
+  ]
+}

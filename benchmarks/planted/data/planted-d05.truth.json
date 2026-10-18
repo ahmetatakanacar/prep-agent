@@ -1,0 +1,100 @@
+{
+  "dataset": "planted-d05",
+  "variant": "anonymous",
+  "seed": 4105,
+  "target": "y",
+  "task_type": "classification",
+  "n_rows": 1500,
+  "columns": [
+    {
+      "name": "c01",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.97,
+      "reason": "the pattern of spots is observed in the field, like the odor of a mushroom"
+    },
+    {
+      "name": "c02",
+      "role": "must_drop",
+      "fault": "pii_email",
+      "measurable": true
+    },
+    {
+      "name": "c03",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c04",
+      "role": "must_drop",
+      "fault": "constant",
+      "measurable": true
+    },
+    {
+      "name": "c05",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c06",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c07",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c08",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.95,
+      "reason": "the lab's score, which exists only after a sample was sent for the diagnosis"
+    },
+    {
+      "name": "c09",
+      "role": "must_drop",
+      "fault": "id_sequential",
+      "measurable": true
+    },
+    {
+      "name": "c10",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c11",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c12",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c13",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.6,
+      "reason": "money spent after the disease was found"
+    },
+    {
+      "name": "c14",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c15",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.75,
+      "reason": "measured by the field sensor before the diagnosis"
+    }
+  ]
+}

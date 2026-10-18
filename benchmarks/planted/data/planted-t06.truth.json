@@ -1,0 +1,94 @@
+{
+  "dataset": "planted-t06",
+  "variant": "anonymous",
+  "seed": 4206,
+  "target": "y",
+  "task_type": "regression",
+  "n_rows": 850,
+  "columns": [
+    {
+      "name": "c01",
+      "role": "must_drop",
+      "fault": "constant",
+      "measurable": true
+    },
+    {
+      "name": "c02",
+      "role": "must_drop",
+      "fault": "id_sequential",
+      "measurable": true
+    },
+    {
+      "name": "c03",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "c04",
+      "role": "must_keep",
+      "fault": "legit_strong",
+      "measurable": true,
+      "level": 0.75,
+      "reason": "the capacity of the room is a fixed fact"
+    },
+    {
+      "name": "c05",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.85,
+      "reason": "a share of delivery revenue, so it is part of the revenue"
+    },
+    {
+      "name": "c06",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c07",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c08",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c09",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c10",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "c11",
+      "role": "must_drop",
+      "fault": "pii_email",
+      "measurable": true
+    },
+    {
+      "name": "c12",
+      "role": "either",
+      "fault": "duplicate_scaled",
+      "duplicate_of": "c03",
+      "measurable": true
+    },
+    {
+      "name": "c13",
+      "role": "must_drop",
+      "fault": "leak_partial",
+      "measurable": true,
+      "level": 0.6,
+      "reason": "a tier the owners association assigns after the year's revenue is reported"
+    },
+    {
+      "name": "c14",
+      "role": "must_keep",
+      "measurable": true
+    }
+  ]
+}
