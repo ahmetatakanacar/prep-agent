@@ -64,10 +64,16 @@ HIGHER_IS_BETTER = {
 
 
 class BaselineScore(BaseModel):
-    """Mean and standard deviation (ddof 0, like `numpy.std`) of one metric over the folds."""
+    """Mean and standard deviation (ddof 0, like `numpy.std`) of one metric over the folds.
+
+    `folds` are the scores of the folds in fold order. With the same rows in the same order, two
+    plans have the same folds, so their scores can be compared fold by fold. Empty in results
+    written before it existed.
+    """
 
     mean: float
     std: float
+    folds: list[float] = []
 
 
 class ModelBaseline(BaseModel):
@@ -274,7 +280,11 @@ def _summarise(raw: dict, scoring: dict) -> dict[str, BaselineScore]:
     scores = {}
     for metric in scoring:
         values = -raw[f"test_{metric}"] if metric in _NEGATED else raw[f"test_{metric}"]
-        scores[metric] = BaselineScore(mean=float(np.mean(values)), std=float(np.std(values)))
+        scores[metric] = BaselineScore(
+            mean=float(np.mean(values)),
+            std=float(np.std(values)),
+            folds=[float(value) for value in values],
+        )
     return scores
 
 

@@ -856,3 +856,130 @@ class TestHeaderAndNotes:
     def test_is_deterministic(self):
         data = results([job("d1", "naive", baseline=classification_baseline(0.5, 0.6))], models=())
         assert render_summary(data) == render_summary(data)
+
+
+class TestTheNoiseRule:
+    """A difference is noise when it is smaller than two standard errors of the difference."""
+
+    HEADING = "## Agent against the naive plan"
+
+    @staticmethod
+    def folded(forest_folds, n_rows=100) -> BaselineResult:
+        """A classification baseline whose forest has these fold scores."""
+        from statistics import fmean, pstdev
+
+        base = classification_baseline(0.5, fmean(forest_folds))
+        forest = base.models[2].model_copy(
+            update={
+                "scores": {
+                    "f1_macro": BaselineScore(
+                        mean=fmean(forest_folds),
+                        std=pstdev(forest_folds),
+                        folds=list(forest_folds),
+                    )
+                }
+            }
+        )
+        return base.model_copy(update={"models": [*base.models[:2], forest], "n_rows": n_rows})
+
+    def cell(self, jobs, **kwargs):
+        rows = table(render_summary(results(jobs, **kwargs)), self.HEADING)
+        return row(rows, "d1")[2], row(rows, TALLY)[2]
+
+    def test_a_steady_difference_between_the_same_folds_is_not_noise(self):
+        naive = [0.60, 0.62, 0.58, 0.64, 0.61]
+        agent = [x + 0.01 for x in naive]
+        jobs = [
+            job("d1", "naive", baseline=self.folded(naive)),
+            job("d1", "agent", baseline=self.folded(agent)),
+        ]
+        # The folds vary by 0.02 between them, more than the difference of 0.01, but the agent
+        # is ahead by the same amount in every fold.
+        assert self.cell(jobs) == ("+0.010", "1 / 0 / 0")
+
+    def test_a_difference_that_changes_sign_between_folds_is_noise(self):
+        naive = [0.60, 0.62, 0.58, 0.64, 0.61]
+        agent = [0.62, 0.60, 0.61, 0.62, 0.62]
+        jobs = [
+            job("d1", "naive", baseline=self.folded(naive)),
+            job("d1", "agent", baseline=self.folded(agent)),
+        ]
+        cell, tally = self.cell(jobs)
+        assert cell.endswith("≈") and tally == "0 / 0 / 1"
+
+    def test_without_fold_scores_the_error_comes_from_the_spread_of_the_folds(self):
+        jobs = [
+            job("d1", "naive", baseline=classification_baseline(0.5, 0.60, std=0.02)),
+            job("d1", "agent", baseline=classification_baseline(0.5, 0.61, std=0.02)),
+        ]
+        assert self.cell(jobs) == ("+0.010 ≈", "0 / 0 / 1")
+
+    def test_fold_scores_of_plans_with_different_train_rows_are_not_paired(self):
+        naive = [0.60, 0.62, 0.58, 0.64, 0.61]
+        agent = [x + 0.01 for x in naive]
+        jobs = [
+            job("d1", "naive", baseline=self.folded(naive, n_rows=100)),
+            job("d1", "agent", baseline=self.folded(agent, n_rows=99)),
+        ]
+        assert self.cell(jobs)[0].endswith("≈")
+
+    def test_the_spread_between_the_runs_of_an_agent_widens_the_error(self):
+        naive = [0.60, 0.62, 0.58, 0.64, 0.61]
+        # Two runs, one 0.15 ahead and one 0.05 behind: the mean is 0.05 ahead, but the plans
+        # of the agent differ so much from run to run that this is noise.
+        jobs = [job("d1", "naive", baseline=self.folded(naive))]
+        jobs += [
+            job("d1", "agent", repeat=1, baseline=self.folded([x + 0.15 for x in naive])),
+            job("d1", "agent", repeat=2, baseline=self.folded([x - 0.05 for x in naive])),
+        ]
+        assert self.cell(jobs, repeats=2)[0].endswith("≈")
+        jobs[2] = job(
+            "d1", "agent", repeat=2, baseline=self.folded([x + 0.0004 + 0.1 for x in naive])
+        )
+        assert self.cell(jobs, repeats=2)[1] == "1 / 0 / 0"
+
+    def test_a_run_that_kept_a_leaky_column_is_a_loss_whatever_its_score(self):
+        jobs = [
+            job("d1", "naive", baseline=classification_baseline(0.5, 0.60)),
+            job(
+                "d1",
+                "agent",
+                baseline=classification_baseline(0.5, 0.90),
+                kept_leaky_columns=["boat"],
+            ),
+        ]
+        assert self.cell(jobs) == (
+            "+0.300 †",
+            "0 / 1 / 0 (1 of the worse kept a leaky column †)",
+        )
+
+    def test_one_leaky_run_among_several_makes_the_dataset_a_loss(self):
+        jobs = [job("d1", "naive", baseline=classification_baseline(0.5, 0.60))]
+        jobs += [
+            job("d1", "agent", repeat=1, baseline=classification_baseline(0.5, 0.60)),
+            job(
+                "d1",
+                "agent",
+                repeat=2,
+                baseline=classification_baseline(0.5, 0.60),
+                kept_leaky_columns=["boat"],
+            ),
+        ]
+        assert self.cell(jobs, repeats=2)[1].startswith("0 / 1 / 0")
+
+    def test_a_naive_plan_that_kept_a_leak_leaves_the_comparison_out(self):
+        jobs = [
+            job(
+                "d1",
+                "naive",
+                baseline=classification_baseline(0.5, 0.90),
+                kept_leaky_columns=["boat"],
+            ),
+            job("d1", "agent", baseline=classification_baseline(0.5, 0.60)),
+        ]
+        assert self.cell(jobs) == ("-0.300 †", "0 / 0 / 0 (1 excluded †)")
+
+    def test_the_text_says_how_the_error_is_made(self):
+        md = render_summary(results([job("d1", "naive"), job("d1", "agent")]))
+        assert "smaller than 2 standard errors of the difference" in md
+        assert "counts as worse whatever its score" in md

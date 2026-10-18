@@ -7,7 +7,8 @@ that is least sensitive to scaling and encoding choices.
 """
 
 from collections import Counter
-from statistics import fmean, stdev
+from math import sqrt
+from statistics import fmean, stdev, variance
 
 from bench_results import BenchmarkResults, JobResult
 from prep_agent.baseline import BaselineResult, BaselineScore, metric_label
@@ -22,6 +23,10 @@ LEAK_MARK = "†"
 NO_TREATMENT = "none"
 NOISE_MARK = "≈"
 TALLY_LABEL = "better / worse / within noise"
+# A difference is called noise when it is smaller than this many standard errors of the
+# difference. Two is about a 95% interval; the score of a plan is a cross-validation
+# estimate whose folds are not independent, so the error is, if anything, understated.
+NOISE_Z = 2.0
 _MAX_REASON = 200
 
 
@@ -206,9 +211,14 @@ def _against(results: BenchmarkResults, other: str, name: str) -> str:
             "",
             "Difference in the random forest's score on the main metric (macro F1 for "
             "classification, R² for regression): positive means the agent's plan scored higher. "
-            f"{NOISE_MARK} marks a difference smaller than the larger of the two plans' "
-            "fold standard deviations (for an agent with repeats, the mean over its runs); it is "
-            "not counted as better or worse.",
+            f"{NOISE_MARK} marks a difference smaller than {NOISE_Z:g} standard errors of the "
+            "difference; it is not counted as better or worse. The error is taken from the "
+            "differences of the plans' scores fold by fold when the results hold the fold scores "
+            "(both plans then have the same folds), plus the spread between the runs of an agent; "
+            "otherwise it is estimated from the standard deviations of the folds, which is wider. "
+            f"{LEAK_MARK} on an agent's cell: a run kept a column that gives the target "
+            "away, which counts as worse whatever its score; if it is the naive plan that kept "
+            "one, the comparison is left out, because that score is inflated by the leak.",
             "",
             _table(["dataset", "metric", *agents], rows),
         ]
@@ -218,24 +228,84 @@ def _against(results: BenchmarkResults, other: str, name: str) -> str:
 def _compare(
     agent_jobs: list[JobResult], other_jobs: list[JobResult], metric: str
 ) -> tuple[str | None, str]:
-    """The verdict (better, worse, noise, excluded; None without a score) and the cell."""
+    """The verdict (better, worse, leak, noise, excluded; None without a score) and the cell.
+
+    An agent run that kept a leaky column is a loss ("leak") whatever its score. A comparison
+    with a plan that kept one is left out ("excluded"): that plan's score is not a score of its
+    preparation.
+    """
     agent, other = _forest_mean(agent_jobs, metric), _forest_mean(other_jobs, metric)
     if agent is None or other is None:
         return None, DASH
     diff = agent - other
-    if _leaks(agent_jobs) or _leaks(other_jobs):
+    if _leaks(agent_jobs):
+        return "leak", f"{diff:+.3f} {LEAK_MARK}"
+    if _leaks(other_jobs):
         return "excluded", f"{diff:+.3f} {LEAK_MARK}"
-    spread = max(_forest_spread(agent_jobs, metric), _forest_spread(other_jobs, metric))
-    if abs(diff) < spread or diff == 0:
+    error = _difference_error(agent_jobs, other_jobs, metric)
+    if abs(diff) < NOISE_Z * error or diff == 0:
         return "noise", f"{diff:+.3f} {NOISE_MARK}"
     return ("better" if diff > 0 else "worse"), f"{diff:+.3f}"
 
 
 def _tally(counts: Counter) -> str:
-    text = f"{counts['better']} / {counts['worse']} / {counts['noise']}"
+    worse = counts["worse"] + counts["leak"]
+    text = f"{counts['better']} / {worse} / {counts['noise']}"
+    notes = []
+    if counts["leak"]:
+        notes.append(f"{counts['leak']} of the worse kept a leaky column {LEAK_MARK}")
     if counts["excluded"]:
-        text += f" ({counts['excluded']} excluded {LEAK_MARK})"
-    return text
+        notes.append(f"{counts['excluded']} excluded {LEAK_MARK}")
+    return text + (f" ({', '.join(notes)})" if notes else "")
+
+
+def _difference_error(
+    agent_jobs: list[JobResult], other_jobs: list[JobResult], metric: str
+) -> float:
+    """The standard error of the difference between the mean forest score of the agent's runs and
+    the other plan's.
+
+    With fold scores on both sides and the same train rows, the plans have the same folds and
+    the differences are taken fold by fold: their spread over the folds, divided by the square
+    root of the number of folds, plus the spread between the agent's runs (their mean
+    differences) over the number of runs. Without them, the variance of each side is estimated
+    from the standard deviation of its folds, which does not use that the folds are shared and so
+    is wider. Fold scores of one dataset are not independent, so either error is a little too
+    small.
+    """
+    agent = [
+        _fold_score(j.baseline, (FOREST,), metric) for j in agent_jobs if _has_metric(j, metric)
+    ]
+    other = [
+        _fold_score(j.baseline, (FOREST,), metric) for j in other_jobs if _has_metric(j, metric)
+    ]
+    n_folds = next(j.baseline.n_folds for j in agent_jobs if _has_metric(j, metric))
+    n_folds = n_folds or 5
+    run_means = [s.mean for s in agent]
+    between_runs = variance(run_means) / len(run_means) if len(run_means) > 1 else 0.0
+
+    if _paired(agent_jobs, other_jobs, metric):
+        other_folds = [fmean(folds) for folds in zip(*(s.folds for s in other), strict=True)]
+        per_fold = [fmean(run.folds[k] - other_folds[k] for run in agent) for k in range(n_folds)]
+        fold_variance = variance(per_fold) / n_folds
+    else:
+        # The standard deviation of a score is taken with ddof 0; this is the sample variance.
+        sides = [fmean(s.std**2 * n_folds / (n_folds - 1) for s in side) for side in (agent, other)]
+        fold_variance = sum(sides) / n_folds
+    return sqrt(fold_variance + between_runs)
+
+
+def _paired(agent_jobs: list[JobResult], other_jobs: list[JobResult], metric: str) -> bool:
+    jobs = [j for j in [*agent_jobs, *other_jobs] if _has_metric(j, metric)]
+    keys = {(j.baseline.n_rows, j.baseline.n_folds, j.baseline.random_state) for j in jobs}
+    if len(keys) != 1:
+        return False
+    n_folds = keys.pop()[1]
+    return (
+        n_folds is not None
+        and n_folds > 1
+        and all(len(_fold_score(j.baseline, (FOREST,), metric).folds) == n_folds for j in jobs)
+    )
 
 
 def _leaks(jobs: list[JobResult]) -> bool:
@@ -245,12 +315,6 @@ def _leaks(jobs: list[JobResult]) -> bool:
 def _forest_mean(jobs: list[JobResult], metric: str) -> float | None:
     scored = [_score(job.baseline, (FOREST,), metric) for job in jobs if _has_metric(job, metric)]
     return fmean(scored) if scored else None
-
-
-def _forest_spread(jobs: list[JobResult], metric: str) -> float:
-    return fmean(
-        _fold_score(job.baseline, (FOREST,), metric).std for job in jobs if _has_metric(job, metric)
-    )
 
 
 # --- plan differences ---
