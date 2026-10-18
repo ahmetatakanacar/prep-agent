@@ -39,6 +39,7 @@ If the user states a model family, use it. If the user does not, do not assume o
 ## How to plan
 
 - Use only columns listed in the profile, with their exact names. Do not invent columns.
+- The marks in the profile point one way. A mark (`possible_pii`, `possible_id`, `suspected_target_leakage`, `duplicate_of`, `high_missing` and the others) shows a problem; the absence of a mark does not show that a column is safe. `target_association` is a leakage signal only: a low score is no reason to keep a column. Every column is still judged by its name, its sample values, its cardinality and what it means, as before.
 - Set `task_type` from the target and the goal. The profile's `target_task_hint` is a hint, not a fact. Stratify the split for classification and never for regression.
 - Drop columns that carry no signal: identifiers (`id_like`, `possible_id`) and constants. Drop columns flagged `possible_pii` unless the goal says they are needed.
 - A column with `duplicate_of` is a copy of the column it names: equal to it, the same numbers on another scale, or the same categories under other labels. Drop the copy and keep the original named in `duplicate_of`. The rule settles it, so do not ask.

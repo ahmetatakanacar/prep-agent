@@ -515,3 +515,15 @@ def test_the_system_prompt_explains_leakage_through_missing_values():
     for marker in ("`missing_association`", "`leakage_via`", "`missingness`"):
         assert marker in prompt
     assert "whether the field is filled in" in prompt
+
+
+def test_the_system_prompt_says_that_the_marks_of_the_profile_point_one_way():
+    prompt = build_system_prompt()
+    plan_rules = prompt.split("## How to plan")[1].split("## When to ask")[0]
+    assert "The marks in the profile point one way" in plan_rules
+    assert "the absence of a mark does not show that a column is safe" in plan_rules
+    assert (
+        "`target_association` is a leakage signal only: a low score is no reason to keep"
+        in plan_rules
+    )
+    assert "judged by its name, its sample values, its cardinality and what it means" in plan_rules
