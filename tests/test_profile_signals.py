@@ -551,7 +551,12 @@ def test_the_missing_ratio_limit_and_the_threshold_come_from_the_config():
     df = classification_frame()
     df.loc[df.index < len(df) * 0.03, "a"] = np.nan
     assert profile(df, leakage_min_missing_ratio=0.02)["a"].missing_association is not None
-    assert profile(gappy_frame("numeric"), leakage_min_score=1.1)["gap"].leakage_via is None
+    assert (
+        profile(gappy_frame("numeric"), leakage_min_score=1.1, high_association_min_score=1.1)[
+            "gap"
+        ].leakage_via
+        is None
+    )
 
 
 def test_a_column_with_nothing_present_has_no_marker_score():
@@ -574,3 +579,73 @@ def test_a_leak_through_missing_values_shows_in_the_profile_json():
     assert by_name["gap"]["leakage_via"] == "missingness"
     assert "target_association" not in by_name["gap"]
     assert "missing_association" in by_name["gap"]
+
+
+# --- two tiers ---
+
+
+def shifted_frame(shift: float, seed=40) -> pd.DataFrame:
+    """A class and a number that is `shift` spreads higher for the positive class: the score of
+    the number is about 2 * Phi(shift / 2) - 1, so 2.3 gives about 0.75 and 4 gives about 0.95."""
+    r = rng(seed)
+    y = (r.random(2000) < 0.4).astype(int)
+    return pd.DataFrame(
+        {"x": shift * y + r.normal(size=2000), "noise": r.normal(size=2000), "y": y}
+    )
+
+
+def tier(column) -> tuple[str, ...]:
+    return tuple(w for w in column.warnings if w.endswith(("leakage", "association")))
+
+
+def test_a_column_that_nearly_determines_the_target_is_in_the_upper_tier_only():
+    column = profile(shifted_frame(4.0))["x"]
+    assert column.target_association >= 0.9
+    assert tier(column) == ("suspected_target_leakage",)
+    assert column.leakage_via == "value"
+
+
+def test_a_strong_but_not_decisive_column_is_in_the_lower_tier():
+    column = profile(shifted_frame(2.3))["x"]
+    assert 0.6 <= column.target_association < 0.9
+    assert tier(column) == ("high_target_association",)
+    assert column.leakage_via == "value"
+
+
+def test_a_weak_column_and_noise_are_in_no_tier():
+    columns = profile(shifted_frame(1.0))
+    assert columns["x"].target_association < 0.6 and tier(columns["x"]) == ()
+    assert tier(columns["noise"]) == () and columns["noise"].leakage_via is None
+
+
+def test_the_tiers_come_from_the_config():
+    df = shifted_frame(2.3)
+    assert tier(profile(df, high_association_min_score=0.9)["x"]) == ()
+    assert tier(profile(df, leakage_min_score=0.7)["x"]) == ("suspected_target_leakage",)
+    assert tier(profile(df, high_association_min_score=0.2)["x"]) == ("high_target_association",)
+
+
+def test_missingness_has_the_same_two_tiers():
+    df = classification_frame()
+    present = df["y"].to_numpy() == 0
+    keep = present | (rng(41).random(len(df)) < 0.35)
+    df["gap"] = np.where(keep, rng(42).normal(size=len(df)), np.nan)
+    column = profile(df)["gap"]
+    assert 0.6 <= column.missing_association < 0.9
+    assert tier(column) == ("high_target_association",)
+    assert column.leakage_via in ("missingness", "both")
+
+
+def test_the_lower_tier_marks_a_legitimate_strong_feature_too():
+    """The profile cannot tell a derived column from a plain strong one: both are in the tier."""
+    r = rng(43)
+    area = r.normal(size=1000)
+    y = 0.85 * area + 0.5 * r.normal(size=1000)
+    df = pd.DataFrame({"area": area, "other": r.normal(size=1000), "y": y})
+    column = profile(df)["area"]
+    assert tier(column) in {("high_target_association",), ("suspected_target_leakage",)}
+
+
+def test_nothing_is_marked_without_a_target():
+    df = shifted_frame(4.0).drop(columns="y")
+    assert all(tier(c) == () for c in profile(df, target=None).values())

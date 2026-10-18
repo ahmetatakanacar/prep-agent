@@ -118,6 +118,8 @@ window.I18N = {
     "warn.suspected_target_leakage":
       "On its own it predicts the target almost perfectly: probably derived from the target or recorded after it.",
     "warn.duplicate_column": "A copy of an earlier column: equal, rescaled or relabelled.",
+    "warn.high_target_association":
+      "Strongly related to the target on its own (0.6 to 0.9): worth checking that it is known when the prediction is made.",
 
     "brief.title": "Brief",
     "brief.goal": "Goal",
@@ -502,6 +504,8 @@ window.I18N = {
     "warn.suspected_target_leakage":
       "Tek başına hedefi neredeyse kusursuz tahmin ediyor: büyük olasılıkla hedeften türetilmiş ya da sonrasında kaydedilmiş.",
     "warn.duplicate_column": "Önceki bir sütunun kopyası: aynı, yeniden ölçeklenmiş ya da yeniden etiketlenmiş.",
+    "warn.high_target_association":
+      "Tek başına hedefle güçlü ilişkili (0.6 ile 0.9): tahmin anında bilindiğinden emin olmakta fayda var.",
 
     "brief.title": "Özet",
     "brief.goal": "Amaç",

@@ -66,15 +66,19 @@ Target association: with a target, every numeric, categorical or binary column g
 `target_association`, the share of the possible improvement over the trivial predictor that a
 model seeing only that column reaches on rows it was not fitted on (see `prep_agent.signals`).
 A column at or above `leakage_min_score` also gets the warning `suspected_target_leakage`: it
-nearly determines the target alone, which in tabular data is far more often a column derived
-from the target, or recorded after it, than a good predictor. The warning is a suspicion for the
-planner to put to the user, not a verdict.
+nearly determines the target alone. A column from `high_association_min_score` up to that gets
+`high_target_association`. Neither is a verdict, and neither can be: the score only says how well
+one column predicts the target, and a column that is a plain fact known before the outcome (the
+floor area of a house, the odor of a mushroom) can predict it as well as a column that exists
+only because of the outcome. What separates them is what the column means, which the profile
+cannot see; the marks tell the planner where to look and to ask.
 
 A column can also give the target away by having a value or not, with the values themselves
 useless. A column with more than `leakage_min_missing_ratio` of its rows missing therefore also
 gets `missing_association`: the same score, computed the same way, for the 0/1 marker "is
-missing". It is judged by the same threshold, and `leakage_via` says what reached it: `value`,
-`missingness` or `both` (a numeric or categorical column that is missing exactly for one class
+missing". It is judged by the same thresholds, and `leakage_via` says what reached the lower
+bound of the tier the column is in: `value`, `missingness` or `both` (a numeric or categorical
+column that is missing exactly for one class
 is reached by both, since the value score already sees missing values as a value of their own;
 only a column of a kind the value score leaves out, such as text or dates, is reached by
 missingness alone). Like the value score, the marker must nearly determine the target in both
@@ -215,6 +219,12 @@ class ProfilerConfig:
     # - depth 4: 16 leaves follow a stepped or curved relation and separate a few groups of
     #   codes along the axis, and are too few to memorise noise.
     leakage_min_score: float = 0.9
+    # - 0.6 for the second tier: from here a column alone reaches more than half of the possible
+    #   improvement, which an ordinary predictor in a table with several useful columns does
+    #   not usually do, and which is enough to be worth a look. The tier is a call for attention
+    #   and a basis for a warning, not for dropping: unlike the 0.9 tier, nothing is dropped on
+    #   it alone (see the planner's rules for what happens when it may not ask).
+    high_association_min_score: float = 0.6
     # - 5% missing: a column can give the target away by whether it has a value at all (a field
     #   filled in only after the outcome). The same score and the same threshold judge the 0/1
     #   marker "is missing" as a column. Under 5% of the rows the marker has so few ones that
@@ -284,7 +294,8 @@ class ColumnProfile(BaseModel):
     # Relations to other columns. `target_association` is set only when the profile has a target
     # and enough rows; `missing_association` is the same score for the marker "is missing", only
     # for a column with enough missing values; `leakage_via` says which of the two reached the
-    # leakage threshold. `duplicate_of` names the earlier column this one copies.
+    # lower bound of the tier (suspected leakage or high association) the column is in.
+    # `duplicate_of` names the earlier column this one copies.
     target_association: float | None = None
     missing_association: float | None = None
     leakage_via: Literal["value", "missingness", "both"] | None = None
@@ -572,13 +583,19 @@ def _add_target_association(
         gap = round(gaps[column.name], 2) if column.name in gaps else None
         column.target_association = value
         column.missing_association = gap
-        by_value = value is not None and value >= config.leakage_min_score
-        by_gap = gap is not None and gap >= config.leakage_min_score
-        if by_value or by_gap:
-            column.leakage_via = (
-                "both" if by_value and by_gap else "value" if by_value else "missingness"
-            )
-            column.warnings.append("suspected_target_leakage")
+        best = max(value or 0.0, gap or 0.0)
+        if best >= config.leakage_min_score:
+            floor, warning = config.leakage_min_score, "suspected_target_leakage"
+        elif best >= config.high_association_min_score:
+            floor, warning = config.high_association_min_score, "high_target_association"
+        else:
+            continue
+        by_value = value is not None and value >= floor
+        by_gap = gap is not None and gap >= floor
+        column.leakage_via = (
+            "both" if by_value and by_gap else "value" if by_value else "missingness"
+        )
+        column.warnings.append(warning)
 
 
 def _profile_column(
