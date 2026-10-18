@@ -17,7 +17,9 @@ before the ratio is taken (a micro average): a dataset with more faults weighs m
 """
 
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+
+from pydantic import BaseModel, Field
 
 from planted_truth import DROP_FAULTS, DUPLICATE_FAULTS, DatasetTruth
 from prep_agent.plan import CastToCategoryStep, DropColumnsStep, Plan
@@ -36,29 +38,28 @@ class TypeScore:
         return self.detected / self.n
 
 
-@dataclass
-class Score:
+class Score(BaseModel):
     """The result of scoring one plan, or the sum over several (see `combine`).
 
     Column lists hold `dataset/column` so that they stay readable after `combine`.
     """
 
     datasets: list[str]
-    found: Counter[str] = field(default_factory=Counter)
-    planted: Counter[str] = field(default_factory=Counter)
+    found: Counter[str] = Field(default_factory=Counter)
+    planted: Counter[str] = Field(default_factory=Counter)
     # Drops: a correct drop is a must_drop column (or a pair) that was dropped.
     correct_drops: int = 0
     wrong_drops: int = 0
     required_drops: int = 0
-    over_dropped: list[str] = field(default_factory=list)
-    pairs_dropped_both: list[str] = field(default_factory=list)
+    over_dropped: list[str] = Field(default_factory=list)
+    pairs_dropped_both: list[str] = Field(default_factory=list)
     # Ops: columns with an expected op, and how many of them got it.
     expected_ops: int = 0
     applied_ops: int = 0
-    missing_ops: list[str] = field(default_factory=list)
-    avoided_op_violations: list[str] = field(default_factory=list)
-    unmeasurable: list[str] = field(default_factory=list)
-    unknown_dropped: list[str] = field(default_factory=list)
+    missing_ops: list[str] = Field(default_factory=list)
+    avoided_op_violations: list[str] = Field(default_factory=list)
+    unmeasurable: list[str] = Field(default_factory=list)
+    unknown_dropped: list[str] = Field(default_factory=list)
 
     @property
     def by_type(self) -> dict[str, TypeScore]:
