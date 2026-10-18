@@ -152,6 +152,7 @@ def build_user_prompt(
     question_rounds_left: int,
     plan_only: bool = False,
     schema_error: str | None = None,
+    resolved_plan: Plan | None = None,
 ) -> str:
     """Render the user message. `question_rounds_left == 0` tells the planner to stop asking;
     `plan_only` adds that its previous answer asked questions anyway and was refused;
@@ -167,4 +168,7 @@ def build_user_prompt(
         question_rounds_left=question_rounds_left,
         plan_only=plan_only,
         schema_error=schema_error,
+        resolved_plan_json=(
+            resolved_plan.model_dump_json(exclude_none=True) if resolved_plan else ""
+        ),
     )

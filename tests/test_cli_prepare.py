@@ -287,23 +287,23 @@ def test_choosing_the_custom_option_asks_for_text_and_keeps_it_verbatim(
 ):
     llm = use_llm(monkeypatch, [questions_reply(target_question()), plan_reply(VALID_PLAN)])
 
-    result = invoke_cli(prepare_args(tmp_path), input="3\nmonthly_spend\n")
+    result = invoke_cli(prepare_args(tmp_path), input="3\nthe spend column\n")
 
     assert result.exit_code == 0, result.output
-    assert "Answer: monthly_spend" in llm.calls[1].user
+    assert "Answer: the spend column" in llm.calls[1].user
     [qa] = read_json(only_run(tmp_path) / "qa.json")
-    assert qa["answer"] == "monthly_spend"
+    assert qa["answer"] == "the spend column"
     assert qa["question"]["allow_custom"] is True
 
 
 def test_an_empty_custom_answer_is_asked_again(invoke_cli, monkeypatch, tmp_path):
     llm = use_llm(monkeypatch, [questions_reply(target_question()), plan_reply(VALID_PLAN)])
 
-    result = invoke_cli(prepare_args(tmp_path), input="3\n\n   \nmonthly_spend\n")
+    result = invoke_cli(prepare_args(tmp_path), input="3\n\n   \nthe spend column\n")
 
     assert result.exit_code == 0, result.output
     assert result.output.count("The answer must not be empty") == 2
-    assert "Answer: monthly_spend" in llm.calls[1].user
+    assert "Answer: the spend column" in llm.calls[1].user
 
 
 def test_ending_the_input_while_typing_a_custom_answer_fails_cleanly(

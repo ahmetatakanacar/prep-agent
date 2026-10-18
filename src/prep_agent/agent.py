@@ -19,6 +19,15 @@ with the validation error added to the prompt, up to `max_schema_retries` times 
 own, `MAX_SCHEMA_RETRIES` by default, per planner call and apart from the revision budget). If
 the last attempt fails too, `AgentError` is raised.
 
+When the user did not name the target, the profile has no relation to it (no
+`target_association`, no marks) while the planner picks it. Once the target is known, the
+profile is made again around it. If the user answered a question about the target with a column,
+that is the target from then on, and the planner's next call carries the new profile. If the
+planner picked the target in a plan, and the profile around that target marks a column, the
+planner is called once more with the new profile and its own plan (purpose `resolve`), because
+a plan made without those relations cannot have taken them into account. With no mark there is no
+extra call. This happens once.
+
 The planner only ever sees the profile (see `prep_agent.planner`), never the data frame.
 """
 
@@ -43,6 +52,7 @@ from prep_agent.planner import (
 from prep_agent.profiler import (
     CsvOptions,
     DatasetProfile,
+    constant_target_message,
     profile_dataframe,
     require_varying_target,
 )
@@ -55,6 +65,9 @@ MAX_SCHEMA_RETRIES = 1
 # the prompt.
 SCHEMA_ERROR_LIMIT = 600
 
+# The profile warnings that tell the planner a column is strongly related to the target.
+MARKS = frozenset({"suspected_target_leakage", "high_target_association"})
+
 AskFn = Callable[[list[Question]], dict[str, str]]
 """Takes the planner's questions and returns `{question id: chosen option}` for every one."""
 
@@ -63,7 +76,7 @@ class LLMCallRecord(BaseModel):
     """What one planner call left behind. The prompts are not kept: they carry profile values."""
 
     index: int
-    purpose: Literal["plan", "revise", "schema_retry"]
+    purpose: Literal["plan", "revise", "schema_retry", "resolve"]
     model: str | None
     usage: TokenUsage | None
     # Codes of the validator errors this call was asked to fix; empty for a first plan.
@@ -252,6 +265,9 @@ class _Agent:
         self.question_rounds = 0
         self.revisions = 0
         self.plan_only_retried = False
+        # The plan the planner made before the target was known, to be reconsidered once.
+        self.resolved_plan: Plan | None = None
+        self.resolved_once = False
         self.attempt: _Attempt | None = None
         self._profiles: dict[str, DatasetProfile] = {}
 
@@ -264,6 +280,7 @@ class _Agent:
             if response.kind == "questions":
                 if self.question_rounds < self.max_question_rounds:
                     self._ask_user(response.questions or [])
+                    self._adopt_target_from_answers()
                 else:
                     self._charge_plan_only_retry()
                     plan_only = True
@@ -271,6 +288,10 @@ class _Agent:
 
             plan = response.plan
             assert plan is not None  # guaranteed by PlannerResponse for kind "plan"
+            self.resolved_plan = None
+            if self._target_unlocks_marks(plan):
+                self.resolved_plan = plan
+                continue
             attempt = self._try(plan)
             errors, warnings = partition_issues(attempt.issues)
             if attempt.execution_error is not None:
@@ -295,8 +316,12 @@ class _Agent:
             revision = Revision(plan=plan, issues=errors, warnings=warnings)
 
     def _call_planner(self, revision: Revision | None, plan_only: bool) -> PlannerResponse:
-        purpose: Literal["plan", "revise", "schema_retry"] = (
-            "revise" if revision or plan_only else "plan"
+        purpose: Literal["plan", "revise", "schema_retry", "resolve"] = (
+            "revise"
+            if revision or plan_only
+            else "resolve"
+            if self.resolved_plan is not None
+            else "plan"
         )
         schema_error: str | None = None
         attempts = 0
@@ -309,6 +334,7 @@ class _Agent:
                 model_family=self.model_family,
                 qa_history=self.qa_history,
                 revision=revision,
+                resolved_plan=self.resolved_plan,
                 question_rounds_left=self.max_question_rounds - self.question_rounds,
                 plan_only=plan_only,
                 schema_error=schema_error,
@@ -333,7 +359,7 @@ class _Agent:
 
     def _record(
         self,
-        purpose: Literal["plan", "revise", "schema_retry"],
+        purpose: Literal["plan", "revise", "schema_retry", "resolve"],
         revision: Revision | None,
         model: str | None,
         usage: TokenUsage | None,
@@ -383,6 +409,44 @@ class _Agent:
                 )
         self.qa_history.extend(QARecord(question=q, answer=answers[q.id]) for q in questions)
         self.question_rounds += 1
+
+    def _adopt_target(self, target: str, profile: DatasetProfile) -> None:
+        self.target = target
+        self.profile = profile
+
+    def _adopt_target_from_answers(self) -> None:
+        """Take a column the user named as the target as the target, and profile around it."""
+        if self.profile.target is not None:
+            return
+        names = {c.name for c in self.profile.columns}
+        for record in self.qa_history:
+            question = record.question
+            if "target" not in f"{question.id} {question.question}".lower():
+                continue
+            answer = record.answer.strip().strip("`'\"").strip()
+            if answer in names:
+                profile = profile_dataframe(self.df, target=answer, csv_options=self.csv_options)
+                if constant_target_message(next(c for c in profile.columns if c.name == answer)):
+                    continue
+                self._adopt_target(answer, profile)
+                return
+
+    def _target_unlocks_marks(self, plan: Plan) -> bool:
+        """Whether the plan was made without the target relations and the profile around its
+        target marks a column: then the planner gets them, once, and its plan is reconsidered."""
+        if self.profile.target is not None or self.resolved_once:
+            return False
+        if plan.target not in {c.name for c in self.profile.columns}:
+            return False
+        profile = self._profile_for(plan)
+        marked = any(
+            c.name != plan.target and MARKS.intersection(c.warnings) for c in profile.columns
+        )
+        if not marked:
+            return False
+        self.resolved_once = True
+        self._adopt_target(plan.target, profile)
+        return True
 
     def _try(self, plan: Plan) -> _Attempt:
         profile = self._profile_for(plan)

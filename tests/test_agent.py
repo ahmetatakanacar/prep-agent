@@ -2,6 +2,7 @@ import copy
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -892,3 +893,145 @@ def test_the_input_frame_is_not_modified(df):
 def test_negative_limits_are_rejected(df, kwargs):
     with pytest.raises(ValueError):
         run(df, [], **kwargs)
+
+
+# --- the target is picked by the planner ---
+
+
+def leaky_table(n: int = 300) -> pd.DataFrame:
+    """A numeric table whose column `after` nearly determines the target `outcome`."""
+    rng = np.random.default_rng(7)
+    outcome = (rng.random(n) < 0.4).astype(int)
+    return pd.DataFrame(
+        {
+            "x": rng.normal(size=n),
+            "after": 4.0 * outcome + rng.normal(size=n),
+            "outcome": outcome,
+        }
+    )
+
+
+def outcome_plan(*, drop_after: bool) -> dict:
+    steps = []
+    if drop_after:
+        steps.append({"op": "drop_columns", "columns": ["after"], "reason": "r"})
+    steps.append({"op": "split", "stratify": True, "reason": "r"})
+    return {
+        "target": "outcome",
+        "task_type": "classification",
+        "model_family": "any",
+        "steps": steps,
+    }
+
+
+def purposes(result) -> list[str]:
+    return [c.purpose for c in result.calls]
+
+
+def test_a_target_the_planner_picks_brings_the_marks_to_the_planner_once():
+    df = leaky_table()
+    result, llm, _ = run(
+        df,
+        [plan_reply(outcome_plan(drop_after=False)), plan_reply(outcome_plan(drop_after=True))],
+        target=None,
+    )
+
+    assert purposes(result) == ["plan", "resolve"]
+    first, second = (call.user for call in llm.calls)
+    assert "target_association" not in first and "suspected_target_leakage" not in first
+    assert "target_association" in second and "suspected_target_leakage" in second
+    assert "## The target is settled" in second
+    assert "The target is now `outcome`" in second
+    assert "Target column: outcome (use exactly this as the plan's `target`)" in second
+    assert result.plan == Plan.model_validate(outcome_plan(drop_after=True))
+
+
+def test_the_plan_the_planner_made_is_in_the_second_prompt():
+    df = leaky_table()
+    _, llm, _ = run(
+        df,
+        [plan_reply(outcome_plan(drop_after=False)), plan_reply(outcome_plan(drop_after=True))],
+        target=None,
+    )
+
+    previous = Plan.model_validate(outcome_plan(drop_after=False)).model_dump_json(
+        exclude_none=True
+    )
+    assert previous in llm.calls[1].user
+    assert "Reconsider your plan" in llm.calls[1].user
+
+
+def test_without_a_mark_there_is_no_extra_call():
+    df = leaky_table().drop(columns="after")
+    result, llm, _ = run(
+        df, [plan_reply(outcome_plan(drop_after=False) | {"steps": SPLIT_ONLY})], target=None
+    )
+
+    assert len(llm.calls) == 1 and purposes(result) == ["plan"]
+
+
+SPLIT_ONLY = [{"op": "split", "stratify": True, "reason": "r"}]
+
+
+def test_a_target_the_user_named_never_needs_the_extra_call():
+    result, llm, _ = run(
+        leaky_table(), [plan_reply(outcome_plan(drop_after=True))], target="outcome"
+    )
+
+    assert len(llm.calls) == 1 and purposes(result) == ["plan"]
+    assert "suspected_target_leakage" in llm.calls[0].user
+
+
+def test_the_extra_call_happens_once_and_a_kept_marked_column_is_a_warning():
+    keep = outcome_plan(drop_after=False)
+    result, llm, _ = run(
+        df=leaky_table(), responses=[plan_reply(keep), plan_reply(keep)], target=None
+    )
+
+    assert len(llm.calls) == 2 and purposes(result) == ["plan", "resolve"]
+    assert [i.column for i in result.issues if i.code == "suspected_leakage_kept"] == ["after"]
+
+
+def test_a_column_the_user_names_as_the_target_is_the_target_of_the_next_call():
+    df = leaky_table()
+    ask_target = questions_reply(
+        question("target", question="Which column is the target?", options=["outcome", "x"],
+                 recommended="outcome", allow_custom=True)
+    )  # fmt: skip
+    ask = Asker({"target": "`outcome`"})
+    result, llm, _ = run(
+        df, [ask_target, plan_reply(outcome_plan(drop_after=True))], target=None, ask=ask
+    )
+
+    assert purposes(result) == ["plan", "plan"]
+    assert "suspected_target_leakage" not in llm.calls[0].user
+    second = llm.calls[1].user
+    assert "suspected_target_leakage" in second
+    assert "Target column: outcome (use exactly this as the plan's `target`)" in second
+    assert "## The target is settled" not in second
+
+
+def test_an_answer_that_is_not_a_column_leaves_the_profile_as_it_was():
+    df = leaky_table()
+    ask_target = questions_reply(
+        question("target", question="Which column is the target?", options=["outcome", "x"],
+                 recommended="outcome", allow_custom=True)
+    )  # fmt: skip
+    ask = Asker({"target": "the one about outcomes"})
+    keep = plan_reply(outcome_plan(drop_after=False))
+    _, llm, _ = run(df, [ask_target, keep, keep], target=None, ask=ask)
+
+    assert "target_association" not in llm.calls[1].user
+
+
+def test_a_constant_column_named_as_the_target_is_not_adopted():
+    df = leaky_table().assign(flat=1)
+    ask_target = questions_reply(
+        question("target", question="Which column is the target?", options=["flat", "outcome"],
+                 recommended="flat", allow_custom=True)
+    )  # fmt: skip
+    ask = Asker({"target": "flat"})
+    fixed = plan_reply(outcome_plan(drop_after=True))
+    _, llm, _ = run(df, [ask_target, fixed, fixed], target=None, ask=ask)
+
+    assert "Target column: not specified" in llm.calls[1].user

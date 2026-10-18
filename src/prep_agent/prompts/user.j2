@@ -42,6 +42,15 @@ Keep writing in the language of the goal, not in the language of the answers.
 {% endif %}
 {% endif %}
 
+{% if resolved_plan_json %}
+
+## The target is settled
+
+You made the plan below before the profile had any relation to the target. The target is now `{{ target }}`, and the profile above has what each column says about it (`target_association`, the marks). Your previous plan:
+
+{{ resolved_plan_json }}
+{% endif %}
+
 {% if plan_only %}
 
 ## Your previous answer was refused
@@ -61,6 +70,7 @@ Answer again with a response that matches the schema exactly.
 
 {% if revision %}Return a complete corrected plan that fixes every issue above.
 Keep writing in the language of the goal, not in the language of these issues.
+{% elif resolved_plan_json %}Reconsider your plan with the relations to the target and the rules about marked columns, and return a complete plan. Change only what they ask for.
 {% else %}Prepare this dataset for the goal above.
 {% endif %}
 {% if question_rounds_left > 0 %}You may still ask questions ({{ question_rounds_left }} round(s) left), but only about decisions that are genuinely open.
