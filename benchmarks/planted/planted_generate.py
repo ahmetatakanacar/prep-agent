@@ -98,7 +98,17 @@ RECIPES_B: tuple[Recipe, ...] = tuple(
     )
     for recipe in RECIPES
 )  # fmt: skip
-ALL_RECIPES: tuple[Recipe, ...] = RECIPES + RECIPES_B
+
+# The third set, for the closing measurement: the same recipes again with seeds that nothing was
+# tuned or looked at with.
+RECIPES_C: tuple[Recipe, ...] = tuple(
+    dataclasses.replace(
+        recipe, name=recipe.name.replace("planted-", "planted-c"), seed=recipe.seed + 200,
+        domain=recipe.name,
+    )
+    for recipe in RECIPES
+)  # fmt: skip
+ALL_RECIPES: tuple[Recipe, ...] = RECIPES + RECIPES_B + RECIPES_C
 
 
 def generate(recipe: Recipe, variant: Variant = "anonymous") -> tuple[pd.DataFrame, DatasetTruth]:

@@ -1,0 +1,81 @@
+{
+  "dataset": "planted-c01",
+  "variant": "named",
+  "seed": 301,
+  "target": "abonelik_iptal",
+  "task_type": "classification",
+  "n_rows": 800,
+  "columns": [
+    {
+      "name": "tekrar_arama_sayisi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "sehir",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "tarife_kodu",
+      "role": "must_keep",
+      "fault": "numeric_category",
+      "expected_op": "cast_to_category",
+      "measurable": true
+    },
+    {
+      "name": "veri_kaynagi",
+      "role": "must_drop",
+      "fault": "constant",
+      "measurable": true
+    },
+    {
+      "name": "son_donem_risk_skoru",
+      "role": "must_drop",
+      "fault": "leak_linear",
+      "measurable": true
+    },
+    {
+      "name": "toplam_odeme",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "aylik_kullanim_gb",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "musteri_no",
+      "role": "must_drop",
+      "fault": "id_sequential",
+      "measurable": true
+    },
+    {
+      "name": "paket_tipi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "email",
+      "role": "must_drop",
+      "fault": "pii_email",
+      "measurable": true
+    },
+    {
+      "name": "aylik_ucret",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "arama_sayisi",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "yas",
+      "role": "must_keep",
+      "measurable": true
+    }
+  ]
+}

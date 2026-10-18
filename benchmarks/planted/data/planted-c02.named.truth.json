@@ -1,0 +1,81 @@
+{
+  "dataset": "planted-c02",
+  "variant": "named",
+  "seed": 302,
+  "target": "defaulted",
+  "task_type": "classification",
+  "n_rows": 700,
+  "columns": [
+    {
+      "name": "home_ownership",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "annual_income",
+      "role": "either",
+      "measurable": true
+    },
+    {
+      "name": "employment_type",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "monthly_payment",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "applicant_name",
+      "role": "must_drop",
+      "fault": "pii_name",
+      "measurable": true
+    },
+    {
+      "name": "application_uuid",
+      "role": "must_drop",
+      "fault": "id_uuid",
+      "measurable": true
+    },
+    {
+      "name": "applicant_age",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "loan_amount",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "months_since_delinquency",
+      "role": "either",
+      "fault": "sentinel",
+      "measurable": false
+    },
+    {
+      "name": "credit_limit",
+      "role": "must_keep",
+      "measurable": true
+    },
+    {
+      "name": "annual_income_alt",
+      "role": "either",
+      "fault": "duplicate_scaled",
+      "duplicate_of": "annual_income",
+      "measurable": true
+    },
+    {
+      "name": "collections_status",
+      "role": "must_drop",
+      "fault": "leak_categorical",
+      "measurable": true
+    },
+    {
+      "name": "loan_purpose",
+      "role": "must_keep",
+      "measurable": true
+    }
+  ]
+}

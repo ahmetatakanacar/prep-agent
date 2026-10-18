@@ -342,7 +342,7 @@ def test_the_named_set_mixes_turkish_and_english():
 
 # --- the second set ---
 
-from planted_generate import ALL_RECIPES, RECIPES_B  # noqa: E402
+from planted_generate import ALL_RECIPES, RECIPES_B, RECIPES_C  # noqa: E402
 
 NAMES_B = [recipe.name for recipe in RECIPES_B]
 
@@ -359,7 +359,7 @@ def test_the_second_set_has_the_same_recipes_with_other_seeds():
         )
         assert a.seed != b.seed and b.domain == a.name
     seeds = [r.seed for r in ALL_RECIPES]
-    assert len(set(seeds)) == len(seeds) == 16
+    assert len(set(seeds)) == len(seeds) == 24
 
 
 @pytest.mark.parametrize("name", NAMES_B)
@@ -397,3 +397,40 @@ def test_the_second_set_has_the_same_names_as_the_first_in_the_named_variant():
 
 def test_the_first_set_is_not_changed_by_the_second():
     assert [r.seed for r in RECIPES] == list(range(101, 109))
+
+
+# --- the third set ---
+
+NAMES_C = [recipe.name for recipe in RECIPES_C]
+
+
+def test_the_third_set_has_the_same_recipes_with_seeds_of_its_own():
+    assert NAMES_C == [n.replace("planted-", "planted-c") for n in NAMES]
+    for a, c in zip(RECIPES, RECIPES_C, strict=True):
+        assert (a.task, a.n_rows, a.n_numeric, a.n_categorical, a.items) == (
+            c.task,
+            c.n_rows,
+            c.n_numeric,
+            c.n_categorical,
+            c.items,
+        )
+        assert c.domain == a.name
+    assert [r.seed for r in RECIPES_C] == list(range(301, 309))
+
+
+@pytest.mark.parametrize("name", NAMES_C)
+@pytest.mark.parametrize("variant", VARIANTS)
+def test_the_committed_files_of_the_third_set_are_what_the_generator_writes(name, variant):
+    recipe = next(r for r in RECIPES_C if r.name == name)
+    frame, truth = generate(recipe, variant)
+    committed_frame, committed_truth = load(name, variant)
+    assert committed_truth == truth
+    pd.testing.assert_frame_equal(committed_frame, frame, check_dtype=False, rtol=1e-9)
+
+
+def test_the_third_set_differs_from_the_other_two():
+    for a, b, c in zip(RECIPES, RECIPES_B, RECIPES_C, strict=True):
+        frame_a, _ = generate(a)
+        frame_b, _ = generate(b)
+        frame_c, _ = generate(c)
+        assert not frame_c.equals(frame_a) and not frame_c.equals(frame_b)

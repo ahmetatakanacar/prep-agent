@@ -8,7 +8,7 @@ Eight small synthetic datasets, each in an anonymous and a named variant, with f
 
 ## Two sets
 
-There are two sets of eight datasets built from the same recipes (task, size, faults, domain names) with different seeds. `planted-01` to `planted-08` is the first set; it measured the agent (`docs/benchmark/planted-results/`) before the profile had signals for leakage and copies, and it is the set those signals were designed without looking at. `planted-b01` to `planted-b08` is the second set, made after the signals existed to measure the agent with and without them, and it must not be used to tune them either. A run uses the first set unless `--datasets` names the datasets of the second (`--datasets planted-b01,planted-b02,...`).
+There are two sets of eight datasets built from the same recipes (task, size, faults, domain names) with different seeds. `planted-01` to `planted-08` is the first set; it measured the agent (`docs/benchmark/planted-results/`) before the profile had signals for leakage and copies, and it is the set those signals were designed without looking at. `planted-b01` to `planted-b08` is the second set, made after the signals existed to measure the agent with and without them, and it must not be used to tune them either. A third set, `planted-c01` to `planted-c08`, was made for the closing measurement after the last change to the profile and the prompt; nobody looked at it before that run. A run uses the first set unless `--datasets` names the datasets of another one (`--datasets planted-b01,planted-b02,...`).
 
 ## What is in a dataset
 
