@@ -605,3 +605,16 @@ def test_the_trade_off_is_written_down_in_the_template_and_not_sent_to_the_model
 
 def test_a_warning_about_a_column_the_user_decided_needs_no_change():
     assert "needs no change" in build_system_prompt().split("## Fixing a rejected plan")[1]
+
+
+def test_the_prompt_says_a_high_share_of_missing_values_is_not_a_reason_to_drop():
+    rules = plan_rules()
+    assert "A high share of missing values is not by itself a reason to drop a column" in rules
+    assert "the fact that the value is missing carries information" in rules
+    assert "explicit category (`constant`)" in rules and "`add_indicator`" in rules
+    assert "make keeping it the recommended option unless the column is nearly empty" in rules
+
+
+def test_high_missing_is_a_mark_that_needs_a_decision_not_a_verdict():
+    rules = plan_rules()
+    assert "`high_missing` and the others) shows something that needs a decision" in rules
