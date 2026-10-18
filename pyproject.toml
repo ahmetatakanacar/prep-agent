@@ -60,7 +60,7 @@ packages = ["src/prep_agent"]
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests", "benchmarks", "app"]
+src = ["src", "tests", "benchmarks", "benchmarks/planted", "app"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
@@ -69,7 +69,7 @@ select = ["E", "F", "I", "B", "UP"]
 testpaths = ["tests"]
 # The benchmark scripts import each other as siblings, so tests see them the same way. The
 # repository root makes the web UI package `app` importable.
-pythonpath = ["benchmarks", "."]
+pythonpath = ["benchmarks", "benchmarks/planted", "."]
 filterwarnings = ["error"]
 markers = [
     "llm: calls the real LLM API; skipped unless PREP_AGENT_RUN_LLM_TESTS=1 and an API key is set",
