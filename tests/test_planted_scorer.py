@@ -1,7 +1,7 @@
 import pytest
 
 from planted_generate import RECIPES, load
-from planted_scorer import combine, score_plan
+from planted_scorer import Score, combine, score_plan
 from planted_support import (
     drop_all_plan,
     leak_blind_plan,
@@ -182,3 +182,11 @@ def test_every_measurable_type_is_scored_across_the_set(all_sets):
     total = combine([score_plan(perfect_plan(f, t), t) for f, t in all_sets])
     assert sorted(total.by_type) == sorted(MEASURABLE)
     assert all(t.n >= 2 for t in total.by_type.values())
+
+
+def test_a_score_survives_a_round_trip_through_json(p03):
+    frame, truth = p03
+    score = score_plan(leak_blind_plan(frame, truth), truth)
+    again = Score.model_validate_json(score.model_dump_json())
+    assert again == score
+    assert again.by_type == score.by_type and again.precision == score.precision

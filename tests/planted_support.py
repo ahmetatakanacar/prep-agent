@@ -1,8 +1,12 @@
 """Plans of known quality for the planted datasets, shared by the scorer and end-to-end tests."""
 
+import json
+
 import pandas as pd
 
+from planted_generate import RECIPES, load
 from planted_truth import DatasetTruth
+from prep_agent.llm.base import LLMResult, TokenUsage
 from prep_agent.plan import Plan
 
 MAX_ONEHOT = 10
@@ -94,3 +98,50 @@ def drop_all_plan(frame: pd.DataFrame, truth: DatasetTruth) -> Plan:
         and pd.api.types.is_numeric_dtype(frame[c.name])
     )
     return plan_of(frame, truth, [c.name for c in truth.columns if c.name != keep], [])
+
+
+class RoutedLLM:
+    """A planner that finds every fault on any planted dataset, told apart by its size and columns.
+
+    If it may ask and the dataset has a leak, it asks once whether to drop the first leaking
+    column. It does what the answer says: a leak the user chose to keep is kept. It reports a
+    fixed token use, so costs are known. Every prompt it was given is kept in `users`.
+    """
+
+    USAGE = TokenUsage(1000, 200)
+
+    def __init__(self) -> None:
+        self.users: list[str] = []
+        self._sets = {
+            (len(frame), tuple(frame.columns)): (frame, truth)
+            for name in (r.name for r in RECIPES)
+            for frame, truth in (load(name, "anonymous"), load(name, "named"))
+        }
+
+    def generate(self, system: str, user: str, schema):
+        self.users.append(user)
+        profile = json.loads(user.split("## Dataset profile\n\n", 1)[1].split("\n", 1)[0])
+        frame, truth = self._sets[(profile["n_rows"], tuple(c["name"] for c in profile["columns"]))]
+        leaks = [c.name for c in truth.columns if c.fault and c.fault.startswith("leak_")]
+        asked = "Questions already asked" in user
+        if "You may still ask questions" in user and leaks and not asked:
+            reply = {
+                "language": "English",
+                "kind": "questions",
+                "plan": None,
+                "questions": [
+                    {
+                        "id": "leak",
+                        "question": f"Is {leaks[0]} known when the prediction is made?",
+                        "options": [f"Drop {leaks[0]}", f"Keep {leaks[0]}"],
+                        "recommended": f"Drop {leaks[0]}",
+                        "reason": "It may be derived from the target.",
+                    }
+                ],
+            }
+        else:
+            drop, cast = perfect_decisions(truth)
+            kept = {name for name in leaks if f"Answer: Keep {name}" in user}
+            plan = build_plan(frame, truth, [n for n in drop if n not in kept], cast)
+            reply = {"language": "English", "kind": "plan", "plan": plan, "questions": None}
+        return LLMResult(parsed=schema.model_validate(reply), model="routed", usage=self.USAGE)

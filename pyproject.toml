@@ -65,6 +65,10 @@ src = ["src", "tests", "benchmarks", "benchmarks/planted", "app"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 
+[tool.ruff.lint.per-file-ignores]
+# Puts benchmarks/planted on the path before the imports that need it.
+"benchmarks/run_planted.py" = ["E402"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # The benchmark scripts import each other as siblings, so tests see them the same way. The

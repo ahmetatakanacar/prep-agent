@@ -73,3 +73,49 @@ The recipes (seed, task, size and faults of each dataset) are in `planted_genera
 `combine` adds the counts of several scores before taking ratios, so a rate over the whole set is a micro average: a dataset with more faults weighs more. With 8 datasets most fault types occur 2 to 4 times, so a single run's per-type rate moves in steps of 25 to 50 percentage points; read it together with its count.
 
 The scorer says nothing about how well the rest of the plan prepares the data (imputation, encoding, scaling). That is what the main benchmark's cross-validated scores are for.
+
+## Running the agent on the set
+
+```powershell
+uv run python benchmarks/run_planted.py --models gpt-6-luna --dry-run
+uv run python benchmarks/run_planted.py --models gpt-6-luna --repeats 3
+uv run python benchmarks/run_planted.py --summarize benchmarks/results/<id>/results.json
+```
+
+A run is the product of datasets, variants (`anonymous`, `named`), answer modes, models and repeats; `--datasets`, `--variants` and `--modes` narrow it. Like the main benchmark, the runner shows the runs and the most they can cost, refuses a model with no price in `benchmarks/prices.yaml`, and asks before it spends anything (`--yes` skips the question, `--dry-run` stops after the listing). The agent is given the dataset's target and the model family `any`, and the same one-sentence goal for both variants. Results go to `benchmarks/results/planted-<timestamp>/` (git-ignored) as `results.json` (one record per run: the plan, the score, tokens, cost, the questions and answers) and `summary.md`. `summary.md` adds the counts of the runs of a group up before it takes a ratio.
+
+### Answer modes
+
+The agent may ask the user questions. Three modes say how a run answers them without a person:
+
+| mode | what happens |
+| --- | --- |
+| `recommended` | every question is answered with the option the agent recommends (what the main benchmark does) |
+| `not_recommended` | every question is answered with the first option the agent did not recommend, so a recommended "drop this column" becomes "keep it". If a question has no other option, the recommended one is taken and the answer is marked `forced` in `results.json` and counted in the summary |
+| `no_questions` | the agent may not ask. The question-round limit of the agent is set to zero for the run, so its prompt says "Do not ask any more questions" and it decides alone. No product code is involved |
+
+`recommended` shows what the agent does when its own advice is followed, `not_recommended` shows whether the plan carries out a decision the user made against the agent, and `no_questions` shows what the agent finds on its own. Only the last one measures whether the agent notices a fault without having asked about it.
+
+### The summary
+
+`summary.md` has one row per model, variant and mode (mode and variant are separate columns):
+
+- detection rate over all faults, with the range over repeats when there are several;
+- drop precision and recall, `must_keep` columns dropped, `avoided_op` violations;
+- questions, calls and cost per run, and the total cost;
+- a table of detection per fault type with the counts behind each rate;
+- anonymous against named for the same model and mode.
+
+A run that failed or errored has no score. It counts in the `runs` column (`3 (2)` is three runs, two of them scored), is listed at the end, and is not counted as a miss.
+
+## What the profile shows the agent (observed before any change)
+
+The planner sees only the profile (`profile.json`), never the data. Profiling the anonymous set shows how much of each fault the profile gives away. These are observations on the current profiler, prompt and validator, listed so that the first results can be read against them; nothing was changed because of them (the set is held out).
+
+- **Leak columns carry no warning.** None of the three leak types has a profile warning, and the profile has no relation to the target. The only leak check, `possible_target_leakage`, runs after execution, only warns, and needs a numeric target with an absolute correlation above 0.98, so it can only fire on `leak_linear`. An agent finds a leak by asking about it or by guessing from the values, and in the anonymous variant there is no name to go on.
+- **UUID columns are typed `text`, not `id_like`.** A 36-character unique string has a mean length above the text threshold, so no `possible_id` warning is raised. The prompt tells the agent to drop text columns, so a UUID is still dropped, for another reason.
+- **Person-name columns are not flagged as personal data when the name says nothing.** The `possible_pii` rule works on the column name for names; only e-mail addresses and phone numbers are recognised by their values. In the anonymous variant a `pii_name` column is high-cardinality categorical with no warning; in the named variant `ad_soyad`, `applicant_name` and the like are flagged by name.
+- **Integer codes and counts look alike.** `numeric_category` and `count_decoy` both get `low_cardinality_numeric`. The only difference in the profile is the values (codes are spread over 10 to 125 in steps of 5; counts are 1 to 6), and the prompt says to decide by name and target.
+- **A sequential id with a step above 1 is typed `numeric`.** The dense-span rule only catches steps of 1, so `id_sequential` with a step of 3 has no `possible_id` warning in the anonymous variant. In the named variant all four id columns are flagged, by name.
+
+In the named variant the profile flags the id columns, the person names, the e-mail addresses and the phone numbers, and still shows nothing for the leaks and the UUIDs (the `uuid` in a name does not make a 36-character string an identifier). Differences between the two variants therefore show how much the agent relies on what the profile flags.
