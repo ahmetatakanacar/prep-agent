@@ -1305,3 +1305,88 @@ def test_validate_plan_does_not_modify_its_inputs():
 
     assert plan.model_dump() == plan_before
     assert profile == PROFILE
+
+
+# --- columns marked as strongly related to the target ---
+
+
+def marked_profile(warning: str, column: str = "age", **fields) -> DatasetProfile:
+    marked = with_warning(PROFILE, column, warning)
+    columns = [c.model_copy(update=fields) if c.name == column else c for c in marked.columns]
+    return marked.model_copy(update={"columns": columns})
+
+
+@pytest.mark.parametrize(
+    "warning, code",
+    [
+        ("suspected_target_leakage", "suspected_leakage_kept"),
+        ("high_target_association", "high_association_kept"),
+    ],
+)
+def test_a_marked_column_that_stays_in_the_plan_is_a_warning(warning, code):
+    profile = marked_profile(warning, target_association=0.93)
+
+    found = find(validate(split(), profile=profile), code)
+
+    assert [i.column for i in found] == ["age"]
+    assert found[0].severity == "warning" and found[0].step_index is None
+    assert warning in found[0].message and "target_association 0.93" in found[0].message
+    assert SEVERITY[code] == "warning"
+
+
+def test_the_two_marks_have_their_own_codes():
+    suspected = validate(split(), profile=marked_profile("suspected_target_leakage"))
+    high = validate(split(), profile=marked_profile("high_target_association"))
+
+    assert find(suspected, "high_association_kept") == []
+    assert find(high, "suspected_leakage_kept") == []
+
+
+@pytest.mark.parametrize("warning", ["suspected_target_leakage", "high_target_association"])
+def test_a_marked_column_that_is_dropped_is_not_reported(warning):
+    issues = validate(drop("age"), split(), profile=marked_profile(warning))
+
+    assert find(issues, "suspected_leakage_kept") + find(issues, "high_association_kept") == []
+
+
+@pytest.mark.parametrize("method", ["onehot", "ordinal"])
+def test_an_encoded_marked_column_is_still_in_the_data(method):
+    profile = marked_profile("suspected_target_leakage", column="city")
+
+    issues = validate(split(), encode(["city"], method), profile=profile)
+
+    assert [i.column for i in find(issues, "suspected_leakage_kept")] == ["city"]
+
+
+def test_a_marked_column_via_missingness_says_so_in_the_message():
+    profile = marked_profile(
+        "suspected_target_leakage", target_association=None, missing_association=0.95
+    )
+
+    [issue] = find(validate(split(), profile=profile), "suspected_leakage_kept")
+
+    assert "missing_association 0.95" in issue.message
+
+
+def test_the_target_is_never_reported_as_a_kept_marked_column():
+    profile = marked_profile("suspected_target_leakage", column="churn")
+
+    issues = validate(split(), profile=profile)
+
+    assert find(issues, "suspected_leakage_kept") == []
+
+
+def test_a_plan_without_marks_has_neither_warning():
+    issues = validate(split())
+
+    assert find(issues, "suspected_leakage_kept") + find(issues, "high_association_kept") == []
+
+
+def test_a_marked_column_never_blocks_a_plan():
+    profile = marked_profile("suspected_target_leakage")
+    plan = make_plan(*VALID_STEPS)
+
+    issues = validate_plan(plan, profile)
+
+    assert not has_errors(issues)
+    assert [i.column for i in find(issues, "suspected_leakage_kept")] == ["age"]

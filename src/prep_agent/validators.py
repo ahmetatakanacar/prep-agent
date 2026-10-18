@@ -90,6 +90,8 @@ IssueCode = Literal[
     "drop_missing_target_without_missing",
     "uninformative_column_kept",
     "personal_data_kept",
+    "suspected_leakage_kept",
+    "high_association_kept",
     "missing_values_remain",
     "unencoded_column_remains",
     "stratify_disabled",
@@ -143,6 +145,8 @@ SEVERITY: dict[IssueCode, Severity] = {
     "drop_missing_target_without_missing": "warning",
     "uninformative_column_kept": "warning",
     "personal_data_kept": "warning",
+    "suspected_leakage_kept": "warning",
+    "high_association_kept": "warning",
     "missing_values_remain": "warning",
     "stratify_disabled": "warning",
     "execution_failed": "error",
@@ -163,6 +167,8 @@ UNINFORMATIVE_TYPES = frozenset({"id_like", "constant"})
 UNINFORMATIVE_WARNINGS = frozenset({"possible_id", "constant"})
 LOW_CARDINALITY_WARNING = "low_cardinality_numeric"
 PII_WARNING = "possible_pii"
+SUSPECTED_LEAKAGE_WARNING = "suspected_target_leakage"
+HIGH_ASSOCIATION_WARNING = "high_target_association"
 
 
 class ValidationIssue(BaseModel):
@@ -208,6 +214,16 @@ class _Column:
     has_missing: bool
     # The profile saw few distinct whole numbers: a hint that the numbers may be categories.
     few_distinct_numbers: bool = False
+
+
+def _association(column: ColumnProfile) -> str:
+    """How strongly the profile related the column to the target, for a message."""
+    parts = []
+    if column.target_association is not None:
+        parts.append(f"target_association {column.target_association}")
+    if column.missing_association is not None:
+        parts.append(f"missing_association {column.missing_association}")
+    return ", ".join(parts) or "no score"
 
 
 def _starts_numeric(column: ColumnProfile) -> bool:
@@ -675,6 +691,32 @@ class _Validation:
                     f"column {name!r} may hold personal data ({PII_WARNING} in the profile) and "
                     "is still in the data at the end of the plan; drop it with drop_columns "
                     "unless the model needs it.",
+                    column=name,
+                )
+
+        # Neither kind of mark proves a leak, so a column that stays is a warning and never an
+        # error: the user may know that it exists when the prediction is made. The warning is
+        # what makes a column that stays in the data on a guess visible in the report.
+        for column in self.profile.columns:
+            name = column.name
+            if name == target:
+                continue
+            if not (name in self.columns or "one-hot" in self.gone.get(name, "")):
+                continue
+            if SUSPECTED_LEAKAGE_WARNING in column.warnings:
+                self._add(
+                    "suspected_leakage_kept",
+                    f"column {name!r} is marked {SUSPECTED_LEAKAGE_WARNING} in the profile "
+                    f"({_association(column)}) and is still in the data at the end of the plan. "
+                    "Drop it with drop_columns unless it is known when the prediction is made.",
+                    column=name,
+                )
+            elif HIGH_ASSOCIATION_WARNING in column.warnings:
+                self._add(
+                    "high_association_kept",
+                    f"column {name!r} is marked {HIGH_ASSOCIATION_WARNING} in the profile "
+                    f"({_association(column)}) and is still in the data at the end of the plan. "
+                    "Check that it is known when the prediction is made.",
                     column=name,
                 )
 
