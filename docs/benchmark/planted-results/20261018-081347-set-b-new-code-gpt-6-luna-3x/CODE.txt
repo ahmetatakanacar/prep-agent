@@ -1,0 +1,2 @@
+Product code: commit d584967 (branch profile-leak-signals), with the target association, missing-value marker, duplicate and hash identifier signals and the matching prompt.
+Benchmark code and data: the same commit, set B (planted-b01 to planted-b08), both variants, 3 modes, 3 repeats.
