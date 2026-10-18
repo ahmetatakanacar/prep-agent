@@ -222,8 +222,9 @@ class ProfilerConfig:
     # - 0.6 for the second tier: from here a column alone reaches more than half of the possible
     #   improvement, which an ordinary predictor in a table with several useful columns does
     #   not usually do, and which is enough to be worth a look. The tier is a call for attention
-    #   and a basis for a warning, not for dropping: unlike the 0.9 tier, nothing is dropped on
-    #   it alone (see the planner's rules for what happens when it may not ask).
+    #   and what is done with it follows from what the column means, not from the score
+    #   (see the planner's rules in prompts/system.j2). A leak that scores below it, such as a
+    #   noisy one at 0.55, is not marked: a known limit, not a threshold to lower for it.
     high_association_min_score: float = 0.6
     # - 5% missing: a column can give the target away by whether it has a value at all (a field
     #   filled in only after the outcome). The same score and the same threshold judge the 0/1

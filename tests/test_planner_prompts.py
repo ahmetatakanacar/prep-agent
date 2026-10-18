@@ -489,12 +489,12 @@ def test_the_system_prompt_explains_the_leakage_and_duplicate_signals():
     assert "so do not ask" in prompt
 
 
-def test_the_system_prompt_sends_suspected_leakage_to_the_user_and_recommends_dropping():
+def test_the_system_prompt_sends_marked_columns_to_the_user_and_recommends_dropping():
     prompt = build_system_prompt()
     asking = prompt.split("## When to ask")[1].split("## Language")[0]
     assert "a column is marked `suspected_target_leakage` or `high_target_association`" in asking
-    assert "drop it if it is marked `suspected_target_leakage`" in asking
-    assert "keep it if it is marked `high_target_association`" in asking
+    assert "`recommended` is the option that drops the column" in asking
+    assert "This holds for both marks" in asking
 
 
 def test_the_user_prompt_carries_the_signals_of_the_profile(signal_profile):
@@ -574,33 +574,34 @@ def test_the_prompt_forbids_deciding_on_the_score_alone():
     assert "never drop one on the strength of the score alone" in rules
 
 
-def test_the_recommended_option_depends_on_the_tier():
-    asking = build_system_prompt().split("## When to ask")[1].split("## Language")[0]
-    assert "`recommended` is the option that drops the column" in asking
-    assert (
-        "a column marked `high_target_association` (0.6 up to 0.9) whose meaning you cannot tell"
-        in asking
-    )
-    assert "the recommended option is to keep it" in asking
-
-
-def test_without_questions_an_unclear_column_is_dropped_from_09_and_kept_below():
+def test_the_recommended_option_is_the_drop_for_both_marks_unless_the_name_says_otherwise():
     asking = build_system_prompt().split("## When to ask")[1].split("## Language")[0]
     assert (
-        "drop it if it is marked `suspected_target_leakage`, and say so in the `reason`" in asking
-    )
-    assert (
-        "keep it if it is marked `high_target_association` (the validator reports that it stayed)"
+        "This holds for both marks, `suspected_target_leakage` and `high_target_association`"
         in asking
     )
+    assert (
+        "whenever the name does not plainly say that the column is known before the outcome"
+        in asking
+    )
+    assert "recommended option is to keep it" not in asking
 
 
-def test_the_trade_off_is_written_down_in_the_template_and_not_sent_to_the_model():
+def test_without_questions_an_unclear_marked_column_is_dropped_whichever_mark_it_has():
+    asking = build_system_prompt().split("## When to ask")[1].split("## Language")[0]
+    assert "that means dropping it, whichever mark it has, and saying so in the `reason`" in asking
+    assert "is kept, with the reason written in the split step" in asking
+    assert "keep it if it is marked `high_target_association`" not in asking
+
+
+def test_the_principle_is_written_down_in_the_template_and_not_sent_to_the_model():
     from importlib import resources
 
     template = resources.files("prep_agent").joinpath("prompts/system.j2").read_text("utf-8")
-    assert "is a trade-off and not a fact" in template
-    assert "trade-off" not in build_system_prompt()
+    assert "Keeping a column that leaks the target is a silent error" in template
+    assert "a visible loss that can be undone" in template
+    assert "It is a principle and not a measurement on any dataset" in template
+    assert "silent error" not in build_system_prompt()
 
 
 def test_a_warning_about_a_column_the_user_decided_needs_no_change():
