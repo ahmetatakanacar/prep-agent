@@ -1,0 +1,2 @@
+Product code: the src/ of commit ff8a14f (the same as 25418da: profile signals, no tiers, no meaning rules). Oracle mode only; the other three modes of the old code are in 20261018-111329-set-d-dev-final-code-gpt-6-luna-3x.
+Benchmark code and data: commit ff8a14f (branch eval-set-d), set D dev half, both variants, 3 repeats.
