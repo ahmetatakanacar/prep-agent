@@ -1,0 +1,2 @@
+Product code: commit eb354f7 (branch eval-set-d): two tiers of association marks, the rule that a mark is decided by the meaning of the column, validator warnings for marked columns that stay, target relations for an auto-picked target, rounded copies, missing values not a reason to drop.
+Benchmark code and data: the same commit, set D dev half, both variants, four modes, 3 repeats.
