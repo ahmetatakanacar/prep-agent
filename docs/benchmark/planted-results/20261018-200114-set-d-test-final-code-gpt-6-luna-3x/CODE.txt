@@ -1,0 +1,2 @@
+Product code: commit 1402ac1 (branch eval-set-d), unchanged since the second round of fixes.
+The one and only run on the test half of set D (planted-t01 to planted-t06), both variants, four modes, 3 repeats. The data was generated for this run and was not looked at before it; the expectations are in docs/eval-d-test-expectations.md (commit 937f2e6).
