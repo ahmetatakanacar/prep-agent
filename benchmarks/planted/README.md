@@ -96,9 +96,10 @@ The agent may ask the user questions. Three modes say how a run answers them wit
 | --- | --- |
 | `recommended` | every question is answered with the option the agent recommends (what the main benchmark does) |
 | `not_recommended` | every question is answered with the first option the agent did not recommend, so a recommended "drop this column" becomes "keep it". If a question has no other option, the recommended one is taken and the answer is marked `forced` in `results.json` and counted in the summary |
+| `oracle` | an informed user: every question is answered from the ground truth. A leak, identifier, personal-data or constant column is dropped, a real feature (plain, or strong but known before the outcome) is kept, a code is cast and a count is left a number. A question about no column of the truth, or about columns with opposite verdicts, gets the agent's own recommendation; the verdict is logged |
 | `no_questions` | the agent may not ask. The question-round limit of the agent is set to zero for the run, so its prompt says "Do not ask any more questions" and it decides alone. No product code is involved |
 
-`recommended` shows what the agent does when its own advice is followed, `not_recommended` shows whether the plan carries out a decision the user made against the agent, and `no_questions` shows what the agent finds on its own. Only the last one measures whether the agent notices a fault without having asked about it.
+`oracle` shows what the plan can be when the answers are right, so it measures how well the agent asks (does it ask about the columns that matter, and with options a user can answer) and what it does with good answers; its `plan accuracy` is the share of the decisions that matter (the drops that were needed and the columns to keep) that the plan got right. `recommended` shows what the agent does when its own advice is followed, `not_recommended` shows whether the plan carries out a decision the user made against the agent, and `no_questions` shows what the agent finds on its own. Only the last one measures whether the agent notices a fault without having asked about it.
 
 ### The summary
 
@@ -154,3 +155,7 @@ The twelve recipes are split in two, with different domains: `planted-d01` to `p
 uv run python benchmarks/planted/planted_generate_d.py          # dev data and all ground truth
 uv run python benchmarks/run_planted.py --models gpt-6-luna --datasets planted-d01,planted-d02,planted-d03,planted-d04,planted-d05,planted-d06
 ```
+
+### Questions
+
+Every run records the columns the profile related to the target at 0.6 or more (at 0.9 or more is `suspected`, whatever the code under test calls it), with whether any question named them and what the ground truth says they are. `summary.md` has `asked: suspected` and `asked: high` in the main table and a table by truth (leaks and legitimate features, above and below 0.9): the questions are the way an agent can use what it knows about a column's meaning, so how often it asks about the marked columns is a result of its own. The `no_questions` mode cannot ask and shows `n/a`.

@@ -10,6 +10,7 @@ make valid is recorded as `failed` and anything unexpected as `error`, both with
 """
 
 import os
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -31,7 +32,7 @@ from bench_runner import ModelEstimate
 from planted_generate import ALL_RECIPES, DATA_DIR, RECIPES, file_stem, load
 from planted_modes import MODES, Answerer, question_rounds
 from planted_recipes_d import ALL_D, TEST
-from planted_results import AgentRecord, PlantedResults, RunConfig, RunResult
+from planted_results import AgentRecord, MarkedColumn, PlantedResults, RunConfig, RunResult
 from planted_scorer import score_plan
 from planted_summary import render_summary
 from planted_truth import VARIANTS, DatasetTruth, Variant
@@ -257,7 +258,7 @@ def _run_job(
         "repeat": job.repeat,
         "task_type": truth.task_type,
     }
-    answerer = Answerer(job.mode)
+    answerer = Answerer(job.mode, truth)
     started = time.perf_counter()
     # Whatever a job raises must end up in its record, not stop the run.
     try:
@@ -281,6 +282,7 @@ def _run_job(
             error_codes=[issue.code for issue in errors],
             warning_codes=[issue.code for issue in warnings],
             agent=_agent_record(exc.trace, answerer, price),
+            marked=_marked(exc.profile, answerer, truth),
             plan=exc.plan,
             plan_seconds=time.perf_counter() - started,
         )
@@ -297,10 +299,49 @@ def _run_job(
         status="ok",
         warning_codes=[issue.code for issue in warnings],
         agent=_agent_record(result.trace, answerer, price),
+        marked=_marked(result.profile, answerer, truth),
         plan=result.plan,
         score=score_plan(result.plan, truth),
         plan_seconds=time.perf_counter() - started,
     )
+
+
+SUSPECTED_FROM = 0.9
+HIGH_FROM = 0.6
+
+
+def _marked(profile, answerer: Answerer, truth: DatasetTruth) -> list[MarkedColumn]:
+    """The columns the profile related strongly to the target, with whether any question named
+    them. The tiers are fixed here, so that runs of different code are measured the same way."""
+    asked_text = " ".join(" ".join([q.question, *q.options]) for q in answerer.log)
+    roles = {c.name: c for c in truth.columns}
+    marked = []
+    for column in profile.columns:
+        score = max(column.target_association or 0.0, column.missing_association or 0.0)
+        truth_column = roles.get(column.name)
+        if score < HIGH_FROM or truth_column is None:
+            continue
+        kind = (
+            "leak"
+            if truth_column.role == "must_drop"
+            else "legit"
+            if truth_column.fault == "legit_strong"
+            else "other"
+        )
+        marked.append(
+            MarkedColumn(
+                name=column.name,
+                score=score,
+                tier="suspected" if score >= SUSPECTED_FROM else "high",
+                asked=_mentions(column.name, asked_text),
+                truth=kind,
+            )
+        )
+    return marked
+
+
+def _mentions(name: str, text: str) -> bool:
+    return re.search(rf"(?<![\w]){re.escape(name)}(?![\w])", text) is not None
 
 
 def _agent_record(trace: AgentTrace, answerer: Answerer, price: ModelPrice | None) -> AgentRecord:

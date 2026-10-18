@@ -39,6 +39,22 @@ class AgentRecord(BaseModel):
     qa: list[AnsweredQuestion]
 
 
+class MarkedColumn(BaseModel):
+    """A column the profile related strongly to the target, and what became of the question.
+
+    `score` is the larger of its value and missing-value association; `tier` is "suspected" from
+    0.9 and "high" from 0.6, whatever the code under test calls them. `truth` is what the ground
+    truth says it is: a "leak" (must be dropped), "legit" (a strong feature known before the
+    outcome) or "other".
+    """
+
+    name: str
+    score: float
+    tier: Literal["suspected", "high"]
+    asked: bool
+    truth: Literal["leak", "legit", "other"]
+
+
 class RunResult(BaseModel):
     dataset: str
     variant: Variant
@@ -52,6 +68,7 @@ class RunResult(BaseModel):
     warning_codes: list[str] = []
     agent: AgentRecord | None = None
     plan: Plan | None = None
+    marked: list[MarkedColumn] = []
     # Only for `ok` runs.
     score: Score | None = None
     plan_seconds: float | None = None

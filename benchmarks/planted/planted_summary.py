@@ -50,6 +50,19 @@ class Group:
         known = [value for value in values if value is not None]
         return mean(known) if known else None
 
+    def asked(self, tier: str | None = None, truth: str | None = None) -> tuple[int, int] | None:
+        """(asked about, marked) for the columns of a tier and a truth class over the runs of the
+        group; None where the mode cannot ask or no run recorded any marked column."""
+        if self.mode == "no_questions":
+            return None
+        marked = [
+            m
+            for run in self.runs
+            for m in run.marked
+            if (tier is None or m.tier == tier) and (truth is None or m.truth == truth)
+        ]
+        return (sum(m.asked for m in marked), len(marked)) if marked else None
+
     @property
     def questions(self) -> float | None:
         return self.per_run([run.agent.questions for run in self.runs if run.agent])
@@ -113,8 +126,11 @@ def render_summary(results: PlantedResults) -> str:
                 "detection",
                 "drop precision",
                 "drop recall",
+                "plan accuracy",
                 "must_keep dropped",
                 "legit strong dropped",
+                "asked: suspected",
+                "asked: high",
                 "avoided_op violations",
                 "questions/run",
                 "calls/run",
@@ -134,6 +150,7 @@ def render_summary(results: PlantedResults) -> str:
         ),
     ]
     lines += _level_tables(by_group)
+    lines += _question_table(by_group)
     comparison = _variant_comparison(by_group)
     if comparison:
         lines += [
@@ -175,13 +192,49 @@ def _headline_row(group: Group) -> list[str]:
         detection,
         _rate(score.precision),
         _rate(score.recall),
+        _rate(score.plan_accuracy),
         _count(len(score.over_dropped), n_ok),
         _legit(score),
+        _ratio(group.asked("suspected")),
+        _ratio(group.asked("high")),
         _count(len(score.avoided_op_violations), n_ok),
         _number(group.questions),
         _number(group.calls),
         _money(group.cost),
         _money(group.cost_total),
+    ]
+
+
+def _ratio(pair: tuple[int, int] | None) -> str:
+    return NA if pair is None else f"{pair[0]} of {pair[1]}"
+
+
+def _question_table(by_group: list[Group]) -> list[str]:
+    """How often a question named a column the profile related strongly to the target, by what
+    the ground truth says that column is. Empty when no run recorded such columns."""
+    if not any(run.marked for g in by_group for run in g.runs):
+        return []
+    cells = [
+        ("suspected", "leak", "leaks, 0.9 and over"),
+        ("suspected", "legit", "legit, 0.9 and over"),
+        ("high", "leak", "leaks, 0.6 to 0.9"),
+        ("high", "legit", "legit, 0.6 to 0.9"),
+    ]
+    return [
+        "",
+        "## Questions about columns strongly related to the target",
+        "",
+        "Columns that a question named, out of those the profile related to the target at 0.6 or "
+        "more (0.9 or more is `suspected`), by what the ground truth says the column is. The "
+        "no_questions mode cannot ask.",
+        "",
+        *_table(
+            ["model", "variant", "mode", *(label for _, _, label in cells)],
+            [
+                [g.model, g.variant, g.mode, *(_ratio(g.asked(t, k)) for t, k, _ in cells)]
+                for g in by_group
+            ],
+        ),
     ]
 
 

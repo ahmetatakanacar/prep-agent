@@ -2,7 +2,7 @@ import pytest
 
 from bench_cost import ModelPrice
 from planted_generate import RECIPES, load
-from planted_modes import MODES
+from planted_modes import MODES as ALL_MODES
 from planted_results import PlantedResults
 from planted_runner import (
     RESULTS_FILE,
@@ -18,6 +18,8 @@ from planted_support import RoutedLLM, build_plan, perfect_decisions
 from prep_agent.llm.base import LLMAPIError, TokenUsage
 from prep_agent.llm.fake import FakeLLM
 
+# The three modes the tests below count with; the oracle has its own tests.
+MODES = tuple(mode for mode in ALL_MODES if mode != "oracle")
 PRICE = ModelPrice(input_per_million=1.0, output_per_million=2.0)
 CALL_COST = (1000 * 1.0 + 200 * 2.0) / 1_000_000
 DATASETS = ["planted-01", "planted-08"]

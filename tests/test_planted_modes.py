@@ -14,8 +14,8 @@ def ask(qid="a", options=("keep it", "drop it", "ask later"), recommended="drop 
     )
 
 
-def test_the_modes_are_the_three_that_were_asked_for():
-    assert MODES == ("recommended", "not_recommended", "no_questions")
+def test_the_modes_are_the_four_that_were_asked_for():
+    assert MODES == ("recommended", "not_recommended", "no_questions", "oracle")
 
 
 def test_recommended_picks_the_recommended_option():

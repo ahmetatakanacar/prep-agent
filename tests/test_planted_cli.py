@@ -44,7 +44,7 @@ def cli(tmp_path, monkeypatch):
 def test_a_dry_run_lists_the_runs_and_the_ceiling_and_calls_nothing(cli):
     result, output = cli("--models", "m", *SMALL, "--dry-run")
     assert result.exit_code == 0
-    assert "6 run(s)" in output
+    assert "8 run(s)" in output
     assert "recommended" in output and "not_recommended" in output and "no_questions" in output
     assert "Estimated maximum use" in output and "no price" not in output
     assert "Dry run: no model was called and nothing was written." in output
@@ -53,7 +53,7 @@ def test_a_dry_run_lists_the_runs_and_the_ceiling_and_calls_nothing(cli):
 
 def test_the_default_scope_is_every_dataset_variant_and_mode(cli):
     result, output = cli("--models", "m", "--repeats", "3", "--dry-run")
-    assert "144 run(s)" in output
+    assert "192 run(s)" in output
 
 
 def test_a_model_without_a_price_is_refused(cli):
@@ -82,10 +82,10 @@ def test_declining_the_confirmation_runs_nothing(cli):
 def test_a_confirmed_run_writes_results_and_a_summary(cli):
     result, output = cli("--models", "m", *SMALL, "--out-dir", str(cli.out), "--yes")
     assert result.exit_code == 0, output
-    assert "Runs: 6 ok, 0 failed, 0 error" in output
-    assert "[6/6]" in output
+    assert "Runs: 8 ok, 0 failed, 0 error" in output
+    assert "[8/8]" in output
     results = PlantedResults.model_validate_json((cli.out / "results.json").read_text("utf-8"))
-    assert len(results.runs) == 6 and results.config.estimated_max_cost["m"] > 0
+    assert len(results.runs) == 8 and results.config.estimated_max_cost["m"] > 0
     assert "| model | variant | mode |" in (cli.out / "summary.md").read_text("utf-8")
 
 

@@ -69,12 +69,26 @@ class Score(BaseModel):
     levels_found: Counter[str] = Field(default_factory=Counter)
     legit_planted: Counter[str] = Field(default_factory=Counter)
     legit_dropped: Counter[str] = Field(default_factory=Counter)
+    # Columns the truth says to keep (must_keep); with the required drops, the decisions a plan
+    # can get right.
+    keep_total: int = 0
 
     @property
     def false_alarm_rate(self) -> float | None:
         """The share of legitimate strong features the plan dropped; None if there were none."""
         total = sum(self.legit_planted.values())
         return sum(self.legit_dropped.values()) / total if total else None
+
+    @property
+    def plan_accuracy(self) -> float | None:
+        """The share of the decisions that matter the plan got right: the drops that were needed
+        and made, and the columns to keep that were kept. A pair of copies counts once, and a
+        pair dropped as a whole counts as lost. None if the data had no such decision."""
+        total = self.required_drops + self.keep_total
+        if not total:
+            return None
+        right = self.correct_drops + self.keep_total - len(self.over_dropped)
+        return (right - len(self.pairs_dropped_both)) / total
 
     @property
     def by_type(self) -> dict[str, TypeScore]:
@@ -123,6 +137,8 @@ def score_plan(plan: Plan, truth: DatasetTruth) -> Score:
             score.unmeasurable.append(f"{label} ({column.fault})")
             continue
         is_dropped = column.name in dropped
+        if column.role == "must_keep":
+            score.keep_total += 1
         level = f"{column.level:.2f}" if column.level is not None else None
         if column.fault == "leak_partial" and level is not None:
             score.levels_planted[level] += 1
@@ -181,6 +197,7 @@ def combine(scores: list[Score]) -> Score:
         total.required_drops += score.required_drops
         total.expected_ops += score.expected_ops
         total.applied_ops += score.applied_ops
+        total.keep_total += score.keep_total
         for name in (
             "over_dropped",
             "pairs_dropped_both",
