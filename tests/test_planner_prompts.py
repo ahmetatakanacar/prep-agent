@@ -388,7 +388,7 @@ def test_system_prompt_recommends_dropping_a_column_that_may_give_the_target_awa
         "measured in the same period as the target",
         "derived from the target",
         "recorded after the outcome is known",
-        "`recommended` is always the option that drops the column",
+        "`recommended` is the option that drops the column",
         "the user can change it if they know the column is available at prediction time",
     ):
         assert expected in prompt, expected
@@ -492,9 +492,9 @@ def test_the_system_prompt_explains_the_leakage_and_duplicate_signals():
 def test_the_system_prompt_sends_suspected_leakage_to_the_user_and_recommends_dropping():
     prompt = build_system_prompt()
     asking = prompt.split("## When to ask")[1].split("## Language")[0]
-    assert "a column has the warning `suspected_target_leakage`" in asking
-    assert "to drop it (recommended)" in asking
-    assert "drop every column marked `suspected_target_leakage` yourself" in asking
+    assert "a column is marked `suspected_target_leakage` or `high_target_association`" in asking
+    assert "drop it if it is marked `suspected_target_leakage`" in asking
+    assert "keep it if it is marked `high_target_association`" in asking
 
 
 def test_the_user_prompt_carries_the_signals_of_the_profile(signal_profile):
@@ -527,3 +527,81 @@ def test_the_system_prompt_says_that_the_marks_of_the_profile_point_one_way():
         in plan_rules
     )
     assert "judged by its name, its sample values, its cardinality and what it means" in plan_rules
+
+
+# --- a mark is not a verdict ---
+
+
+def plan_rules() -> str:
+    return build_system_prompt().split("## How to plan")[1].split("## When to ask")[0]
+
+
+def test_the_prompt_says_that_a_mark_of_association_does_not_say_the_column_leaks():
+    rules = plan_rules()
+    assert "It does not say that the column leaks" in rules
+    assert "the score cannot tell the two apart" in rules
+    assert "information that comes into being after the target is leakage" in rules
+    assert "information that exists before it is not" in rules
+
+
+def test_the_prompt_names_both_tiers_and_the_missingness_path():
+    rules = plan_rules()
+    for marker in (
+        "`suspected_target_leakage` (0.9 or more)",
+        "`high_target_association` (0.6 up to 0.9)",
+        "`missing_association`",
+        "`leakage_via`",
+    ):
+        assert marker in rules, marker
+
+
+def test_the_prompt_has_three_ways_to_decide_a_marked_column_by_its_meaning():
+    rules = plan_rules()
+    assert "the name says plainly that it is a property known before the outcome: keep it" in rules
+    assert "say why in the `reason` of the split step" in rules
+    assert "the name says plainly that it is information from after the outcome: drop it" in rules
+    assert "with the drop as the recommended option so that the user can overrule you" in rules
+    assert (
+        "you cannot tell from the name and the samples (this includes names that say nothing"
+        in rules
+    )
+    assert "ask" in rules.split("such as c07):")[1][:6]
+
+
+def test_the_prompt_forbids_deciding_on_the_score_alone():
+    rules = plan_rules()
+    assert "Never keep a marked column because its score is low" in rules
+    assert "never drop one on the strength of the score alone" in rules
+
+
+def test_the_recommended_option_depends_on_the_tier():
+    asking = build_system_prompt().split("## When to ask")[1].split("## Language")[0]
+    assert "`recommended` is the option that drops the column" in asking
+    assert (
+        "a column marked `high_target_association` (0.6 up to 0.9) whose meaning you cannot tell"
+        in asking
+    )
+    assert "the recommended option is to keep it" in asking
+
+
+def test_without_questions_an_unclear_column_is_dropped_from_09_and_kept_below():
+    asking = build_system_prompt().split("## When to ask")[1].split("## Language")[0]
+    assert (
+        "drop it if it is marked `suspected_target_leakage`, and say so in the `reason`" in asking
+    )
+    assert (
+        "keep it if it is marked `high_target_association` (the validator reports that it stayed)"
+        in asking
+    )
+
+
+def test_the_trade_off_is_written_down_in_the_template_and_not_sent_to_the_model():
+    from importlib import resources
+
+    template = resources.files("prep_agent").joinpath("prompts/system.j2").read_text("utf-8")
+    assert "is a trade-off and not a fact" in template
+    assert "trade-off" not in build_system_prompt()
+
+
+def test_a_warning_about_a_column_the_user_decided_needs_no_change():
+    assert "needs no change" in build_system_prompt().split("## Fixing a rejected plan")[1]
