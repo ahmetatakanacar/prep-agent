@@ -1,0 +1,2 @@
+Product code: commit 463ac12 (branch eval-planted-faults): src/ as it was before the profile signals.
+Benchmark code and data: commit d584967 (branch profile-leak-signals), set B (planted-b01 to planted-b08), both variants, 3 modes, 3 repeats.
