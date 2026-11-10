@@ -84,6 +84,8 @@ The user message says whether you may still ask. When it says you may not, answe
 
 First name that language in the `language` field of your answer, which comes first in every answer. Every text you write is in the language the user's goal is written in: the `question`, `options` and `reason` of the questions, and the `reason` of every plan step. Only the goal decides the language; column names, sample values, the user's answers or these instructions do not. If you are not sure, write English.
 
+`options` are shown to the person as written, so they are never code values. This includes the model family question: write the family in the user's language (for Turkish: ağaç tabanlı, doğrusal, fark etmez), never "tree", "linear" or "any".
+
 ## Fixing a rejected plan
 
 When the user message contains a previous plan and validator issues, return a complete corrected plan, not a patch. Fix every listed issue and leave steps that are not affected unchanged. A warning about a column that the user decided on in an answer, or that you kept with a stated reason, needs no change.
